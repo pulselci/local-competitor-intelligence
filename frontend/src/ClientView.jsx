@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api/client";
 
-function fmtLocal(dt) {
-  if (!dt) return "—";
+async function checkBackend() {
+  // If this fails, we’ll know immediately if it’s “backend down” vs “CORS” vs “wrong URL”
   try {
-    return dt.toLocaleString();
-  } catch {
-    return String(dt);
+    const res = await fetch("http://127.0.0.1:8000/health", {
+      method: "GET",
+      headers: { Accept: "application/json" },
+    });
+    const text = await res.text();
+    return { ok: res.ok, status: res.status, body: text };
+  } catch (e) {
+    return { ok: false, status: 0, body: String(e?.message || e) };
   }
 }
 
@@ -14,7 +19,6 @@ export default function ClientView() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const [health, setHealth] = useState(null);
   const [businesses, setBusinesses] = useState([]);
   const [selectedId, setSelectedId] = useState("");
 
@@ -22,22 +26,37 @@ export default function ClientView() {
   const [insights, setInsights] = useState(null);
 
   const [days, setDays] = useState(30);
-  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
-  // Boot: health + businesses
+  const [backendCheck, setBackendCheck] = useState(null);
+
+  // ✅ Phase A: simulate “client is locked to one business”
+  // Later this will come from auth/claims.
+  const [lockToFirstBusiness, setLockToFirstBusiness] = useState(true);
+
   useEffect(() => {
     let mounted = true;
 
     async function boot() {
       setLoading(true);
       setErr("");
+
+      // Backend connectivity check (one-time)
+      const hc = await checkBackend();
+      if (!mounted) return;
+      setBackendCheck(hc);
+
       try {
-        const [h, list] = await Promise.all([api.health(), api.businesses()]);
+        const list = await api.businesses();
         if (!mounted) return;
 
-        setHealth(h || null);
-        setBusinesses(list || []);
-        if (list?.length) setSelectedId(list[0].id);
+        const safeList = list || [];
+        setBusinesses(safeList);
+
+        if (safeList.length) {
+          setSelectedId(safeList[0].id);
+        } else {
+          setSelectedId("");
+        }
       } catch (e) {
         if (!mounted) return;
         setErr(String(e?.message || e));
@@ -56,8 +75,6 @@ export default function ClientView() {
   async function refresh() {
     if (!selectedId) return;
     setErr("");
-    setLoading(true);
-
     try {
       const [d, i] = await Promise.all([
         api.snapshotDeltas(selectedId, days),
@@ -65,19 +82,14 @@ export default function ClientView() {
       ]);
       setDeltas(d || []);
       setInsights(i || null);
-      setLastRefreshedAt(new Date());
     } catch (e) {
       setErr(String(e?.message || e));
       setDeltas([]);
       setInsights(null);
-    } finally {
-      setLoading(false);
     }
   }
 
   useEffect(() => {
-    // Only auto-refresh after we have a selection
-    if (!selectedId) return;
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, days]);
@@ -87,56 +99,82 @@ export default function ClientView() {
     [businesses, selectedId]
   );
 
-  const asOfObservedDay =
-    deltas?.[0]?.observed_day_utc || deltas?.[0]?.observed_day || null;
+  // ✅ If “locked”, always force selectedId to first business
+  useEffect(() => {
+    if (!lockToFirstBusiness) return;
+    if (!businesses.length) return;
+    if (selectedId !== businesses[0].id) {
+      setSelectedId(businesses[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockToFirstBusiness, businesses]);
 
   return (
     <div style={{ padding: 16, maxWidth: 1100, margin: "0 auto" }}>
-      {/* Header */}
+      <h2 style={{ marginBottom: 6 }}>LCI — Client View</h2>
+
+      {/* Backend Connectivity Badge */}
       <div
         style={{
           display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          marginBottom: 12,
+          gap: 10,
+          alignItems: "center",
+          marginBottom: 10,
+          fontSize: 12,
         }}
       >
-        <div>
-          <h2 style={{ margin: 0 }}>LCI — Client View</h2>
-          <div style={{ opacity: 0.8, marginTop: 6 }}>
-            {selectedBusiness ? (
-              <>
-                <strong>{selectedBusiness.name}</strong>{" "}
-                <span>— {selectedBusiness.address || "No address on file"}</span>
-              </>
-            ) : (
-              <span>Select a business</span>
-            )}
-          </div>
-        </div>
+        <div style={{ opacity: 0.7 }}>Backend health:</div>
 
-        <div
-          style={{
-            border: "1px solid #e6e6e6",
-            borderRadius: 10,
-            padding: "10px 12px",
-            minWidth: 260,
-            background: "#fff",
-          }}
-        >
-          <div style={{ fontSize: 12, opacity: 0.75 }}>Status</div>
-          <div style={{ marginTop: 4 }}>
-            Backend:{" "}
-            <span style={{ fontWeight: 700 }}>
-              {health ? "ok" : err ? "error" : "checking..."}
-            </span>
+        {backendCheck ? (
+          backendCheck.ok ? (
+            <div
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                border: "1px solid #cfe9d6",
+              }}
+            >
+              ✅ OK (HTTP {backendCheck.status})
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: "2px 8px",
+                borderRadius: 999,
+                border: "1px solid #f3c2c2",
+              }}
+            >
+              ❌ FAIL {backendCheck.status ? `(HTTP ${backendCheck.status})` : ""}
+            </div>
+          )
+        ) : (
+          <div
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              border: "1px solid #ddd",
+            }}
+          >
+            Checking…
           </div>
-          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>
-            Last refresh: {fmtLocal(lastRefreshedAt)}
+        )}
+
+        {backendCheck && !backendCheck.ok ? (
+          <div style={{ color: "crimson", whiteSpace: "pre-wrap" }}>
+            {backendCheck.body}
           </div>
-        </div>
+        ) : null}
+      </div>
+
+      <div style={{ opacity: 0.8, marginBottom: 16 }}>
+        {selectedBusiness ? (
+          <>
+            <strong>{selectedBusiness.name}</strong>{" "}
+            <span>— {selectedBusiness.address || "No address on file"}</span>
+          </>
+        ) : (
+          <span>Select a business</span>
+        )}
       </div>
 
       {/* Controls */}
@@ -149,12 +187,27 @@ export default function ClientView() {
           marginBottom: 12,
         }}
       >
+        <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            checked={lockToFirstBusiness}
+            onChange={(e) => setLockToFirstBusiness(e.target.checked)}
+          />
+          Lock to first business (simulate client scope)
+        </label>
+
         <label>
           Business{" "}
           <select
             value={selectedId}
             onChange={(e) => setSelectedId(e.target.value)}
+            disabled={lockToFirstBusiness}
             style={{ padding: 6, minWidth: 320 }}
+            title={
+              lockToFirstBusiness
+                ? "Locked to first business (client-scoped mode)"
+                : "Select business"
+            }
           >
             {businesses.map((b) => (
               <option key={b.id} value={b.id}>
@@ -180,62 +233,55 @@ export default function ClientView() {
           Refresh
         </button>
 
+        {loading ? <span>Loading…</span> : null}
         {err ? (
           <span style={{ color: "crimson", whiteSpace: "pre-wrap" }}>{err}</span>
         ) : null}
       </div>
 
-      {/* Loading strip */}
-      {loading ? (
-        <div
-          style={{
-            marginBottom: 12,
-            padding: "8px 10px",
-            borderRadius: 10,
-            border: "1px solid #eee",
-            background: "#fafafa",
-          }}
-        >
-          Loading…
-        </div>
-      ) : null}
-
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-        {/* Table */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, background: "#fff" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-            <h3 style={{ marginTop: 0, marginBottom: 6 }}>Competitors</h3>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>
-              {asOfObservedDay ? `As of: ${asOfObservedDay}` : "As of: —"}
-            </div>
+        {/* Deltas */}
+        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h3 style={{ marginTop: 0 }}>Competitors (latest day)</h3>
+          <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+            {deltas?.[0]?.observed_day_utc
+              ? `As of: ${deltas[0].observed_day_utc}`
+              : "As of: —"}
           </div>
 
           <div style={{ overflowX: "auto" }}>
-            <table width="100%" cellPadding="8" style={{ borderCollapse: "collapse" }}>
+            <table
+              width="100%"
+              cellPadding="8"
+              style={{ borderCollapse: "collapse" }}
+            >
               <thead>
                 <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
                   <th>Competitor</th>
-                  <th style={{ textAlign: "right" }}>Rating</th>
-                  <th style={{ textAlign: "right" }}>Reviews</th>
-                  <th style={{ textAlign: "right" }}>Δ 1d</th>
-                  <th style={{ textAlign: "right" }}>Δ 7d</th>
+                  <th>Rating</th>
+                  <th>Reviews</th>
+                  <th>Δ 1d Reviews</th>
+                  <th>Δ 7d Reviews</th>
                 </tr>
               </thead>
               <tbody>
                 {deltas.length === 0 ? (
                   <tr>
                     <td colSpan={5} style={{ padding: 12, opacity: 0.75 }}>
-                      No competitor movement found for the selected window.
+                      No data yet.
                     </td>
                   </tr>
                 ) : (
                   deltas.map((r) => (
-                    <tr key={r.competitor_id} style={{ borderBottom: "1px solid #f2f2f2" }}>
+                    <tr
+                      key={r.competitor_id}
+                      style={{ borderBottom: "1px solid #f2f2f2" }}
+                    >
                       <td>{r.competitor_name}</td>
-                      <td style={{ textAlign: "right" }}>{r.google_rating ?? "—"}</td>
-                      <td style={{ textAlign: "right" }}>{r.google_review_count ?? "—"}</td>
-                      <td style={{ textAlign: "right" }}>{r.reviews_delta_1d ?? "—"}</td>
-                      <td style={{ textAlign: "right" }}>{r.reviews_delta_7d ?? "—"}</td>
+                      <td>{r.google_rating ?? "—"}</td>
+                      <td>{r.google_review_count ?? "—"}</td>
+                      <td>{r.reviews_delta_1d ?? "—"}</td>
+                      <td>{r.reviews_delta_7d ?? "—"}</td>
                     </tr>
                   ))
                 )}
@@ -245,7 +291,7 @@ export default function ClientView() {
         </div>
 
         {/* Insights */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 12, background: "#fff" }}>
+        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <h3 style={{ marginTop: 0 }}>Insights</h3>
           <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
             {insights?.as_of ? `As of: ${insights.as_of}` : "As of: —"}

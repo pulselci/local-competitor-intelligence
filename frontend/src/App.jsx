@@ -1,4 +1,6 @@
 import { useState } from "react";
+import "./App.css";
+
 import AdminView from "./AdminView";
 import ClientView from "./ClientView";
 
@@ -7,7 +9,15 @@ export default function App() {
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: 12,
+          alignItems: "center",
+          flexWrap: "wrap",
+        }}
+      >
         <button
           onClick={() => setViewMode("admin")}
           style={{
@@ -35,9 +45,13 @@ export default function App() {
         >
           Client View
         </button>
+
+        <div style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }}>
+          Mode: <strong>{viewMode}</strong>
+        </div>
       </div>
 
-      {viewMode === "admin" ? <AdminView /> : <ClientView />}
+      {viewMode === "client" ? <ClientView /> : <AdminView />}
     </div>
   );
 }
