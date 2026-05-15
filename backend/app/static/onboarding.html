@@ -486,7 +486,11 @@
       dropdown.innerHTML = '<option value="">Load previous client...</option>';
 
       try {
-        const response = await fetch("/admin/businesses");
+        const response = await fetch("https://pulse-lci-api.onrender.com/admin/businesses", {
+            headers: {
+                "x-admin-key": "ChargerPantherCardinalBuckeyeBearcatNorseman"
+            }
+        });
         const businesses = await response.json();
 
         if (!response.ok) {
