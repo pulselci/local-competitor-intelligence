@@ -57,8 +57,8 @@ def _strategy_fields(
         priority = "medium" if severity == "info" else "high"
         implication = "A small number of competitors control most of the market’s trust signals."
         recommended_action = (
-            "Position more directly against the top competitors and highlight the "
-            "reasons customers should choose you instead."
+            "Win customers from the market leader by highlighting clear differentiators, "
+            "stronger trust signals, and clear reasons customers should choose you instead."
         )
 
     elif insight_type == "baseline_rank":
@@ -74,7 +74,7 @@ def _strategy_fields(
     elif insight_type == "market_dominance":
         priority = "high" if severity == "warning" else "medium"
         implication = "One competitor currently holds outsized review share in the market."
-        recommended_action = "Position directly against the dominant competitor and give customers a clear reason to choose you instead."
+        recommended_action = "Win customers from the market leader by clearly positioning around your strongest advantage."
 
     elif insight_type == "market_position":
         priority = "medium"

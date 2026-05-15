@@ -19,6 +19,30 @@ function cardStyle(borderColor = "#ddd") {
   };
 }
 
+function apiBaseUrl() {
+  // Prefer env var if you have it; fallback to local backend.
+  return (
+    import.meta?.env?.VITE_API_URL ||
+    import.meta?.env?.VITE_BACKEND_URL ||
+    "http://127.0.0.1:8000"
+  );
+}
+
+async function fetchGeneratedReport(businessId) {
+  const url = `${apiBaseUrl()}/business/${businessId}/reports/generate`;
+  const res = await fetch(url, { method: "POST" });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(text || `Failed to generate report (HTTP ${res.status})`);
+  }
+  return JSON.parse(text);
+}
+
+function fmtPct(x) {
+  if (x == null || Number.isNaN(Number(x))) return "—";
+  return `${Number(x).toFixed(1)}%`;
+}
+
 export default function ClientView() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -27,7 +51,7 @@ export default function ClientView() {
   const [selectedId, setSelectedId] = useState(""); // client-scoped business
 
   const [deltas, setDeltas] = useState([]);
-  const [insights, setInsights] = useState(null);
+  const [report, setReport] = useState(null); // NEW: generated report payload
 
   const [days, setDays] = useState(30);
 
@@ -84,17 +108,19 @@ export default function ClientView() {
     setRefreshing(true);
 
     try {
-      const [d, i] = await Promise.all([
+      // NOTE: report generate is always 30d server-side (your backend currently hardcodes days=30)
+      const [d, r] = await Promise.all([
         api.snapshotDeltas(selectedId, days),
-        api.insights(selectedId, days),
+        fetchGeneratedReport(selectedId),
       ]);
+
       setDeltas(d || []);
-      setInsights(i || null);
+      setReport(r || null);
       setLastUpdated(new Date());
     } catch (e) {
       setErr(String(e?.message || e));
       setDeltas([]);
-      setInsights(null);
+      setReport(null);
     } finally {
       setRefreshing(false);
     }
@@ -120,7 +146,26 @@ export default function ClientView() {
   );
 
   const hasDeltas = deltas && deltas.length > 0;
-  const hasInsights = insights?.insights?.length > 0;
+
+  const sections = report?.sections || {};
+  const insightsList = Array.isArray(sections?.insights) ? sections.insights : [];
+  const hasInsights = insightsList.length > 0;
+
+  const sov = sections?.share_of_voice || null;
+  const sovRows = Array.isArray(sov?.rows) ? sov.rows : [];
+  const marketTotalReviews = sov?.market_total_reviews;
+
+  const weeklyActions = useMemo(() => {
+    const wa = insightsList.find((x) => x?.type === "weekly_actions");
+    if (!wa) return [];
+    return Array.isArray(wa.items) ? wa.items : [];
+  }, [insightsList]);
+
+  const otherInsights = useMemo(() => {
+    // show everything EXCEPT weekly_actions as the "Insights" bullets
+    return insightsList.filter((x) => x?.type !== "weekly_actions");
+  }, [insightsList]);
+
   const isBackendDown = backendCheck && !backendCheck.ok;
 
   return (
@@ -168,9 +213,7 @@ export default function ClientView() {
         </button>
 
         {lastUpdated ? (
-          <div style={{ opacity: 0.7 }}>
-            Last updated: {lastUpdated.toLocaleString()}
-          </div>
+          <div style={{ opacity: 0.7 }}>Last updated: {lastUpdated.toLocaleString()}</div>
         ) : null}
       </div>
 
@@ -203,9 +246,7 @@ export default function ClientView() {
         {selectedBusiness ? (
           <>
             <div style={{ fontSize: 18, fontWeight: 800 }}>{selectedBusiness.name}</div>
-            <div style={{ opacity: 0.75 }}>
-              {selectedBusiness.address || "No address on file"}
-            </div>
+            <div style={{ opacity: 0.75 }}>{selectedBusiness.address || "No address on file"}</div>
 
             {businesses.length > 1 ? (
               <div style={{ fontSize: 12, opacity: 0.65, marginTop: 6 }}>
@@ -242,11 +283,7 @@ export default function ClientView() {
           />
         </label>
 
-        <button
-          onClick={refresh}
-          style={{ padding: "6px 10px" }}
-          disabled={!selectedId || refreshing}
-        >
+        <button onClick={refresh} style={{ padding: "6px 10px" }} disabled={!selectedId || refreshing}>
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
 
@@ -259,80 +296,195 @@ export default function ClientView() {
         <div style={{ ...cardStyle("#ddd"), marginBottom: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Getting started</div>
           <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.4 }}>
-            We’ll start showing competitor movement and insights once we have enough daily snapshots.
-            If this is a brand-new account, check back tomorrow after the next snapshot run.
+            We’ll start showing competitor movement and insights once we have enough daily snapshots. If this is a
+            brand-new account, check back tomorrow after the next snapshot run.
           </div>
         </div>
       ) : null}
 
       {/* Main grid */}
       <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
-        {/* Deltas */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Competitors (latest day)</h3>
+        {/* Left column */}
+        <div style={{ display: "grid", gap: 16 }}>
+          {/* Deltas */}
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Competitors (latest day)</h3>
 
-          <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
-            {hasDeltas && deltas?.[0]?.observed_day_utc ? `As of: ${deltas[0].observed_day_utc}` : "As of: —"}
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+              {hasDeltas && deltas?.[0]?.observed_day_utc ? `As of: ${deltas[0].observed_day_utc}` : "As of: —"}
+            </div>
+
+            {!hasDeltas ? (
+              <div style={{ opacity: 0.8 }}>
+                No competitor movement to show yet.
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                  We may need a few daily snapshots before trends appear.
+                </div>
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table width="100%" cellPadding="8" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+                      <th>Competitor</th>
+                      <th>Rating</th>
+                      <th>Reviews</th>
+                      <th>Δ 1d</th>
+                      <th>Δ 7d</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deltas.map((r) => (
+                      <tr key={r.competitor_id || r.competitor_name} style={{ borderBottom: "1px solid #f2f2f2" }}>
+                        <td>{r.competitor_name}</td>
+                        <td>{r.google_rating ?? "—"}</td>
+                        <td>{r.google_review_count ?? "—"}</td>
+                        <td>{r.reviews_delta_1d ?? "—"}</td>
+                        <td>{r.reviews_delta_7d ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
-          {!hasDeltas ? (
-            <div style={{ opacity: 0.8 }}>
-              No competitor movement to show yet.
-              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                We may need a few daily snapshots before trends appear.
+          {/* Share of Voice */}
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Share of Voice (total reviews)</h3>
+
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+              {marketTotalReviews != null ? `Market total: ${marketTotalReviews}` : "Market total: —"}
+              {report?.generated_at ? (
+                <span style={{ marginLeft: 10 }}>Report: {new Date(report.generated_at).toLocaleString()}</span>
+              ) : null}
+            </div>
+
+            {!sovRows.length ? (
+              <div style={{ opacity: 0.75 }}>
+                No share-of-voice data yet.
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                  Once snapshots exist, we’ll compute how review volume is distributed across competitors.
+                </div>
               </div>
-            </div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table width="100%" cellPadding="8" style={{ borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
-                    <th>Competitor</th>
-                    <th>Rating</th>
-                    <th>Reviews</th>
-                    <th>Δ 1d</th>
-                    <th>Δ 7d</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deltas.map((r) => (
-                    <tr key={r.competitor_id} style={{ borderBottom: "1px solid #f2f2f2" }}>
-                      <td>{r.competitor_name}</td>
-                      <td>{r.google_rating ?? "—"}</td>
-                      <td>{r.google_review_count ?? "—"}</td>
-                      <td>{r.reviews_delta_1d ?? "—"}</td>
-                      <td>{r.reviews_delta_7d ?? "—"}</td>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table width="100%" cellPadding="8" style={{ borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ textAlign: "left", borderBottom: "1px solid #eee" }}>
+                      <th>#</th>
+                      <th>Competitor</th>
+                      <th>Reviews</th>
+                      <th>Share</th>
+                      <th>Δ share (7d)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {sovRows.map((r) => {
+                      const isBiz = !!r.is_business;
+                      return (
+                        <tr
+                          key={`${r.rank}-${r.competitor_name}`}
+                          style={{
+                            borderBottom: "1px solid #f2f2f2",
+                            background: isBiz ? "#f3f4f6" : "transparent",
+                          }}
+                        >
+                          <td style={{ width: 40 }}>{r.rank ?? "—"}</td>
+                          <td style={{ fontWeight: isBiz ? 800 : 600 }}>
+                            {r.competitor_name}
+                            {isBiz ? <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7 }}>(you)</span> : null}
+                          </td>
+                          <td style={{ fontFamily: "monospace" }}>{r.reviews_total ?? "—"}</td>
+                          <td style={{ fontFamily: "monospace" }}>{fmtPct(r.share_pct)}</td>
+                          <td style={{ fontFamily: "monospace", opacity: 0.85 }}>
+                            {r.share_change_7d_pct != null ? fmtPct(r.share_change_7d_pct) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Insights */}
-        <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h3 style={{ marginTop: 0 }}>Insights</h3>
-          <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
-            {insights?.as_of ? `As of: ${insights.as_of}` : "As of: —"}
+        {/* Right column */}
+        <div style={{ display: "grid", gap: 16 }}>
+          {/* Insights */}
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+            <h3 style={{ marginTop: 0 }}>Insights</h3>
+
+            <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
+              {report?.generated_at ? `As of: ${new Date(report.generated_at).toLocaleString()}` : "As of: —"}
+            </div>
+
+            {otherInsights.length ? (
+              <ul style={{ paddingLeft: 18, margin: 0 }}>
+                {otherInsights.map((it, idx) => (
+                  <li key={`${it.type}-${idx}`} style={{ marginBottom: 8 }}>
+                    {it.message || it.summary || (
+                      <span style={{ fontFamily: "monospace", fontSize: 12 }}>
+                        {it.type}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ opacity: 0.75 }}>
+                No insights yet.
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                  Insights appear once we have enough history and detectable movement.
+                </div>
+              </div>
+            )}
           </div>
 
-          {hasInsights ? (
-            <ul style={{ paddingLeft: 18, margin: 0 }}>
-              {insights.insights.map((it, idx) => (
-                <li key={`${it.type}-${idx}`} style={{ marginBottom: 8 }}>
-                  {it.message}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div style={{ opacity: 0.75 }}>
-              No insights yet.
-              <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-                Insights appear once we have enough history and detectable movement.
+          {/* What to do this week (weekly_actions) */}
+          <div style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+            <h3 style={{ marginTop: 0 }}>What to do this week</h3>
+
+            {!weeklyActions.length ? (
+              <div style={{ opacity: 0.75 }}>
+                No weekly action recommendations yet.
+                <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+                  Once the report can be generated, we’ll show clear actions here.
+                </div>
               </div>
+            ) : (
+              <div style={{ display: "grid", gap: 10 }}>
+                {weeklyActions.map((a, idx) => (
+                  <div key={`${a.title}-${idx}`} style={cardStyle("#eee")}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <div style={{ fontWeight: 800 }}>{a.title || "Action"}</div>
+                      {a.severity ? (
+                        <div style={{ fontSize: 12, opacity: 0.75, textTransform: "uppercase" }}>
+                          {a.severity}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    {a.why ? <div style={{ fontSize: 13, opacity: 0.9, marginTop: 6 }}>{a.why}</div> : null}
+                    {a.metric ? (
+                      <div style={{ fontSize: 12, opacity: 0.85, marginTop: 8, fontFamily: "monospace" }}>
+                        {a.metric}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Report summary (optional small box) */}
+          {report?.summary_text ? (
+            <div style={{ ...cardStyle("#ddd") }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>Report summary</div>
+              <div style={{ fontSize: 13, opacity: 0.85, lineHeight: 1.4 }}>{report.summary_text}</div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

@@ -216,39 +216,113 @@ def build_this_month_focus(action_plan: dict | None) -> list[dict]:
 
         return text
 
-    def _add(title: str, signal_type: str, priority: str) -> None:
-        title = _clean(title)
-        if not title:
-            return
-        if signal_type in seen_types:
-            return
-
-        focus_items.append(
-            {
-                "title": title,
-                "priority": priority,
-                "detail": _build_execution_detail(title),
-            }
-        )
-        seen_types.add(signal_type)
-
     all_items = immediate_items + next_items
+    owner_is_leader = any(
+        "you currently lead" in str(item).lower()
+        or "you lead the market" in str(item).lower()
+        or "lead the market" in str(item).lower()
+        or "leading the market by" in str(item).lower()
+        or "ranked #1" in str(item).lower()
+        or "leading position" in str(item).lower()
+        for item in (all_items or [])
+    )
+    
+    closest_competitor = None
 
-    # 1. Positioning focus: why buyers should choose you
+    for item in all_items:
+        details = item.get("details") or {}
+        if isinstance(details, dict):
+            closest_competitor = (
+                details.get("challenger_name")
+                or details.get("leader_name")
+                or details.get("competitor_name")
+                or closest_competitor
+            )
+
+    closest_competitor = closest_competitor or "your closest competitor"
+
+def _add(item: dict, signal_type: str, priority: str) -> None:
+    summary = str(item.get("summary") or "").strip()
+    summary_lower = summary.lower()
+
+    raw_action = str(item.get("action") or item.get("recommended_action") or "").strip()
+
+    if not raw_action or raw_action.lower() == summary_lower:
+        if "controls" in summary_lower or "top 2 competitors" in summary_lower:
+            action = "Make speed and convenience the clearest reason customers choose you over competitors."
+
+        elif "leading the market by" in summary_lower:
+            action = "Maintain consistent review growth to preserve and extend your lead."
+
+        elif ("behind" in summary_lower or "gap" in summary_lower) and not owner_is_leader:
+            action = f"Maintain review growth and reinforce the advantages that keep you ahead of {closest_competitor}."
+
+        elif "ranked" in summary_lower or "tier" in summary_lower:
+            action = "Adjust your review and positioning strategy based on your current rank to move up one position."
+
+        else:
+            action = "Strengthen the customer-facing advantage most likely to influence buyer choice this month."
+
+    else:
+        if owner_is_leader and (
+            "close the review gap" in raw_action.lower()
+            or "closing distance to the leader" in raw_action.lower()
+            or "close distance to the leader" in raw_action.lower()
+        ):
+            action = "Maintain consistent review growth to preserve and extend your lead."
+        else:
+            action = raw_action
+
+    action = _clean(str(action))
+
+    if not action:
+        return
+
+    if signal_type in seen_types and len(focus_items) >= 3:
+        return
+
+    action_key = action.lower()
+
+    existing_actions = {
+        str(item.get("action") or "").lower()
+        for item in focus_items
+    }
+
+    if action_key in existing_actions:
+        return
+
+    focus_items.append(
+        {
+            "title": action,
+            "summary": action,
+            "action": action,
+            "priority": priority,
+            "detail": _build_execution_detail(action),
+        }
+    )
+
+    seen_types.add(signal_type)
+    # 1. Positioning focus (take best available)
+    for item in all_items:
+        _add(item, "positioning", item.get("priority") or "Immediate")
+        break
+
+    # 2. Pressure focus (fallback if no explicit pressure insight)
+    added = False
+
     for item in all_items:
         insight_type = str(item.get("type") or "").strip().lower()
-        if insight_type in {"hidden_opportunity", "messaging_rollup", "messaging_mismatch"}:
-            _add(item.get("summary") or "", "positioning", item.get("priority") or "Immediate")
-            break
-
-    # 2. Pressure focus: who is close enough to threaten you
-    for item in all_items:
-        insight_type = str(item.get("type") or "").strip().lower()
-        summary = item.get("summary") or ""
-
         if insight_type == "competitive_tier_pressure":
-            _add(summary, "pressure", item.get("priority") or "Immediate")
+            _add(item, "pressure", item.get("priority") or "Immediate")
+            added = True
             break
+
+    if not added:
+        for item in all_items:
+            summary = str(item.get("summary") or "").lower()
+            if "ahead" in summary or "below" in summary or "pressure" in summary:
+                _add(item, "pressure", item.get("priority") or "Next")
+                break
 
     # 3. Gap focus: your distance from the leader, only if it directly mentions you
     for item in all_items:
@@ -258,10 +332,288 @@ def build_this_month_focus(action_plan: dict | None) -> list[dict]:
 
         if insight_type in {"challenger_gap", "market_dominance"}:
             if "you" in summary_lower or "your" in summary_lower:
-                _add(summary, "gap", item.get("priority") or "Immediate")
+                _add(item, "gap", item.get("priority") or "Immediate")
+                break
+
+    # Fallback: fill remaining focus slots with any unique actions
+    if len(focus_items) < 3:
+        existing_actions = {
+            str(item.get("action") or "").strip().lower()
+            for item in focus_items
+        }
+
+        existing_decisions = {
+            _derive_decision({"action": item.get("action")})
+            for item in focus_items
+        }
+
+        for item in all_items:
+            raw_action = str(item.get("action") or item.get("recommended_action") or "").strip()
+
+            if not raw_action:
+                continue
+
+            action = _clean(raw_action)
+            action_key = action.lower()
+            decision = _derive_decision({"action": action})
+
+            if not action or action_key in existing_actions or decision in existing_decisions:
+                continue
+
+            focus_items.append(
+                {
+                    "title": action,
+                    "summary": action,
+                    "action": action,
+                    "priority": item.get("priority") or "Next",
+                    "detail": _build_execution_detail(action),
+                }
+            )
+
+            existing_actions.add(action_key)
+            existing_decisions.add(decision)
+
+            if len(focus_items) >= 3:
+                break
+
+    existing_decisions = {
+        _derive_decision({"action": item.get("action")})
+        for item in focus_items
+    }
+
+    
+    existing_decisions = {
+        _derive_decision({"action": item.get("action")})
+        for item in focus_items
+    }
+
+    # PRIORITY 2: positioning
+    if len(focus_items) < 3 and "win_positioning" not in existing_decisions:
+        focus_items.append(
+            {
+                "title": "Own one customer value clearly and reinforce it across all messaging.",
+                "summary": "Own one customer value clearly and reinforce it across all messaging.",
+                "action": "Own one customer value clearly and reinforce it across all messaging.",
+                "priority": "Next",
+                "detail": "Choose one value (speed, trust, or convenience), highlight it on your homepage, and reinforce it through reviews and customer communication.",
+            }
+        )
+
+    # FINAL DEDUPE
+    deduped = []
+    seen = set()
+
+    for item in focus_items:
+        action = str(item.get("action") or "").lower().strip()
+        if action in seen:
+            continue
+        seen.add(action)
+        deduped.append(item)
+
+    focus_items = deduped
+
+    # LEADER fallback: ensure a strong 3rd item if leader
+    if len(focus_items) < 3 and owner_is_leader:
+        existing_actions = {
+            str(item.get("action") or "").lower()
+            for item in focus_items
+        }
+
+        if "maintain consistent review growth to preserve your lead." not in existing_actions:
+            focus_items.append(
+                {
+                    "title": "Maintain consistent review growth to preserve your lead.",
+                    "summary": "Maintain consistent review growth to preserve your lead.",
+                    "action": "Maintain consistent review growth to preserve your lead.",
+                    "priority": "Immediate",
+                    "detail": f"Set a monthly review target that keeps you ahead of {closest_competitor} and reinforces your #1 position.",
+                }
+            )
+            seen.add("maintain consistent review growth to preserve your lead.")
+
+    # FORCE FILL to 3
+    if len(focus_items) < 3:
+        for item in all_items:
+            action = str(item.get("action") or "").strip()
+            if not action:
+                continue
+
+            action_key = action.lower()
+
+            if action_key in seen:
+                continue
+
+            focus_items.append(
+                {
+                    "title": action,
+                    "summary": action,
+                    "action": action,
+                    "priority": item.get("priority") or "Next",
+                    "detail": _build_execution_detail(action),
+                }
+            )
+
+            seen.add(action_key)
+
+            if len(focus_items) >= 3:
                 break
 
     return focus_items[:3]
+
+def _derive_decision(item: dict) -> str:
+    text = " ".join([
+        str(item.get("summary") or ""),
+        str(item.get("title") or ""),
+        str(item.get("action") or ""),
+        str(item.get("section") or ""),
+    ]).lower()
+
+    if "messaging" in text or "customer language" in text or "website messaging" in text:
+        return "improve_conversion"
+
+    if "behind" in text or "gap" in text or "trail" in text:
+        return "close_gap"
+
+    if "leader" in text or "controls" in text or "top 2" in text:
+        return "challenge_leader"
+
+    if "upper tier" in text or "ranked #3" in text or "ranked #2" in text:
+        return "push_for_top"
+
+    if "pressure" in text or "ahead by" in text or "below" in text:
+        return "defend_position"
+
+    if "perception" in text or "trust" in text or "speed" in text or "quality" in text:
+        return "win_positioning"
+
+    return "general"
+
+
+def _build_strategic_action(item: dict) -> str:
+    decision = _derive_decision(item)
+
+    if decision == "improve_conversion":
+        details = item.get("details") or {}
+
+        # try to extract themes from perception data
+        themes = []
+
+        for key in [
+            "owner_winning_themes",
+            "owner_themes",
+            "winning_themes",
+            "primary_theme",
+            "theme"
+        ]:
+            value = details.get(key)
+            if isinstance(value, list) and value:
+                themes = [str(v).strip().lower() for v in value if str(v).strip()]
+                break
+            if isinstance(value, str) and value.strip():
+                themes = [v.strip().lower() for v in value.split(",") if v.strip()]
+                break
+
+        if themes:
+            top_themes = ", ".join([t.title() for t in themes[:2]])
+            return f"Update messaging to reflect what customers consistently value: {top_themes}."
+
+        return "Update messaging to reflect how customers describe their experience to improve conversion."
+
+    if decision == "close_gap":
+        summary = str(item.get("summary") or "")
+
+        # try to extract competitor name + gap
+        competitor = ""
+        gap = ""
+
+        import re
+
+        match = re.search(r"trail ([\w\s\.'-]+) by (\d+)", summary.lower())
+        if match:
+            competitor = match.group(1).strip().title()
+            gap = match.group(2)
+
+        if competitor and gap:
+            return f"Close the {gap}-review gap with {competitor} by increasing monthly review volume."
+        
+        return "Increase review velocity to close the gap with higher-ranked competitors."
+
+    if decision == "challenge_leader":
+        return "Win customers from the market leader by highlighting clear differentiators and clear reasons customers should choose you."
+
+    if decision == "push_for_top":
+        return "Use your upper-tier position to challenge more directly for the top spot."
+
+    if decision == "defend_position":
+        return "Protect your current position by maintaining consistent review growth and visibility."
+
+    if decision == "win_positioning":
+        return "Own one customer value clearly, such as speed, trust, convenience, or quality."
+
+    return str(item.get("action") or item.get("summary") or "").strip()
+
+
+def _build_execution_steps(item: dict) -> str:
+    decision = _derive_decision(item)
+
+    if decision == "improve_conversion":
+        return (
+            "Update the homepage headline first, then service page headers, then testimonials so the same "
+            "customer-valued themes appear consistently across buyer touchpoints."
+        )
+
+    if decision == "close_gap":
+        return (
+            "Set a monthly review target, request reviews after every completed job, and track progress weekly "
+            "against the competitors directly above you."
+        )
+
+    if decision == "challenge_leader":
+        return (
+            "Create one comparison message against the market leader, feature your strongest proof points, "
+            "and make the difference obvious before buyers contact either business."
+        )
+
+    if decision == "push_for_top":
+        return (
+            "Choose one clear advantage to elevate, support it with customer proof, and make it more prominent "
+            "on your homepage, Google profile, and follow-up messaging."
+        )
+
+    if decision == "defend_position":
+        return (
+            "Keep review requests consistent, watch the closest competitor below you, and reinforce the reasons "
+            "customers already choose you."
+        )
+
+    if decision == "win_positioning":
+        return (
+            "Elevate one clear advantage and make it the dominant message across your website and reviews."
+            "across website copy, Google posts, and review responses."
+        )
+
+    return str(item.get("how_to_implement") or item.get("detail") or "").strip()
+
+
+def _is_weak_insight(item: dict) -> bool:
+    text = " ".join([
+        str(item.get("summary") or ""),
+        str(item.get("action") or ""),
+        str(item.get("why_it_matters") or ""),
+        str(item.get("how_to_implement") or ""),
+    ]).lower()
+
+    weak_patterns = [
+        "use this as strategic context",
+        "use this as context",
+        "not as a standalone move",
+        "not every movement matters",
+        "inform a decision",
+        "this signal helps",
+        "wait for a clearer opening",
+    ]
+
+    return any(pattern in text for pattern in weak_patterns)
 
 def build_client_facing_insights(
     insights: List[Insight],
@@ -607,6 +959,80 @@ def _hidden_opportunity_specificity_score(item: Insight) -> Tuple[int, int, int]
         len(summary),
     )
 
+def _derive_decision(item: dict) -> str:
+    text = " ".join([
+        str(item.get("summary") or ""),
+        str(item.get("type") or ""),
+        str(item.get("section") or ""),
+    ]).lower()
+
+    if "messaging" in text or "language" in text:
+        return "improve_conversion"
+
+    if "behind" in text or "gap" in text or "trail" in text:
+        return "close_gap"
+
+    if "leader" in text or "controls" in text:
+        return "challenge_leader"
+
+    if "upper tier" in text or "ranked #3" in text:
+        return "push_for_top"
+
+    if "pressure" in text or "ahead by" in text:
+        return "defend_position"
+
+    if any(x in text for x in ["trust", "speed", "quality", "convenience"]):
+        return "win_positioning"
+
+    return "general"
+
+
+def _build_strategic_action(item: dict) -> str:
+    d = _derive_decision(item)
+
+    if d == "improve_conversion":
+        return "Update messaging to reflect how customers describe their experience to improve conversion."
+
+    if d == "close_gap":
+        return "Increase review velocity to close the gap with higher-ranked competitors."
+
+    if d == "challenge_leader":
+        return "Win customers from the market leader by highlighting clear differentiators and clear reasons customers should choose you."
+
+    if d == "push_for_top":
+        return "Use your position to push more aggressively toward the top spot."
+
+    if d == "defend_position":
+        return "Protect your current position by maintaining consistent review growth."
+
+    if d == "win_positioning":
+        return "Own one customer value clearly and reinforce it across all messaging."
+
+    return str(item.get("action") or item.get("summary") or "")
+
+
+def _build_execution_steps(item: dict) -> str:
+    d = _derive_decision(item)
+
+    if d == "improve_conversion":
+        return "Update homepage, service pages, and testimonials to reflect customer language."
+
+    if d == "close_gap":
+        return "Set a monthly review target and request reviews after every job."
+
+    if d == "challenge_leader":
+        return "Create a direct comparison message and highlight proof points."
+
+    if d == "push_for_top":
+        return "Elevate your strongest differentiator across all buyer touchpoints."
+
+    if d == "defend_position":
+        return "Monitor nearby competitors and maintain steady review growth."
+
+    if d == "win_positioning":
+        return "Select one value and make it the core of your messaging."
+
+    return str(item.get("how_to_implement") or "")
 
 def _normalize_insight(insight: Insight) -> Insight:
     item = dict(insight or {})
@@ -622,6 +1048,28 @@ def _normalize_insight(insight: Insight) -> Insight:
     priority = _infer_priority(insight_type, severity, raw_summary, details, item)
     sharp_summary = _rewrite_summary(insight_type, raw_summary, details)
 
+    # -----------------------------------------
+    # Tighten summary phrasing
+    # -----------------------------------------
+    if sharp_summary:
+        s = sharp_summary.strip()
+        s_lower = s.lower()
+
+        if "messaging does not fully reflect" in s_lower:
+            sharp_summary = "Messaging is not aligned with how customers describe value."
+
+        elif "positioning opening" in s_lower:
+            sharp_summary = "Clear positioning opportunity: emphasize speed and convenience."
+
+        elif "reducing positioning clarity" in s_lower:
+            sharp_summary = s.replace("reducing positioning clarity", "").strip().rstrip(".") + "."
+
+        elif "complaints are limited" in s_lower:
+            sharp_summary = (
+                "No meaningful customer friction signals detected. "
+                "Scheduling appears occasionally but is not yet a consistent issue."
+            )
+
     default_action, default_why_it_matters, default_how_to_implement = _build_action_layer(
         insight_type=insight_type,
         summary=sharp_summary,
@@ -629,6 +1077,30 @@ def _normalize_insight(insight: Insight) -> Insight:
         priority=priority,
         section=section,
     )
+
+    # -------------------------
+    # UPGRADED STRATEGY LAYER
+    # -------------------------
+    decision = _derive_decision({
+        "summary": sharp_summary,
+        "type": insight_type,
+        "section": section,
+        "details": details,
+    })
+
+    strategic_action = _build_strategic_action({
+        "summary": sharp_summary,
+        "type": insight_type,
+        "section": section,
+        "details": details,
+    })
+
+    strategic_how = _build_execution_steps({
+        "summary": sharp_summary,
+        "type": insight_type,
+        "section": section,
+        "details": details,
+    })
 
     implication = _clean_sentence(str(item.get("implication") or "").strip())
     recommended_action = _clean_sentence(str(item.get("recommended_action") or "").strip())
@@ -646,8 +1118,10 @@ def _normalize_insight(insight: Insight) -> Insight:
         "baseline_rank",
         "market_position",
     }:
-        item["action"] = default_action
+        item["action"] = strategic_action
         item["why_it_matters"] = default_why_it_matters
+        item["how_to_implement"] = strategic_how
+        item["decision"] = decision
 
         resolved_how = default_how_to_implement
         if _is_generic_implementation(resolved_how):
@@ -665,6 +1139,14 @@ def _normalize_insight(insight: Insight) -> Insight:
         item["how_to_implement"] = resolved_how
 
     item["display_order"] = _display_order(section, priority)
+
+    # -------------------------
+    # FORCE STRATEGIC ACTIONS (ALL INSIGHTS)
+    # -------------------------
+    item["action"] = strategic_action
+    item["how_to_implement"] = strategic_how
+    item["decision"] = decision
+
     item["_dedupe_key"] = _build_dedupe_key(item)
 
     return item
@@ -903,7 +1385,7 @@ def _build_messaging_rollup(items: List[Insight]) -> Optional[Insight]:
         )
     else:
         summary = (
-            "Messaging and customer language are not fully aligned, indicating missed positioning clarity."
+            "Messaging does not fully reflect how customers describe value, reducing positioning clarity."
         )
 
     return {
@@ -1236,8 +1718,8 @@ def _build_action_layer(
     if insight_type == "messaging_rollup":
         return (
             "Realign messaging to match how customers actually describe value.",
-            "When messaging reflects real customer language, conversion improves without changing the offer.",
-            "Update homepage headline first, then service page headers, then testimonials so the same themes appear consistently across all buyer touchpoints.",
+            "When messaging reflects how customers actually describe value, conversion improves.",
+            "Update homepage, service pages, and testimonials so the same themes appear consistently across all buyer touchpoints.",
         )
 
     if insight_type == "hidden_opportunity":
@@ -1302,7 +1784,7 @@ def _build_action_layer(
             if "speed" in owner_theme_set or "convenience" in owner_theme_set:
                 return (
                     f"Own the market position around {owner_phrase}.",
-                    "Speed and convenience are high-conversion decision drivers when made visible.",
+                    "Speed and convenience drive patient choice when clearly communicated."
                     "Emphasize fast scheduling, short wait times, and ease of experience across homepage, booking flow, and front desk scripting.",
                 )
 
@@ -1529,7 +2011,51 @@ def _dedupe_and_reduce(items: List[Insight]) -> List[Insight]:
     reduced = _suppress_duplicate_hidden_opportunities(reduced)
     reduced = _suppress_redundant_leader_insights(reduced)
     reduced = _sort_insights(reduced)
-    return reduced
+
+    # -----------------------------------------
+    # Deduplicate by strategy/action type
+    # -----------------------------------------
+    seen_actions = set()
+    final = []
+
+    for item in reduced:
+        action = str(item.get("action") or "").strip().lower()
+
+        if "update messaging" in action:
+            action_key = "update_messaging"
+        elif "own one customer value" in action:
+            action_key = "own_positioning"
+        elif "share of voice" in action or "review share" in action:
+            action_key = "market_movement"
+        elif "review target" in action or "generate reviews" in action:
+            action_key = "review_growth"
+        else:
+            action_key = action
+
+        if action_key in seen_actions:
+            continue
+
+        seen_actions.add(action_key)
+        final.append(item)
+
+    # -----------------------------------------
+    # Ensure at least one market movement insight
+    # -----------------------------------------
+    has_market = any(
+        "share of voice" in (str(i.get("summary") or "").lower())
+        or "review share" in (str(i.get("summary") or "").lower())
+        for i in final
+    )
+
+    if not has_market:
+        for item in reduced:
+            summary = str(item.get("summary") or "").lower()
+
+            if "share of voice" in summary or "review share" in summary:
+                final.append(item)
+                break
+
+    return final
 
 
 def _suppress_soft_overlap(items: List[Insight]) -> List[Insight]:
@@ -1821,6 +2347,27 @@ def _build_dedupe_key(item: Insight) -> str:
     section = str(item.get("section") or "").strip().lower()
     summary = str(item.get("summary") or "").strip().lower()
     action = str(item.get("action") or "").strip().lower()
+    # -----------------------------------------
+    # Strategic positioning dedupe
+    # -----------------------------------------
+
+    if (
+        "positioning opening" in summary
+        or "reposition by" in summary
+    ):
+        if (
+            "speed" in summary
+            or "convenience" in summary
+        ):
+            return "positioning_speed_convenience"
+
+        if (
+            "trust" in summary
+            or "communication" in summary
+        ):
+            return "positioning_trust"
+
+        return "positioning_generic"
 
     normalized_summary = re.sub(r"[^a-z0-9 ]+", " ", summary)
     normalized_summary = re.sub(r"\s+", " ", normalized_summary).strip()
@@ -2073,7 +2620,11 @@ def build_review_target_recommendation(
     valid_competitors = []
     for row in rows:
         name = row.get("competitor_name") or row.get("name") or "Competitor"
-        count = row.get("review_count") or row.get("google_review_count")
+        count = (
+            row.get("review_count")
+            or row.get("google_review_count")
+            or row.get("reviews_total")
+        )
 
         if count is None:
             continue
@@ -2128,7 +2679,7 @@ def build_review_target_recommendation(
         low = base
         high = base + 4
 
-        headline = f"This month: maintain {low}–{high} new reviews to protect your #1 position."
+        headline = f"This month: maintain {low}–{high} new reviews to preserve and extend your lead."
 
     elif gap_to_next is not None and gap_to_next <= 15:
         mode = "Growth mode"
@@ -2245,12 +2796,23 @@ def build_review_overtake_projection(
             "months_to_overtake": 0,
         }
 
+    your_reviews = your_reviews or 0
+    next_reviews = next_reviews or 0
+    
     if net_gain_per_month <= 0:
+        gap = max(0, (next_reviews or 0) - (your_reviews or 0))
+
+        aggressive_months = 6
+        moderate_months = 12
+
+        aggressive_target = max(1, round(gap / aggressive_months))
+        moderate_target = max(1, round(gap / moderate_months))
+
         return {
             "status": "Not closing yet",
             "message": (
                 f"At the current pace, you are not closing the gap with {next_competitor}. "
-                f"You need to outpace them by at least 1 review per month to start gaining ground."
+                f"To gain ground, you need to outpace them by roughly {moderate_target}–{aggressive_target} reviews per month."
             ),
             "months_to_overtake": None,
         }

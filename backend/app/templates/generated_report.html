@@ -74,6 +74,13 @@
       margin: 0;
     }
 
+    .client-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1f4e79;
+      margin: 0 0 6px 0;
+    }
+
     .meta-card {
       border: 1px solid #d9e2f2;
       border-radius: 10px;
@@ -101,7 +108,7 @@
     }
 
     .section {
-        margin-bottom: 14px;
+        margin-bottom: 10px;
     }
 
     .section-title {
@@ -126,7 +133,7 @@
     border: 1px solid #dce6f5;
     border-radius: 12px;
     background: #f8fbff;
-    padding: 12px 14px;
+    padding: 10px 12px;
     margin-bottom: 10px;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
@@ -239,7 +246,7 @@
     }
 
     .cards {
-      margin-top: 8px;
+      margin-top: 6px;
     }
 
     .insight-card {
@@ -367,7 +374,23 @@
     }
 
     .narrative-block {
-      white-space: pre-line;
+      white-space: normal;
+    }
+
+    .perception-block {
+      line-height: 1.5;
+      font-size: 11.5px;
+    }
+
+    .perception-block strong {
+      display: block;
+      margin-top: 10px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #475467;
     }
   </style>
 </head>
@@ -401,11 +424,17 @@
 
   <div class="page">
     <div class="header">
-      <div class="eyebrow">Local Competitor Intelligence</div>
+      <div class="eyebrow">Pulse · Local Competitor Intelligence</div>
 
       <div class="title-row">
         <div class="title-col">
           <h1>{{ report.title or "Competitive Report" }}</h1>
+
+          {% if sections.get("business_name") %}
+            <div class="client-name">{{ sections.get("business_name") }}</div>
+          {% endif %}
+
+          <p class="subtitle">
           <p class="subtitle">
             Deterministic competitive positioning report built from market movement, review trends, and customer perception signals.
           </p>
@@ -451,9 +480,9 @@
                 <div class="meta-value">{{ immediate_items|length }}</div>
               </div>
               <div class="summary-side-item">
-                <div class="meta-label">Position context</div>
-                <div class="meta-value">{{ next_items|length }}</div>
-              </div>
+              <div class="meta-label">Position context</div>
+              <div class="meta-value">3</div>
+            </div>
               <div class="summary-side-item">
                 <div class="meta-label">Monitor items</div>
                 <div class="meta-value">{{ monitor_items|length }}</div>
@@ -464,19 +493,41 @@
       </div>
 
       {% if report.sections.report_experience.this_month_focus %}
-        <div class="summary-card">
-            <div class="summary-heading">This Month’s Focus</div>
+      <div class="summary-card">
+        <div class="summary-heading">This Month’s Focus</div>
 
-            <ul style="padding-left: 18px; margin: 8px 0 0 0;">
-            {% for item in report.sections.report_experience.this_month_focus %}
-                {% set clean_title = (item.title or "")|replace("• ", "")|replace("•", "")|trim %}
-                <li style="margin-bottom: 8px;">
-                {{ clean_title }}
-                </li>
-            {% endfor %}
-            </ul>
-        </div>
-        {% endif %}
+        <ul style="padding-left: 18px; margin: 8px 0 0 0;">
+
+          {% set review_target = report.sections.report_experience.review_target or {} %}
+          {% set is_leader = review_target.get("current_rank") == 1 %}
+          
+          {% set competitor_rows = sov_rows|rejectattr("is_business")|list %}
+          {% set dominant_competitor = "" %}
+          {% if competitor_rows %}
+            {% set dominant_competitor = competitor_rows[0].get("competitor_name") or competitor_rows[0].get("name") %}
+          {% endif %}
+
+          {% for item in report.sections.report_experience.this_month_focus %}
+
+            {% set raw_title = (item.get("action") or item.get("summary") or item.get("title") or "") %}
+
+            {% if is_leader and dominant_competitor and "over the leader" in raw_title|lower %}
+              {% set clean_title = raw_title|replace("the leader", dominant_competitor) %}
+            {% elif is_leader and dominant_competitor and "closest competitor" in raw_title|lower %}
+              {% set clean_title = raw_title|replace("the closest competitor", dominant_competitor) %}
+            {% else %}
+              {% set clean_title = raw_title %}
+            {% endif %}
+
+            <li style="margin-bottom: 6px;">
+              {{ clean_title }}
+            </li>
+
+          {% endfor %}
+
+        </ul>
+      </div>
+    {% endif %}
 
       {% if flat_insights %}
         <div class="priority-grid">
@@ -521,17 +572,54 @@
           <div class="priority-gap"></div>
 
           <div class="priority-card">
-            <h3>Position Context</h3>
-            {% if next_items %}
-              <ul class="priority-list">
-                {% for item in next_items[:3] %}
-                  <li>{{ item.get("summary") }}</li>
+          <h3>Position Context</h3>
+
+          {% set sorted_rows = sov_rows %}
+          {% set you = sov_rows|selectattr("is_business")|list|first %}
+          {% set leader = sorted_rows[0] if sorted_rows else none %}
+
+          {% if you and leader %}
+            {% set you_reviews = you.get("reviews_total") or you.get("review_count") or 0 %}
+            {% set leader_reviews = leader.get("reviews_total") or leader.get("review_count") or 0 %}
+            {% set leader_name = leader.get("competitor_name") or leader.get("name") or "the market leader" %}
+            {% set leader_share = leader.get("share_pct") or leader.get("share") or 0 %}
+            {% set gap = leader_reviews - you_reviews %}
+
+            <ul class="priority-list">
+              {% if leader.get("is_business") %}
+                <li>You lead the market with {{ you_reviews }} reviews and roughly {{ "%.0f"|format(leader_share) }}% review share.</li>
+
+                {% if sorted_rows|length > 1 %}
+                  {% set challenger = sorted_rows[1] %}
+                  {% set challenger_name = challenger.get("competitor_name") or challenger.get("name") or "the closest challenger" %}
+                  {% set challenger_reviews = challenger.get("reviews_total") or challenger.get("review_count") or 0 %}
+                  <li>{{ challenger_name }} is the closest challenger at {{ challenger_reviews }} reviews, so protect the lead by keeping review generation consistent.</li>
+                {% endif %}
+
+              {% else %}
+                <li>You are chasing {{ leader_name }}, who leads the market with {{ leader_reviews }} reviews and roughly {{ "%.0f"|format(leader_share) }}% review share.</li>
+                <li>You currently have {{ you_reviews }} reviews, leaving a {{ gap }}-review gap to close.</li>
+
+                {% set competitors_below = [] %}
+                {% for row in sorted_rows %}
+                  {% set row_reviews = row.get("reviews_total") or row.get("review_count") or 0 %}
+                  {% if not row.get("is_business") and row_reviews < you_reviews %}
+                    {% set _ = competitors_below.append(row) %}
+                  {% endif %}
                 {% endfor %}
-              </ul>
-            {% else %}
-              <div class="muted">No next-step items surfaced this cycle.</div>
-            {% endif %}
-          </div>
+
+                {% if competitors_below %}
+                  {% set below = competitors_below[0] %}
+                  {% set below_name = below.get("competitor_name") or below.get("name") or "the closest challenger" %}
+                  {% set below_reviews = below.get("reviews_total") or below.get("review_count") or 0 %}
+                  <li>{{ below_name }} is {{ you_reviews - below_reviews }} reviews behind you, so protect your position while closing the gap above.</li>
+                {% endif %}
+              {% endif %}
+            </ul>
+          {% else %}
+            <div class="muted">No position context surfaced this cycle.</div>
+          {% endif %}
+        </div>
 
           <div class="priority-gap"></div>
 
@@ -557,7 +645,9 @@
       {% if grouped_sections %}
         {% for group in grouped_sections %}
           <div class="section" style="margin-bottom: 14px;">
-            <div class="section-title">{{ group.get("section") }}</div>
+            {% if group.get("section") != "Strategic Recommendations" %}
+              <div class="section-title">{{ group.get("section") }}</div>
+            {% endif %}
 
             <div class="cards">
               {% for item in group.get("insights") or [] %}
@@ -565,7 +655,15 @@
                 <div class="insight-card">
                   <div class="insight-top">
                     <div class="insight-title-col">
-                      <p class="insight-summary">{{ item.get("summary") }}</p>
+                      {% set summary_text = item.get("summary") or "" %}
+
+                      {% if "Customer Perception Insights" in summary_text %}
+                        <p class="insight-summary">
+                          Customer perception shows a clear positioning opening: make speed and convenience the core message.
+                        </p>
+                      {% else %}
+                        <p class="insight-summary">{{ summary_text }}</p>
+                      {% endif %}
                     </div>
                     <div class="insight-badge-col">
                       <span class="badge {% if priority == 'Immediate' %}badge-immediate{% elif priority == 'Next' %}badge-next{% else %}badge-monitor{% endif %}">
@@ -607,115 +705,142 @@
 
       <div class="summary-card">
         <div class="summary-heading">Customer Perception Narrative</div>
-        <div class="detail-text narrative-block">
-          {{ (sections.get("customer_perception_insights") or {}).get("body") }}
+        <div class="detail-text narrative-block perception-block">
+          {{
+            ((sections.get("customer_perception_insights") or {}).get("body") or "")
+              | replace('Market Story', '<strong>Market Story</strong>')
+              | replace('Competitive Readout', '<strong>Competitive Readout</strong>')
+              | replace('Messaging Gap', '<strong>Messaging Gap</strong>')
+              | replace('Recommended Position', '<strong>Recommended Position</strong>')
+              | replace('\n\n', '<br><br>')
+              | replace('\n', '<br>')
+              | safe
+          }}
         </div>
       </div>
 
       {% set friction = sections.get("customer_friction_signals") or {} %}
       {% if friction %}
         <div class="summary-card">
-          <div class="summary-heading">{{ friction.get("title") or "Customer Friction Signals" }}</div>
+          <div class="summary-heading">
+            {{ friction.get("title") or "Customer Friction Signals" }}
+          </div>
 
-          {% if friction.get("subtitle") %}
-            <div class="detail-text" style="margin-bottom: 8px; color: #667085;">
-              {{ friction.get("subtitle") }}
-            </div>
-          {% endif %}
+          {% set friction_summary = friction.get("summary") or "" %}
 
-          {% if friction.get("summary") %}
-            <div class="detail-text narrative-block" style="margin-bottom: 14px;">
-              {{ friction.get("summary") }}
-            </div>
-          {% endif %}
+          {% if "limited" in friction_summary|lower %}
 
-          {% if friction.get("summary") %}
-            <div style="margin-top: 10px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid #f1c0c0; border-radius: 6px; background: #fff5f5; font-size: 12px;">
-                <strong style="color:#b42318;">Top Issue This Month:</strong>
-                Quality complaints are above market levels and should be addressed first.
-            </div>
+            <div class="detail-text narrative-block">
+              No meaningful customer friction signals detected. Scheduling appears occasionally but is not yet a consistent issue.
+            </div>  
+
+          {% else %}
+
+            {% if friction.get("subtitle") %}
+              <div class="detail-text" style="margin-bottom: 8px; color: #667085;">
+                {{ friction.get("subtitle") }}
+              </div>
             {% endif %}
 
-          {% set friction_themes = friction.get("themes") or [] %}
-          {% if friction_themes %}
-            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
-              <thead>
-                <tr>
-                  <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">
-                    Status
-                  </th>
-                  <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">
-                    Theme
-                  </th>
-                  <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">
-                    You
-                  </th>
-                  <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">
-                    Market
-                  </th>
-                  <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">
-                    Highest Competitor
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {% for row in friction_themes %}
+            {% if friction.get("summary") %}
+              <div class="detail-text narrative-block" style="margin-bottom: 14px;">
+                {{ friction.get("summary") }}
+              </div>
+            {% endif %}
+
+            {% set friction_themes = friction.get("themes") or [] %}
+            {% set total = friction_themes | sum(attribute="market_total") %}
+
+            {% if total > 0 %}
+              <div style="margin-top: 10px; margin-bottom: 14px; padding: 8px 10px; border: 1px solid #f1c0c0; border-radius: 6px; background: #fff5f5; font-size: 12px;">
+                <strong style="color:#b42318;">Top Issue This Month:</strong>
+                {{ friction_summary }}
+              </div>
+            {% endif %}
+
+            {% if friction_themes %}
+              <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                <thead>
+                  <tr>
+                    <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">Status</th>
+                    <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">Theme</th>
+                    <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">You</th>
+                    <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">Market</th>
+                    <th style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #667085;">Highest Competitor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in friction_themes %}
                     <tr>
-
-                    <!-- STATUS -->
-                    <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; font-weight: 700; white-space: nowrap;">
+                      <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; font-weight: 700; white-space: nowrap;">
                         {% if row.owner_count == 0 and row.market_total > 0 %}
-                        <span style="color:#667085;">Advantage</span>
+                          <span style="color:#667085;">Advantage</span>
                         {% elif row.owner_count > row.market_average %}
-                        <span style="color:#b42318;">Risk</span>
+                          <span style="color:#b42318;">Risk</span>
                         {% elif row.owner_count > 0 %}
-                        <span style="color:#b54708;">Watch</span>
+                          <span style="color:#b54708;">Watch</span>
                         {% else %}
-                        <span style="color:#98a2b3;">—</span>
+                          <span style="color:#98a2b3;">—</span>
                         {% endif %}
-                    </td>
+                      </td>
 
-                    <!-- THEME -->
-                    <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
+                      <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
                         {{ row.get("theme_label") }}
-                    </td>
+                      </td>
 
-                    <!-- YOU -->
-                    <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; font-weight: 600;">
+                      <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef; font-weight: 600;">
                         {{ row.get("owner_count") }}
-                    </td>
+                      </td>
 
-                    <!-- MARKET -->
-                    <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
+                      <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
                         {{ row.market_total }}{% if row.market_total == 1 %} complaint{% else %} complaints{% endif %}
-                    </td>
+                      </td>
 
-                    <!-- HIGHEST COMPETITOR -->
-                    <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
+                      <td style="padding: 10px 12px; border-bottom: 1px solid #e6e9ef;">
                         {% if row.get("leader_competitor_name") %}
-                        {{ row.get("leader_competitor_name") }} ({{ row.get("leader_count") }})
+                          {{ row.get("leader_competitor_name") }} ({{ row.get("leader_count") }})
                         {% else %}
-                        —
+                          —
                         {% endif %}
-                    </td>
-
+                      </td>
                     </tr>
-                {% endfor %}
+                  {% endfor %}
                 </tbody>
-            </table>
+              </table>
 
-            <div class="detail-text" style="margin-top: 10px; color: #667085;">
-              Counts reflect repeated negative-review themes found through deterministic phrase matching.
-            </div>
+              <div class="detail-text" style="margin-top: 10px; color: #667085;">
+                Counts reflect repeated negative-review themes found through deterministic phrase matching.
+              </div>
+            {% endif %}
+
           {% endif %}
         </div>
       {% endif %}
-
+      
       {% if sov_donut %}
         <div class="summary-card">
           <div class="summary-heading">Review Share</div>
 
-          <table style="width: 100%; border-collapse: collapse;">
+            {% set owner_sov = namespace(row=none) %}
+            {% set leader_sov = sov_rows[0] if sov_rows else none %}
+
+            {% for row in sov_rows %}
+              {% if row.get("is_business") %}
+                {% set owner_sov.row = row %}
+              {% endif %}
+            {% endfor %}
+
+            {% if owner_sov.row and leader_sov %}
+              <p class="detail-text" style="margin-bottom: 8px;">
+                You currently hold {{ owner_sov.row.get("share_pct")|round|int }}% of total reviews
+                with {{ owner_sov.row.get("reviews_total") or owner_sov.row.get("review_count") or owner_sov.row.get("google_review_count") }} reviews.
+                {{ leader_sov.get("competitor_name") or leader_sov.get("name") }} leads the market with
+                {{ leader_sov.get("share_pct")|round|int }}% and
+                {{ leader_sov.get("reviews_total") or leader_sov.get("review_count") or leader_sov.get("google_review_count") }} reviews.
+              </p>
+            {% endif %}
+
+            <table style="width: 100%; border-collapse: collapse;">
             <tr>
               <td style="width: 220px; vertical-align: top; text-align: center; padding-right: 12px;">
                 <img
@@ -781,60 +906,105 @@
         </div>
       {% endif %}
 
-      {% if sov_rows %}
-        <div class="summary-card">
-          <div class="summary-heading">Share of Voice Snapshot</div>
-          <p class="detail-text">
-            Market total reviews: {{ sov.get("market_total_reviews") or 0 }}.
-            Top competitors in this snapshot:
-            {% for row in sov_rows[:3] %}
-              {{ row.get("competitor_name") or row.get("name") }}{% if row.get("share_pct") is not none %} ({{ (row.get("share_pct") or 0) | round(0) | int }}%){% endif %}{% if not loop.last %}, {% endif %}
-            {% endfor %}.
-          </p>
-        </div>
-      {% endif %}
-    </div>
-
     {% if report.sections.report_experience.this_month_focus %}
     <div class="summary-card next-moves-card">
         
-        <div class="summary-heading">Next Moves (Action Plan)</div>
+        <div class="summary-heading">Execution Plan</div>
 
       <div class="detail-text" style="margin-bottom: 10px;">
-        {% if review_target %}
-            <strong>{{ review_target.mode }}:</strong>
-            {{ review_target.headline }}
+        {% set sorted_rows = sov_rows %}
+        {% set you = sov_rows|selectattr("is_business")|list|first %}
+        {% set leader = sorted_rows[0] if sorted_rows else none %}
 
-            {% if review_pace %}
-                <br/>
-                <span style="display:block; margin-top: 2px;">
-                    <strong>{{ review_pace.status }}:</strong>
-                    {{ review_pace.message }}
-                </span>
-            {% endif %}
+        {% if you and leader and not leader.get("is_business") %}
+          {% set you_reviews = you.get("reviews_total") or you.get("review_count") or 0 %}
+          {% set leader_reviews = leader.get("reviews_total") or leader.get("review_count") or 0 %}
+          {% set leader_name = leader.get("competitor_name") or leader.get("name") or "the market leader" %}
+          {% set gap = leader_reviews - you_reviews %}
+          {% set moderate_target = ((gap / 12)|round(0, "ceil"))|int %}
+          {% set aggressive_target = ((gap / 6)|round(0, "ceil"))|int %}
 
-            {% if review_overtake %}
-            <span style="display:block; margin-top: 2px;">
-                <strong>{{ review_overtake.status }}:</strong>
-                {{ review_overtake.message }}
-            </span>
-        {% endif %}
-
+          <strong>Not closing yet:</strong>
+          At the current pace, you are not closing the gap with {{ leader_name }}.
+          To gain ground, you need to outpace them by roughly {{ moderate_target }}-{{ aggressive_target }} reviews per month.
         {% else %}
-            Clear action items to improve position before the next report.
+          Clear action items to improve position before the next report.
         {% endif %}
-    </div>
+      </div>
 
         <ol style="padding-left: 16px; margin: 0;">
         {% for item in report.sections.report_experience.this_month_focus %}
-        <li style="margin-bottom: 10px;">
-            <strong>{{ item.title }}</strong>
-            {% if item.detail %}
-            <div class="detail-text" style="margin-top: 3px;">
-                {{ item.detail }}
-            </div>
+
+            {% set action_text = item.get("action") or item.get("summary") or item.get("title") or "" %}
+            {% set detail_text = item.get("detail") or "" %}
+
+            {% set dominant_competitor = "" %}
+
+            {% set competitor_rows = sov_rows|rejectattr("is_business")|list %}
+            {% set dominant_competitor = "" %}
+
+            {% if competitor_rows %}
+              {% set dominant_competitor = competitor_rows[0].get("competitor_name") or competitor_rows[0].get("name") %}
             {% endif %}
-        </li>
+
+        <li style="margin-bottom: 10px;">
+
+          {% set review_target = report.sections.report_experience.review_target or {} %}
+          {% set is_leader = review_target.get("current_rank") == 1 %}
+
+          <strong>
+            {% if is_leader and dominant_competitor and "choose you over the leader" in action_text|lower %}
+              {{ action_text|replace("the leader", dominant_competitor) }}
+            {% elif is_leader and dominant_competitor and "choose you over the closest competitor" in action_text|lower %}
+              {{ action_text|replace("the closest competitor", dominant_competitor) }}
+            {% else %}
+              {{ action_text }}
+            {% endif %}
+          </strong>
+
+          <div class="detail-text" style="margin-top: 3px;">
+
+          {% if detail_text and "identify the highest-impact opportunity" not in detail_text|lower %}
+              {{ detail_text }}
+
+          {% elif "review" in action_text|lower %}
+
+          {% set review_target = report.sections.report_experience.review_target %}
+          {% set review_pace = report.sections.report_experience.review_pace %}
+
+          {% if review_target and review_target.headline %}
+
+              {% if review_target.mode %}
+              <div class="detail-text" style="margin-bottom: 2px;">
+                <strong>Review posture:</strong> {{ review_target.mode|title }} —
+                {{ review_target.headline
+                    |replace("This month:", "")
+                    |replace(review_target.mode ~ ":", "")
+                    |trim
+                    |lower
+                }}
+              </div>
+            {% endif %}
+
+              {% if review_pace and review_pace.message %}
+                  {{ review_pace.message }}
+              {% endif %}
+          {% else %}
+              Set a measurable monthly review target and standardize review requests across staff.
+          {% endif %}
+
+          {% elif "messaging" in action_text|lower %}
+              Update homepage messaging, testimonials, and service descriptions so the positioning customers describe in reviews is visible immediately.
+
+          {% elif "position" in action_text|lower %}
+              Clarify your positioning against {{ dominant_competitor or "the leading competitor" }} across your website, Google profile, and customer messaging.
+
+          {% else %}
+              Focus execution on the highest-impact operational or positioning change surfaced in this report and measure whether it improves customer response next month.
+
+          {% endif %}
+          </div>
+      </li>
     {% endfor %}
         </ol>
     </div>

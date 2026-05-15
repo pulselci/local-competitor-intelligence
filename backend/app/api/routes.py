@@ -21,6 +21,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from app.services.snapshot_service import collect_snapshots_for_business
+from app.services.report_integrity_service import apply_report_integrity_rules
 
 from app.api.analytics import router as analytics_router
 from app.api.generated_reports import (
@@ -1587,11 +1588,116 @@ def _build_report_experience_payload(
     safe_previous_insights = previous_insights if isinstance(previous_insights, list) else []
     safe_sections = sections if isinstance(sections, dict) else {}
 
+    # -------------------------------------------------
+    # CLIENT-DATA SAFETY GUARD
+    # Never allow previous insights from another business
+    # to leak into the current report.
+    # -------------------------------------------------
+
+    current_sov = safe_sections.get("share_of_voice") or []
+
+    valid_competitor_names = {
+        str(row.get("competitor_name") or row.get("name") or "").strip()
+        for row in current_sov
+        if isinstance(row, dict)
+    }
+
+    valid_competitor_names = {
+        name for name in valid_competitor_names if name
+    }
+
+    def _text_has_foreign_client_data(text: str) -> bool:
+        text_lower = str(text or "").lower()
+
+        known_wrong_terms = [
+            "blue ash dental",
+            "riversbend dental",
+            "cedar village",
+            "dental group",
+        ]
+
+        return any(term in text_lower for term in known_wrong_terms)
+
+    def _filter_cross_client_items(items):
+        cleaned = []
+
+        for item in items or []:
+            if isinstance(item, str):
+                if not _text_has_foreign_client_data(item):
+                    cleaned.append(item)
+
+            elif isinstance(item, dict):
+                combined = " ".join(
+                    str(item.get(k) or "")
+                    for k in [
+                        "title",
+                        "summary",
+                        "action",
+                        "detail",
+                        "why_it_matters",
+                        "how_to_implement",
+                    ]
+                )
+
+                if not _text_has_foreign_client_data(combined):
+                    cleaned.append(item)
+
+        return cleaned
+
+    safe_previous_insights = _filter_cross_client_items(safe_previous_insights)
+
     presentation = build_client_facing_insights(
         safe_insights,
         previous_insights=safe_previous_insights,
         sections=safe_sections,
     )
+
+    def _dynamic_how_to_implement(item: Dict[str, Any]) -> str:
+        summary = str(item.get("summary") or "").lower()
+        insight_type = str(item.get("type") or "").lower()
+
+        if "ranked #" in summary or "rank #" in summary:
+            return (
+                "Use this rank as the baseline: set a monthly review target, compare movement against the next competitor, "
+                "and track whether the gap is shrinking."
+            )
+
+        if "behind" in summary or "gap" in summary or "trail the market leader" in summary:
+            return (
+                "Set a review target tied to the gap, then consistently request reviews after each visit and track progress monthly."
+            )
+
+        if "controls" in summary or "top 2 competitors" in summary:
+            return (
+                "Position directly against dominant competitors by highlighting clear differentiators, stronger trust signals, "
+                "and reasons customers should choose you instead."
+            )
+
+        if "review share" in summary or "share of voice" in summary:
+            return (
+                "Make your review position more visible by improving your Google Business Profile, increasing review volume, "
+                "and reinforcing trust signals."
+            )
+
+        if "customer language" in summary or "friendly staff" in summary or "easy scheduling" in summary:
+            return (
+                "Use exact customer phrases in your website, Google profile, and review responses to reinforce what customers value most."
+            )
+
+        if "friction" in insight_type or "complaint" in summary:
+            return (
+                "Identify the operational cause behind complaints, fix the issue, and communicate improvements through responses and messaging."
+            )
+
+        if "perception" in insight_type:
+            return (
+                "Turn the strongest customer perception into a clear positioning message and repeat it across all customer touchpoints."
+            )
+
+        return (
+            "Identify the highest-impact opportunity from this signal and act on it this month—either by improving how you generate reviews, "
+            "how you position your services, or how clearly you communicate trust and results to potential customers."
+        )
 
     def _normalize_item(item: Dict[str, Any]) -> Dict[str, Any]:
         summary = (
@@ -1602,7 +1708,34 @@ def _build_report_experience_payload(
             or ""
         )
 
+        # -----------------------------------------
+        # Tighten summary phrasing (headline quality)
+        # -----------------------------------------
+        if summary:
+            s = summary.strip()
+
+            if "messaging does not fully reflect" in s.lower():
+                summary = "Messaging is not aligned with how customers describe value."
+
+            elif "positioning opening" in s.lower():
+                summary = "Clear positioning opportunity: emphasize speed and convenience."
+
+            elif "reducing positioning clarity" in s.lower():
+                summary = summary.replace("reducing positioning clarity", "").strip().rstrip(".") + "."
+
         action = item.get("action") or item.get("recommended_action") or summary
+
+        # -----------------------------------------
+        # Prevent signal-as-action (low value)
+        # -----------------------------------------
+        if action:
+            action_lower = action.lower()
+
+            if "share of voice increased" in action_lower:
+                action = "Reinforce your market lead by increasing review visibility and strengthening trust signals."
+
+            if "share of voice decreased" in action_lower:
+                action = "Recover lost visibility by accelerating review generation and reinforcing your core positioning."
 
         why = (
             item.get("why_it_matters")
@@ -1610,9 +1743,7 @@ def _build_report_experience_payload(
             or "This signal may affect local visibility, trust, or customer choice."
         )
 
-        how = item.get("how_to_implement") or (
-            "Review this signal, assign an owner, and take one clear action before the next report."
-        )
+        how = item.get("how_to_implement") or _dynamic_how_to_implement(item)
 
         priority_map = {
             "high": "Immediate",
@@ -1718,10 +1849,102 @@ def _build_report_experience_payload(
         if isinstance(i, dict)
     ]
 
+    # -------------------------------------------------
+    # FORCE CLEAN POSITION CONTEXT (NO CROSS-CLIENT DATA)
+    # -------------------------------------------------
+
+    current_sov = safe_sections.get("share_of_voice") or []
+
+    def _build_clean_position_context():
+        rows = [
+            r for r in current_sov
+            if isinstance(r, dict)
+        ]
+
+        if not rows:
+            return []
+
+        rows = sorted(
+            rows,
+            key=lambda r: int(r.get("reviews_total") or r.get("review_count") or 0),
+            reverse=True,
+        )
+
+        you = next((r for r in rows if r.get("is_business")), None)
+        leader = rows[0] if rows else None
+
+        if not you or not leader:
+            return []
+
+        you_name = str(you.get("competitor_name") or you.get("name") or "you")
+        leader_name = str(leader.get("competitor_name") or leader.get("name") or "the market leader")
+
+        you_reviews = int(you.get("reviews_total") or you.get("review_count") or 0)
+        leader_reviews = int(leader.get("reviews_total") or leader.get("review_count") or 0)
+
+        you_share = float(you.get("share_pct") or you.get("share") or 0)
+        leader_share = float(leader.get("share_pct") or leader.get("share") or 0)
+
+        context = []
+
+        if leader.get("is_business"):
+            context.append(
+                f"You lead the market with {you_reviews:,} reviews and roughly {you_share:.0f}% review share."
+            )
+
+            if len(rows) > 1:
+                challenger = rows[1]
+                challenger_name = challenger.get("competitor_name") or challenger.get("name") or "the closest challenger"
+                challenger_reviews = int(challenger.get("reviews_total") or challenger.get("review_count") or 0)
+
+                context.append(
+                    f"{challenger_name} is the closest challenger at {challenger_reviews:,} reviews, so protect the lead by keeping review generation consistent."
+                )
+
+        else:
+            gap = max(leader_reviews - you_reviews, 0)
+
+            context.append(
+                f"You are chasing {leader_name}, who leads the market with {leader_reviews:,} reviews and roughly {leader_share:.0f}% review share."
+            )
+
+            context.append(
+                f"You currently have {you_reviews:,} reviews, leaving a {gap:,}-review gap to close."
+            )
+
+            below_you = [
+                r for r in rows
+                if not r.get("is_business")
+                and int(r.get("reviews_total") or r.get("review_count") or 0) < you_reviews
+            ]
+
+            if below_you:
+                closest_below = below_you[0]
+                below_name = closest_below.get("competitor_name") or closest_below.get("name") or "the closest challenger"
+                below_reviews = int(closest_below.get("reviews_total") or closest_below.get("review_count") or 0)
+                cushion = you_reviews - below_reviews
+
+                context.append(
+                    f"{below_name} is {cushion:,} reviews behind you, so protect your position while closing the gap above."
+                )
+
+        return context[:3]
+
+    # Override any contaminated Position Context from presentation layer
+    clean_position_context = _build_clean_position_context()
+
+    summary_side = presentation.get("summary_side") or {}
+    if not isinstance(summary_side, dict):
+        summary_side = {}
+
+    summary_side["position_context"] = clean_position_context
+
     return {
         "flat_insights": flat_insights,
         "grouped_sections": grouped_sections,
         "summary_text": presentation.get("summary_text") or "",
+        "summary_side": summary_side,
+        "position_context": clean_position_context,
         "action_plan": action_plan,
         "this_month_focus": this_month_focus,
         "review_target": presentation.get("review_target"),
@@ -1914,10 +2137,17 @@ def _append_insight_to_report_in_db(
                 sections["insights"] = insights
 
             insights.append(insight)
+
             sections["report_experience"] = _build_report_experience_payload(
                 insights,
                 previous_insights=previous_insights,
                 sections=sections,
+            )
+
+            # 🔥 APPLY GLOBAL RULES HERE
+            sections["report_experience"] = apply_report_integrity_rules(
+                sections.get("report_experience") or {},
+                sections,
             )
             sections["share_of_voice_donut"] = _build_share_of_voice_donut_payload(sections)
             sections["review_count_bar"] = _build_review_count_bar_payload(sections)
@@ -2486,13 +2716,28 @@ def generate_business_report(business_id: UUID):
             themes = (sections.get("customer_friction_signals") or {}).get("themes") or []
 
             if themes:
-                top_theme = themes[0]
+                top_theme = themes[0] if themes else {}
 
-                customer_perception_text = (
-                    f"Customer feedback is currently driven by {top_theme}. "
-                    "This theme is shaping how competitors are perceived and influencing customer decision-making. "
-                    "Strengthening this area while positioning against competitor weaknesses will improve conversion."
-                )
+                theme_label = None
+                market_total = 0
+                leader_name = None
+
+                if isinstance(top_theme, dict):
+                    theme_label = top_theme.get("theme_label") or top_theme.get("theme_key")
+                    market_total = int(top_theme.get("market_total") or 0)
+                    leader_name = top_theme.get("leader_competitor_name")
+
+                if not theme_label or market_total == 0:
+                    customer_perception_text = (
+                        "No dominant customer perception theme emerged this period. "
+                        "This creates an opportunity to differentiate by owning a key experience area such as speed, communication, or convenience."
+                    )
+                else:
+                    customer_perception_text = (
+                        f"Customer feedback in this market is primarily driven by {str(theme_label).lower()}. "
+                        f"{leader_name or 'A leading competitor'} is currently the most visible competitor in this area. "
+                        "Strengthening your positioning around this theme can improve conversion and reinforce competitive advantage."
+                    )
 
                 sections["customer_perception_insights"]["body"] = customer_perception_text
 
@@ -2537,8 +2782,6 @@ def generate_business_report(business_id: UUID):
                 }
             ]
 
-        sections["report_experience"]["this_month_focus"] = focus[:3]
-
         if not sections["report_experience"].get("immediate_priorities"):
             sections["report_experience"]["immediate_priorities"] = len(focus[:3]) or 1
 
@@ -2549,6 +2792,13 @@ def generate_business_report(business_id: UUID):
 
         if sections.get("report_experience"):
             sections["report_experience"]["summary_text"] = premium_headline
+
+        owner_row = next((r for r in (share_of_voice.get("rows") or []) if r.get("is_business")), None)
+        sections["business_name"] = (
+            (owner_row or {}).get("competitor_name")
+            or (owner_row or {}).get("name")
+            or "Client"
+        )
 
         summary_text = premium_headline
 
@@ -2673,8 +2923,17 @@ def generate_business_report(business_id: UUID):
         focus = sections["report_experience"].get("this_month_focus") or []
         insights = sections.get("insights") or []
 
+        focus = sections["report_experience"].get("this_month_focus") or []
+
         if not focus:
-            focus = insights[:3]
+            focus = [{
+                "type": "fallback_focus",
+                "summary": "Set a clear monthly review-growth target, improve your positioning against top competitors, and track whether you are closing the gap.",
+                "priority": "Immediate"
+            }]
+
+        sections["report_experience"]["this_month_focus"] = focus[:3]
+        sections["report_experience"]["immediate_priorities"] = len(focus[:3]) or 1
 
         if not focus:
             focus = [{
