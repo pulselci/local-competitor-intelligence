@@ -12,6 +12,14 @@ from pydantic import BaseModel, EmailStr
 from app.core.db import get_conn
 from app.services.pdf_service import render_report_pdf
 from app.services.email_service import send_report_email
+from fastapi import Depends, Header, HTTPException
+
+import os
+
+def verify_admin_key(x_admin_key: str = Header(None)):
+    expected = os.getenv("ADMIN_API_KEY")
+    if not expected or x_admin_key != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 router = APIRouter(tags=["generated-reports"])
 
@@ -109,7 +117,11 @@ def get_generated_report_pdf(report_id: UUID):
 
 
 @router.post("/generated-reports/{report_id}/send")
-def send_generated_report_email(report_id: UUID, payload: SendReportRequest):
+def send_generated_report_email(
+    report_id: UUID,
+    payload: SendReportRequest,
+    admin_ok: None = Depends(verify_admin_key)
+):
     report = _fetch_report(report_id)
 
     # Build PDF

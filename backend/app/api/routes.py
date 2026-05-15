@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 import math
 import stripe
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Header, Depends
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
@@ -112,6 +112,13 @@ from app.services.review_friction_service import (
     build_customer_friction_insights,
     build_customer_friction_summary,
 )
+
+import os
+
+def verify_admin_key(x_admin_key: str = Header(None)):
+    expected = os.getenv("ADMIN_API_KEY")
+    if not expected or x_admin_key != expected:
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 logger = logging.getLogger(__name__)
 
@@ -822,7 +829,7 @@ def onboarding(payload: OnboardingIn):
 
 
 @router.get("/admin/businesses")
-def list_admin_businesses():
+def list_admin_businesses(admin_ok: None = Depends(verify_admin_key)):
     sql = """
     select
         b.id,
@@ -2168,7 +2175,10 @@ def _append_insight_to_report_in_db(
 
 
 @router.post("/business/{business_id}/reports/generate", response_model=GeneratedReportOut)
-def generate_business_report(business_id: UUID):
+def generate_business_report(
+    business_id: UUID,
+    admin_ok: None = Depends(verify_admin_key)
+):
     """
     Manual report generation:
       - inserts generated_reports row with summary_text + sections
