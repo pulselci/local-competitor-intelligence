@@ -26,6 +26,7 @@ class BusinessIntakeIn(BaseModel):
     state: Optional[str] = Field(default=None, max_length=120)
     country: Optional[str] = Field(default="US", max_length=2)
     notes: Optional[str] = Field(default=None, max_length=2000)
+    customer_label: Optional[str] = Field(default="customers", max_length=50)
     competitors: list[CompetitorIn] = Field(default_factory=list)
 
 
@@ -37,6 +38,7 @@ class BusinessOut(BaseModel):
     state: Optional[str] = None
     country: Optional[str] = None
     notes: Optional[str] = None
+    customer_label: Optional[str] = "customers"
     created_at: datetime
 
 
@@ -75,6 +77,7 @@ class BusinessSeedIn(BaseModel):
     state: Optional[str] = Field(default=None, max_length=120)
     country: Optional[str] = Field(default="US", max_length=2)
     notes: Optional[str] = Field(default=None, max_length=2000)
+    customer_label: Optional[str] = Field(default="customers", max_length=50)
     google_place_id: Optional[str] = None
     google_maps_url: Optional[str] = None
     website_url: Optional[str] = None

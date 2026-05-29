@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     stripe_success_url: str | None = None
     stripe_cancel_url: str | None = None
 
+    # Admin / cron protection
+    ADMIN_API_KEY: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=r"C:\Users\201397\local-competitor-intelligence\.env",
         env_file_encoding="utf-8",

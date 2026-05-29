@@ -289,7 +289,7 @@ def _sync_business_from_checkout_session(session_id: str) -> dict:
     if items:
         price_id = (((items[0] or {}).get("price")) or {}).get("id")
 
-    # Always derive from items (your Stripe version requires this)
+    # Derive current_period_end from subscription items
     items = (((subscription.get("items") or {}).get("data")) or [])
 
     current_period_end = None
@@ -298,33 +298,24 @@ def _sync_business_from_checkout_session(session_id: str) -> dict:
 
     current_period_end_dt = None
     if current_period_end:
-        current_period_end_dt = datetime.fromtimestamp(
-            int(current_period_end),
-            tz=timezone.utc,
-        )
-
-    # Fallback: try nested location if top-level missing
-    if not current_period_end:
-        items = (((subscription.get("items") or {}).get("data")) or [])
-        if items:
-            current_period_end = items[0].get("current_period_end")
-
-    current_period_end_dt = None
-    if current_period_end:
-        current_period_end_dt = datetime.fromtimestamp(
-            int(current_period_end),
-            tz=timezone.utc,
-        )
+        try:
+            current_period_end_dt = datetime.fromtimestamp(
+                int(current_period_end),
+                tz=timezone.utc,
+            )
+        except (TypeError, ValueError):
+            current_period_end_dt = None
 
     _upsert_business_billing_state(
         business_id=str(business_id),
         stripe_customer_id=str(customer_id) if customer_id else None,
-        stripe_subscription_id=str(subscription_id),
+        stripe_subscription_id=str(subscription_id) if subscription_id else None,
         stripe_price_id=str(price_id) if price_id else None,
         billing_status=str(status) if status else None,
         billing_current_period_end=current_period_end_dt,
         is_active=_is_billing_active(status),
     )
+
 
     return {
         "business_id": str(business_id),
@@ -578,42 +569,33 @@ async def stripe_webhook(request: Request):
                     if items:
                         price_id = (((items[0] or {}).get("price")) or {}).get("id")
 
-                    # Always derive from items (your Stripe version requires this)
-                    items = (((subscription.get("items") or {}).get("data")) or [])
+                # Derive current_period_end from subscription items
+                items = (((subscription.get("items") or {}).get("data")) or [])
 
-                    current_period_end = None
-                    if items:
-                        current_period_end = items[0].get("current_period_end")
+                current_period_end = None
+                if items:
+                    current_period_end = items[0].get("current_period_end")
 
-                    current_period_end_dt = None
-                    if current_period_end:
+                current_period_end_dt = None
+                if current_period_end:
+                    try:
                         current_period_end_dt = datetime.fromtimestamp(
                             int(current_period_end),
                             tz=timezone.utc,
                         )
+                    except (TypeError, ValueError):
+                        current_period_end_dt = None
 
-                    # Fallback: try nested location if top-level missing
-                    if not current_period_end:
-                        items = (((subscription.get("items") or {}).get("data")) or [])
-                        if items:
-                            current_period_end = items[0].get("current_period_end")
+                _upsert_business_billing_state(
+                    business_id=str(business_id),
+                    stripe_customer_id=str(customer_id) if customer_id else None,
+                    stripe_subscription_id=str(subscription_id) if subscription_id else None,
+                    stripe_price_id=str(price_id) if price_id else None,
+                    billing_status=str(status) if status else None,
+                    billing_current_period_end=current_period_end_dt,
+                    is_active=_is_billing_active(status),
+                )
 
-                    current_period_end_dt = None
-                    if current_period_end:
-                        current_period_end_dt = datetime.fromtimestamp(
-                            int(current_period_end),
-                            tz=timezone.utc,
-                        )
-
-                    _upsert_business_billing_state(
-                        business_id=str(business_id),
-                        stripe_customer_id=str(customer_id) if customer_id else None,
-                        stripe_subscription_id=str(subscription_id),
-                        stripe_price_id=str(price_id) if price_id else None,
-                        billing_status=str(status) if status else "past_due",
-                        billing_current_period_end=current_period_end_dt,
-                        is_active=False,
-                    )
 
     except Exception as e:
         logger.exception("Stripe webhook handler failed")
@@ -683,6 +665,7 @@ def onboarding(payload: OnboardingIn):
             state=payload.business.state,
             country=payload.business.country,
             notes=payload.business.notes,
+            customer_label=payload.business.customer_label or "customers",
             competitors=[
                 CompetitorIn(
                     name=payload.business.business_name,
@@ -734,33 +717,16 @@ def onboarding(payload: OnboardingIn):
         first_report = None
 
         if payload.auto_generate_first_report:
-            sections = build_full_report_pipeline(business_id)
-
-            report = insert_generated_report(
-                business_id=business_id,
-                schedule_id=schedule_id,
-                period_start=datetime.now(timezone.utc) - timedelta(days=30),
-                period_end=datetime.now(timezone.utc),
-                status="generated",
-                title=f"Competitive Report - {datetime.now().strftime('%Y-%m-%d')}",
-                summary_text=(sections.get("report_experience") or {}).get("summary_text") or "Report generated.",
-                sections=sections,
-                inputs={
-                    "source": "onboarding_full_pipeline",
-                },
-                error=None,
-            )
-
-            if hasattr(report, "model_dump"):
-                first_report = report.model_dump()
-            elif hasattr(report, "dict"):
-                first_report = report.dict()
-            else:
-                first_report = report
+            # generate_business_report handles data collection, insight building,
+            # chart rendering, DB insert, and post-insert comparisons in one call.
+            first_report = generate_business_report(UUID(str(business_id)))
+            if hasattr(first_report, "model_dump"):
+                first_report = first_report.model_dump()
+            elif hasattr(first_report, "dict"):
+                first_report = first_report.dict()
 
             if payload.send_first_report and first_report:
                 report_id = first_report.get("id") if isinstance(first_report, dict) else None
-
                 if report_id:
                     for recipient in recipients:
                         send_generated_report_email(
@@ -768,7 +734,6 @@ def onboarding(payload: OnboardingIn):
                             SendReportRequest(to_email=recipient.email),
                         )
 
-        
         checkout = None
         billing_mode = (payload.billing_mode or "").strip().lower()
 
@@ -785,6 +750,7 @@ def onboarding(payload: OnboardingIn):
                     plan="starter",
                 )
             )
+
         # Optionally email checkout link
         if (
             billing_mode == "paid_now"
@@ -792,25 +758,18 @@ def onboarding(payload: OnboardingIn):
             and checkout
         ):
             checkout_url = checkout.get("url")
-
             if checkout_url:
                 for recipient in recipients:
-                    send_simple_email(
+                    send_plain_email(
                         to_email=recipient.email,
                         subject="Activate your Pulse LCI account",
-                        body=f"""
-        Hi,
-
-        Your Pulse Local Competitor Intelligence account is ready.
-
-        Activate your subscription here:
-        {checkout_url}
-
-        Once completed, your monthly reports will begin automatically.
-
-        Thanks,
-        Pulse LCI
-        """.strip(),
+                        body=(
+                            "Hi,\n\n"
+                            "Your Pulse Local Competitor Intelligence account is ready.\n\n"
+                            f"Activate your subscription here:\n{checkout_url}\n\n"
+                            "Once completed, your monthly reports will begin automatically.\n\n"
+                            "Thanks,\nPulse LCI"
+                        ),
                     )
         return OnboardingOut(
             business=created.business,
@@ -839,6 +798,7 @@ def list_admin_businesses(admin_ok: None = Depends(verify_admin_key)):
         b.state,
         b.country,
         b.notes,
+        'customers' as customer_label,
 
         c.id as competitor_id,
         c.name as competitor_name,
@@ -879,6 +839,7 @@ def list_admin_businesses(admin_ok: None = Depends(verify_admin_key)):
                 "google_place_id": None,
                 "google_maps_url": None,
                 "notes": row["notes"],
+                "customer_label": row["customer_label"] or "customers",
                 "competitors": [],
                 "recipient_emails": [],
             }
@@ -977,12 +938,24 @@ def _build_share_of_voice_donut_payload(sections: dict) -> dict | None:
             share_pct = 0.0
 
 
+        # Pull rating from whatever field is available
+        raw_rating = (
+            row.get("google_rating")
+            or row.get("rating")
+            or row.get("avg_rating")
+        )
+        try:
+            google_rating = round(float(raw_rating), 1) if raw_rating is not None else None
+        except (TypeError, ValueError):
+            google_rating = None
+
         valid_rows.append(
             {
                 "competitor_name": competitor_name,
                 "reviews_total": reviews_total,
                 "share_pct": share_pct,
                 "is_business": is_business,
+                "google_rating": google_rating,
             }
         )
 
@@ -1534,6 +1507,239 @@ def delete_snapshot(snapshot_id: UUID):
         raise HTTPException(status_code=500, detail=f"Failed to delete snapshot: {str(e)}")
 
 
+# ---------------------------------------------------------------------------
+# Data-driven Execution Plan
+# ---------------------------------------------------------------------------
+
+def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
+    """
+    Builds 3 concrete, numbered action items using real data from the report:
+      1. Review gap / momentum item (SOV + top mover)
+      2. Competitive positioning item (praise words + rating gap)
+      3. Exploit competitor weakness item (friction themes)
+    """
+    sov = sections.get("share_of_voice") or {}
+    sov_rows = sov.get("rows") or []
+
+    owner = next((r for r in sov_rows if r.get("is_business")), None)
+    competitors = [r for r in sov_rows if not r.get("is_business")]
+    leader = competitors[0] if competitors else None
+
+    print(f"[EXEC_PLAN_FN] sov_rows={len(sov_rows)} owner={bool(owner)} competitors={len(competitors)}")
+    for r in sov_rows:
+        print(f"  row: {r.get('competitor_name')} reviews={r.get('reviews_total')} is_biz={r.get('is_business')} rating={r.get('google_rating')}")
+
+    plan: list[dict] = []
+
+    # ── Item 1: Review momentum ───────────────────────────────────────────
+    if owner and leader:
+        owner_reviews = int(owner.get("reviews_total") or 0)
+        leader_reviews = int(leader.get("reviews_total") or 0)
+        leader_name = leader.get("competitor_name") or "the market leader"
+        leader_rating = leader.get("google_rating")
+        owner_rating = owner.get("google_rating")
+
+        # Check review pulse for top mover (fastest-gaining competitor)
+        top_mover_name = None
+        top_mover_gain = 0
+        pulse_series = (sections.get("review_pulse") or {})
+        # review pulse doesn't expose series directly, use competitor_deltas via SOV delta
+        for r in competitors:
+            delta = int(r.get("reviews_delta_7d") or r.get("share_change_7d_pct") or 0)
+            if delta > top_mover_gain:
+                top_mover_gain = delta
+                top_mover_name = r.get("competitor_name")
+
+        if owner_reviews >= leader_reviews:
+            # Owner is leading
+            next_comp = competitors[1] if len(competitors) > 1 else None
+            if next_comp:
+                gap_below = owner_reviews - int(next_comp.get("reviews_total") or 0)
+                challenger = next_comp.get("competitor_name") or "your closest challenger"
+                action = "Keep your review lead — it's your most visible competitive advantage."
+                detail = (
+                    f"You lead {leader_name} with {owner_reviews:,} reviews. "
+                    f"{challenger} is {gap_below:,} reviews behind. "
+                    f"Ask every patient for a review this month to maintain your margin."
+                )
+            else:
+                action = "Keep your review lead — it's your most visible competitive advantage."
+                detail = (
+                    f"You lead the market with {owner_reviews:,} reviews. "
+                    f"A consistent review ask after every appointment keeps the gap growing."
+                )
+        else:
+            gap = leader_reviews - owner_reviews
+            months_moderate = max(1, round(gap / max(gap // 12, 1)))
+            per_month_needed = max(3, gap // 6)
+            if top_mover_name and top_mover_gain > 0:
+                mover_note = f" {top_mover_name} gained {top_mover_gain} reviews last week alone — they are accelerating."
+            else:
+                mover_note = ""
+            action = f"Close the {gap:,}-review gap with {leader_name}."
+            detail = (
+                f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}. "
+                f"You need roughly {per_month_needed}+ new reviews per month to close this in 6 months.{mover_note} "
+                f"Build a post-appointment review ask into your workflow today."
+            )
+
+        plan.append({"type": "execution_review_gap", "action": action, "detail": detail})
+
+    # ── Item 2: Positioning / rating advantage ────────────────────────────
+    # Use praise words from perception narrative + rating comparison
+    perception_text = (sections.get("customer_perception_insights") or {}).get("body") or ""
+    praise_words = ""
+    if "words that come up most are:" in perception_text:
+        try:
+            praise_words = perception_text.split("words that come up most are:")[1].split(".")[0].strip()
+        except Exception:
+            pass
+
+    # Find competitor with lowest rating (biggest opening)
+    rated_comps = [r for r in competitors if r.get("google_rating")]
+    weakest_rated = min(rated_comps, key=lambda r: float(r.get("google_rating") or 5), default=None)
+    owner_rating_val = float(owner.get("google_rating") or 0) if owner else 0
+
+    if praise_words:
+        action = f"Own the words patients already use: {praise_words}."
+        detail = (
+            f"These are the phrases showing up in local reviews right now. "
+            f"Add them to your Google Business profile description and coach patients to use them when they leave a review."
+        )
+        if weakest_rated and owner_rating_val > float(weakest_rated.get("google_rating") or 0):
+            weak_name = weakest_rated.get("competitor_name") or "a competitor"
+            weak_rating = weakest_rated.get("google_rating")
+            detail += (
+                f" Your {owner_rating_val:.1f}★ rating already beats {weak_name}'s {weak_rating}★ — "
+                f"make sure that comparison is visible to anyone shopping around."
+            )
+    elif owner_rating_val > 0 and weakest_rated:
+        weak_name = weakest_rated.get("competitor_name") or "a competitor"
+        weak_rating = weakest_rated.get("google_rating")
+        action = f"Your rating is a competitive edge — make it visible."
+        detail = (
+            f"At {owner_rating_val:.1f}★ you outrank {weak_name} ({weak_rating}★). "
+            f"Highlight your rating on your homepage, in follow-up emails, and on your Google profile."
+        )
+    else:
+        action = "Highlight one clear advantage patients should associate with your practice."
+        detail = "Reinforce one strength — comfort, convenience, or communication — consistently across your website and Google profile."
+
+    if action:
+        plan.append({"type": "execution_positioning", "action": action, "detail": detail})
+
+    # ── Item 3: Exploit competitor weakness ───────────────────────────────
+    friction_data = sections.get("customer_friction_signals") or {}
+    friction_insights = friction_data.get("insights") or []
+
+    # Find the competitor with the most/highest friction
+    worst_comp = None
+    worst_theme = None
+    worst_count = 0
+    for fi in friction_insights:
+        details = fi.get("details") or {}
+        cname = details.get("competitor_name") or ""
+        theme = details.get("theme") or details.get("top_theme") or ""
+        count = int(details.get("complaint_count") or details.get("market_total") or 0)
+        if cname and count > worst_count:
+            worst_count = count
+            worst_comp = cname
+            worst_theme = theme
+
+    if worst_comp and worst_theme:
+        action = f"Turn {worst_comp}'s weakness into your headline."
+        detail = (
+            f"Patients are complaining about {worst_theme.lower()} at {worst_comp} "
+            f"({worst_count} mentions in recent reviews). "
+            f"If that's a strength of yours, say so explicitly — on your website, in your Google profile, and when patients ask why they should choose you."
+        )
+    else:
+        # Fallback: use the messaging gap from perception narrative if available
+        perception_body = (sections.get("customer_perception_insights") or {}).get("body") or ""
+        weak_spot_comp = ""
+        weak_spot_detail = ""
+        if "Weak Spot" in perception_body:
+            try:
+                # Extract "Blue Ash Dental Group's Weak Spot\nTheir patients..."
+                before_label = perception_body.split("Weak Spot")[0]
+                # Grab the competitor name from the last line before "Weak Spot"
+                weak_spot_comp = before_label.strip().split("\n")[-1].replace("'s", "").strip()
+                raw = perception_body.split("Weak Spot")[1].split("\n\n")[0].strip()
+                # Replace anonymous "Their" with the competitor name
+                if weak_spot_comp:
+                    raw = raw.replace("Their patients", f"{weak_spot_comp}'s patients")
+                    raw = raw.replace("their website", f"{weak_spot_comp}'s website")
+                    raw = raw.replace("they're advertising", f"{weak_spot_comp} is advertising")
+                weak_spot_detail = raw
+            except Exception:
+                pass
+
+        if weak_spot_detail:
+            comp_label = f" {weak_spot_comp}'s" if weak_spot_comp else " a competitor's"
+            action = f"Exploit{comp_label} gap between what patients value and what they advertise."
+            # Truncate cleanly at sentence boundary
+            full = weak_spot_detail[:600]
+            last_period = full.rfind(".")
+            detail = full[:last_period + 1] if last_period > 100 else full
+        else:
+            action = "Improve how your reviews and credibility are presented."
+            detail = "Feature top reviews prominently, respond to every review, and highlight credentials or guarantees on your homepage."
+
+    plan.append({"type": "execution_weakness", "action": action, "detail": detail})
+
+    return plan
+
+
+# ---------------------------------------------------------------------------
+# Daily snapshot collection — called by Render cron job every 24 hours
+# POST /cron/collect-snapshots
+# Header: x-admin-key: <ADMIN_API_KEY>
+# ---------------------------------------------------------------------------
+@router.post("/cron/collect-snapshots")
+def cron_collect_snapshots(request: Request):
+    """
+    Iterates over every active business and collects a fresh Google Places
+    snapshot for each competitor. Called by a Render cron job daily.
+    Protected by x-admin-key header matching ADMIN_API_KEY env var.
+    """
+    from app.core.config import settings
+
+    admin_key = settings.ADMIN_API_KEY
+    if admin_key:
+        provided = request.headers.get("x-admin-key", "")
+        if provided != admin_key:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+    # Fetch all distinct business IDs that have competitors
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select distinct business_id
+                from public.competitors
+                where google_place_id is not null
+                  and is_active is not false
+                """
+            )
+            biz_rows = cur.fetchall()
+
+    results = []
+    for row in biz_rows:
+        biz_id = row["business_id"]
+        try:
+            result = collect_snapshots_for_business(biz_id)
+            results.append({
+                "business_id": str(biz_id),
+                "inserted": result.inserted,
+                "skipped": result.skipped_duplicates,
+            })
+        except Exception as exc:
+            logger.warning("cron snapshot failed for business_id=%s: %s", biz_id, exc)
+            results.append({"business_id": str(biz_id), "error": str(exc)})
+
+    return {"collected": len(results), "results": results}
+
+
 # --------------------
 # Reports (legacy “reports” table)
 # --------------------
@@ -1659,17 +1865,103 @@ def _build_report_experience_payload(
         sections=safe_sections,
     )
 
+    def _dynamic_why_it_matters(item: Dict[str, Any]) -> str:
+        insight_type = str(item.get("type") or "").lower()
+        details = item.get("details") or {}
+
+        if insight_type == "baseline_rank":
+            owner_rank = int(details.get("owner_rank") or 0)
+            owner_reviews = int(details.get("owner_reviews_total") or 0)
+            market_size = int(details.get("market_size") or 0)
+            if owner_rank == 1 and owner_reviews:
+                return (
+                    f"You hold the #1 spot across {market_size} competitors with {owner_reviews:,} reviews. "
+                    "Your rank is a trust signal — patients comparing providers will see it immediately."
+                )
+            elif owner_rank and owner_reviews and market_size:
+                return (
+                    f"You're ranked #{owner_rank} of {market_size} with {owner_reviews:,} reviews. "
+                    "Review rank directly influences which business patients call first."
+                )
+
+        if insight_type == "leader_gap":
+            gap = int(details.get("gap_reviews") or 0)
+            leader_name = details.get("leader_name") or "the market leader"
+            leader_reviews = int(details.get("leader_reviews_total") or 0)
+            if gap and leader_name and leader_reviews:
+                months_est = max(1, round(gap / 10))
+                return (
+                    f"You trail {leader_name} ({leader_reviews:,} reviews) by {gap:,} reviews. "
+                    f"At 10 new reviews per month, closing this gap takes about {months_est} months without acceleration."
+                )
+
+        if insight_type == "market_dominance":
+            leader_share = float(details.get("leader_share_pct") or 0)
+            owner_is_leader = details.get("owner_is_leader") or details.get("is_owner")
+            leader_name = details.get("leader_name") or "the market leader"
+            if owner_is_leader and leader_share:
+                return (
+                    f"You hold {leader_share}% of all market reviews. "
+                    "Consistent growth is what keeps that gap from closing on you."
+                )
+            elif leader_share:
+                return (
+                    f"{leader_name} controls {leader_share}% of market reviews — "
+                    "that dominance builds default trust with patients before they ever compare."
+                )
+
+        return ""
+
     def _dynamic_how_to_implement(item: Dict[str, Any]) -> str:
         summary = str(item.get("summary") or "").lower()
         insight_type = str(item.get("type") or "").lower()
+        details = item.get("details") or {}
 
-        if "ranked #" in summary or "rank #" in summary:
+        if insight_type == "baseline_rank" or "ranked #" in summary or "rank #" in summary:
+            owner_rank = int(details.get("owner_rank") or 0)
+            owner_reviews = int(details.get("owner_reviews_total") or 0)
+            market_size = int(details.get("market_size") or 0)
+            if owner_rank == 1 and owner_reviews:
+                return (
+                    "Set a monthly target of at least 10 new reviews. "
+                    "Ask patients at checkout or in a follow-up message — consistency matters more than volume spikes."
+                )
+            elif owner_rank and owner_reviews:
+                return (
+                    f"You currently hold rank #{owner_rank} with {owner_reviews:,} reviews. "
+                    "Set a monthly review target and check monthly whether you're closing the gap to the rank above you."
+                )
             return (
                 "Use this rank as the baseline: set a monthly review target, compare movement against the next competitor, "
                 "and track whether the gap is shrinking."
             )
 
-        if "behind" in summary or "gap" in summary or "trail the market leader" in summary:
+        if insight_type == "leader_gap" or "trail the market leader" in summary:
+            gap = int(details.get("gap_reviews") or 0)
+            leader_name = details.get("leader_name") or "the market leader"
+            if gap and leader_name:
+                return (
+                    f"Request reviews after every visit and set a monthly target of at least 10. "
+                    f"Track your gap to {leader_name} each month — if it shrinks by 10+ reviews, your cadence is working."
+                )
+            return (
+                "Set a review target tied to the gap, then consistently request reviews after each visit and track progress monthly."
+            )
+
+        if insight_type == "market_dominance":
+            owner_is_leader = details.get("owner_is_leader") or details.get("is_owner")
+            leader_name = details.get("leader_name") or "the market leader"
+            if owner_is_leader:
+                return (
+                    "Maintain a consistent review request process — aim for at least 10 new reviews per month. "
+                    "Monitor your closest challenger monthly: if they gain more than 20 reviews in a single month, accelerate your pace."
+                )
+            return (
+                f"Pick one thing you do better than {leader_name} — speed, communication, or pricing — "
+                "and make it visible in your reviews and messaging. Volume gap closes slowly; positioning gap can close fast."
+            )
+
+        if "behind" in summary or "gap" in summary:
             return (
                 "Set a review target tied to the gap, then consistently request reviews after each visit and track progress monthly."
             )
@@ -1702,7 +1994,7 @@ def _build_report_experience_payload(
             )
 
         return (
-            "Identify the highest-impact opportunity from this signal and act on it this month—either by improving how you generate reviews, "
+            "Identify the highest-impact opportunity from this signal and act on it this month — either by improving how you generate reviews, "
             "how you position your services, or how clearly you communicate trust and results to potential customers."
         )
 
@@ -1733,6 +2025,14 @@ def _build_report_experience_payload(
         action = item.get("action") or item.get("recommended_action") or summary
 
         # -----------------------------------------
+        # Override generic action for rank-1 leader
+        # -----------------------------------------
+        if str(item.get("type") or "").lower() == "baseline_rank":
+            _d = item.get("details") or {}
+            if int(_d.get("owner_rank") or 0) == 1:
+                action = "Defend your #1 position and widen the gap over your closest competitor."
+
+        # -----------------------------------------
         # Prevent signal-as-action (low value)
         # -----------------------------------------
         if action:
@@ -1746,6 +2046,7 @@ def _build_report_experience_payload(
 
         why = (
             item.get("why_it_matters")
+            or _dynamic_why_it_matters(item)
             or item.get("implication")
             or "This signal may affect local visibility, trust, or customer choice."
         )
@@ -2188,6 +2489,12 @@ def generate_business_report(
     try:
         days = 30
 
+        # Refresh review text before building insights so perception/friction sections are current
+        try:
+            ingest_reviews_for_business(str(business_id))
+        except Exception as e:
+            logger.warning("review ingestion skipped during report generation: %s", e)
+
         prev_sections, prev_report_id = _fetch_latest_report_sections(business_id)
 
         now = datetime.now(timezone.utc)
@@ -2480,6 +2787,7 @@ def generate_business_report(
         business_name = None
         business_reviews_total = None
         owner_competitor_id = None
+        customer_label = "customers"
 
         try:
             business_obj = get_business_with_competitors(business_id)
@@ -2491,6 +2799,7 @@ def generate_business_report(
 
             b = (business_obj or {}).get("business") or {}
             business_name = b.get("name")
+            customer_label = b.get("customer_label") or "customers"
 
             competitors_meta = (business_obj or {}).get("competitors") or []
             for comp in competitors_meta:
@@ -2620,11 +2929,21 @@ def generate_business_report(
         # -------------------------
         customer_perception_text = ""
 
+        # Build a competitor_id -> reviews_total map from SOV rows for sorting
+        _sov_rows = (share_of_voice or {}).get("rows") or []
+        _competitor_review_totals: dict = {}
+        for _sov_row in _sov_rows:
+            _cid = str(_sov_row.get("competitor_id") or "")
+            _rt = int(_sov_row.get("reviews_total") or _sov_row.get("review_count") or 0)
+            if _cid:
+                _competitor_review_totals[_cid] = _rt
+
         try:
             review_insights = build_review_insights_for_business(
                 business_id=str(business_id),
                 owner_competitor_id=str(owner_competitor_id) if owner_competitor_id else None,
                 owner_name=business_name,
+                competitor_review_totals=_competitor_review_totals,
             )
 
             if review_insights:
@@ -2725,30 +3044,31 @@ def generate_business_report(
 
             themes = (sections.get("customer_friction_signals") or {}).get("themes") or []
 
-            if themes:
-                top_theme = themes[0] if themes else {}
+            # Only use friction themes to build perception text if review insights
+            # didn't already produce something meaningful.
+            if not customer_perception_text and themes:
+                # Pick the theme with the highest market_total, not the first in the list
+                active_themes = [t for t in themes if isinstance(t, dict) and int(t.get("market_total") or 0) > 0]
+                top_theme = max(active_themes, key=lambda t: int(t.get("market_total") or 0)) if active_themes else None
 
-                theme_label = None
-                market_total = 0
-                leader_name = None
-
-                if isinstance(top_theme, dict):
+                if top_theme:
                     theme_label = top_theme.get("theme_label") or top_theme.get("theme_key")
-                    market_total = int(top_theme.get("market_total") or 0)
                     leader_name = top_theme.get("leader_competitor_name")
-
-                if not theme_label or market_total == 0:
-                    customer_perception_text = (
-                        "No dominant customer perception theme emerged this period. "
-                        "This creates an opportunity to differentiate by owning a key experience area such as speed, communication, or convenience."
-                    )
-                else:
                     customer_perception_text = (
                         f"Customer feedback in this market is primarily driven by {str(theme_label).lower()}. "
                         f"{leader_name or 'A leading competitor'} is currently the most visible competitor in this area. "
                         "Strengthening your positioning around this theme can improve conversion and reinforce competitive advantage."
                     )
+                else:
+                    customer_perception_text = (
+                        "No dominant customer perception theme emerged this period. "
+                        "This creates an opportunity to differentiate by owning a key experience area such as speed, communication, or convenience."
+                    )
 
+                sections["customer_perception_insights"]["body"] = customer_perception_text
+
+            elif customer_perception_text:
+                # Review insights produced real text — persist it into the section
                 sections["customer_perception_insights"]["body"] = customer_perception_text
 
         except Exception as e:
@@ -2777,10 +3097,14 @@ def generate_business_report(
         if not sections.get("report_experience"):
             sections["report_experience"] = {}
 
-        focus = sections["report_experience"].get("this_month_focus") or []
+        # ── Data-driven Execution Plan ─────────────────────────────────────
+        # Build 3 concrete action items from real numbers rather than
+        # relying on the generic presentation-layer output.
+        focus = _build_data_driven_execution_plan(sections)
+        print("[EXEC_PLAN] generated", len(focus), "items:", [f.get("action", "")[:60] for f in focus])
 
         if not focus:
-            focus = insights[:3]
+            focus = sections["report_experience"].get("this_month_focus") or insights[:3]
 
         if not focus:
             focus = [
@@ -2791,6 +3115,8 @@ def generate_business_report(
                     "details": {},
                 }
             ]
+
+        sections["report_experience"]["this_month_focus"] = focus
 
         if not sections["report_experience"].get("immediate_priorities"):
             sections["report_experience"]["immediate_priorities"] = len(focus[:3]) or 1
@@ -2811,6 +3137,37 @@ def generate_business_report(
         )
 
         summary_text = premium_headline
+
+        # ── Customer label normalisation ────────────────────────────────────
+        # Replace every occurrence of "patients" (and "patient") with the
+        # business-specific customer label so the report reads naturally for
+        # non-healthcare businesses (e.g. "customers" for auto repair).
+        if customer_label and customer_label.lower() not in ("patients", "patient"):
+            import json as _json2
+
+            def _replace_patient_terms(text: str, label: str) -> str:
+                if not text:
+                    return text
+                label_pl = label          # plural  (e.g. "customers")
+                label_sg = label.rstrip("s") if label.endswith("s") else label  # singular
+                # Replace plural first (order matters)
+                text = text.replace("patients", label_pl)
+                text = text.replace("Patients", label_pl.capitalize())
+                text = text.replace("patient", label_sg)
+                text = text.replace("Patient", label_sg.capitalize())
+                return text
+
+            def _walk_and_replace(obj, label):
+                if isinstance(obj, str):
+                    return _replace_patient_terms(obj, label)
+                if isinstance(obj, dict):
+                    return {k: _walk_and_replace(v, label) for k, v in obj.items()}
+                if isinstance(obj, list):
+                    return [_walk_and_replace(i, label) for i in obj]
+                return obj
+
+            sections = _walk_and_replace(sections, customer_label)
+            summary_text = _replace_patient_terms(summary_text or "", customer_label)
 
         print("\n=== REPORT DEBUG ===")
         print("competitor_deltas:", len(competitor_deltas))
@@ -2930,32 +3287,50 @@ def generate_business_report(
         if not sections.get("report_experience"):
             sections["report_experience"] = {}
 
-        focus = sections["report_experience"].get("this_month_focus") or []
-        insights = sections.get("insights") or []
-
-        focus = sections["report_experience"].get("this_month_focus") or []
-
-        if not focus:
-            focus = [{
+        # ── Re-apply data-driven execution plan after Step 5/6 rebuilds report_experience ──
+        final_focus = _build_data_driven_execution_plan(sections)
+        if not final_focus:
+            final_focus = sections["report_experience"].get("this_month_focus") or []
+        if not final_focus:
+            final_focus = [{
                 "type": "fallback_focus",
                 "summary": "Set a clear monthly review-growth target, improve your positioning against top competitors, and track whether you are closing the gap.",
                 "priority": "Immediate"
             }]
 
-        sections["report_experience"]["this_month_focus"] = focus[:3]
-        sections["report_experience"]["immediate_priorities"] = len(focus[:3]) or 1
+        # Patch just this_month_focus in the DB — read current saved sections,
+        # update only the execution plan, write back. Avoids overwriting the
+        # good report_experience cards built by _append_insight_to_report_in_db.
+        try:
+            import json as _json
+            with get_conn() as _conn:
+                with _conn.cursor() as _cur:
+                    _cur.execute(
+                        "SELECT sections FROM generated_reports WHERE id = %s",
+                        (str(created_id),),
+                    )
+                    _saved = _cur.fetchone()
 
-        if not focus:
-            focus = [{
-                "type": "fallback_focus",
-                "summary": "Increase review velocity this month and strengthen positioning against the current review-share leaders.",
-                "severity": "info",
-                "details": {},
-            }]
-
-        sections["report_experience"]["this_month_focus"] = focus[:3]
-        sections["report_experience"]["immediate_priorities"] = len(focus[:3]) or 1
-        created["sections"] = sections
+                if _saved:
+                    _saved_sections = _saved["sections"]
+                    if isinstance(_saved_sections, str):
+                        _saved_sections = _json.loads(_saved_sections)
+                    if isinstance(_saved_sections, dict):
+                        if "report_experience" not in _saved_sections:
+                            _saved_sections["report_experience"] = {}
+                        _saved_sections["report_experience"]["this_month_focus"] = final_focus[:3]
+                        _saved_sections["report_experience"]["immediate_priorities"] = len(final_focus[:3]) or 1
+                        with get_conn() as _conn2:
+                            with _conn2.cursor() as _cur2:
+                                _cur2.execute(
+                                    "UPDATE generated_reports SET sections = %s WHERE id = %s",
+                                    (_json.dumps(_saved_sections), str(created_id)),
+                                )
+                            _conn2.commit()
+                        created["sections"] = _saved_sections
+                        sections = _saved_sections
+        except Exception as _e:
+            logger.warning("failed to persist final execution plan to DB: %s", _e)
 
         return created
 

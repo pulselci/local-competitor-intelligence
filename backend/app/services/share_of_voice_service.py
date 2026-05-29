@@ -48,13 +48,24 @@ def compute_share_of_voice_from_deltas(
         delta_7d = d.get("reviews_delta_7d")
         delta_7d_int = _to_int(delta_7d, 0) if delta_7d is not None else None
 
+        delta_30d = d.get("reviews_delta_30d")
+        delta_30d_int = _to_int(delta_30d, 0) if delta_30d is not None else None
+
+        raw_rating = d.get("google_rating") or d.get("rating") or d.get("avg_rating")
+        try:
+            google_rating = round(float(raw_rating), 1) if raw_rating is not None else None
+        except (TypeError, ValueError):
+            google_rating = None
+
         cleaned.append(
             {
-                "competitor_id": cid,  # ✅ NEW
+                "competitor_id": cid,
                 "competitor_name": name,
                 "reviews_total": total_reviews,
-                "reviews_delta_7d": delta_7d_int,  # None if unknown
+                "reviews_delta_7d": delta_7d_int,
+                "reviews_delta_30d": delta_30d_int,
                 "is_business": bool(d.get("is_business") or False),
+                "google_rating": google_rating,
             }
         )
 
@@ -135,11 +146,13 @@ def compute_share_of_voice_from_deltas(
 
         row = {
             "rank": i,
-            "competitor_id": x.get("competitor_id"),  # ✅ NEW (stable key)
+            "competitor_id": x.get("competitor_id"),
             "competitor_name": x["competitor_name"],
             "reviews_total": total,
             "share_pct": round(share_now, 1),
             "share_change_7d_pct": round(share_change, 1),
+            "google_rating": x.get("google_rating"),
+            "reviews_delta_30d": x.get("reviews_delta_30d"),
         }
         if x.get("is_business"):
             row["is_business"] = True

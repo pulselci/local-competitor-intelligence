@@ -8,6 +8,8 @@ from app.core.db import get_conn
 def compute_snapshot_deltas(business_id: UUID, days: int = 30) -> list[dict]:
     """
     Latest day snapshot per competitor + 1d/7d deltas (rating + review_count).
+    Also computes reviews_delta_30d by comparing current count to the oldest
+    snapshot within the window (works even with sparse snapshots).
     Returns list[dict].
     """
     sql = """
@@ -36,11 +38,15 @@ def compute_snapshot_deltas(business_id: UUID, days: int = 30) -> list[dict]:
         lag(google_rating, 1) over (partition by business_id, competitor_id order by day_utc) as rating_1d_ago,
         lag(google_rating, 7) over (partition by business_id, competitor_id order by day_utc) as rating_7d_ago,
         lag(google_review_count, 1) over (partition by business_id, competitor_id order by day_utc) as reviews_1d_ago,
-        lag(google_review_count, 7) over (partition by business_id, competitor_id order by day_utc) as reviews_7d_ago
+        lag(google_review_count, 7) over (partition by business_id, competitor_id order by day_utc) as reviews_7d_ago,
+        first_value(google_review_count) over (
+          partition by business_id, competitor_id order by day_utc asc
+          rows between unbounded preceding and unbounded following
+        ) as reviews_period_start
       from daily
       where rn = 1
     ),
-        latest_per_competitor as (
+    latest_per_competitor as (
       select *
       from (
         select
@@ -63,7 +69,8 @@ def compute_snapshot_deltas(business_id: UUID, days: int = 30) -> list[dict]:
       (d.google_rating - d.rating_1d_ago) as rating_delta_1d,
       (d.google_rating - d.rating_7d_ago) as rating_delta_7d,
       (d.google_review_count - d.reviews_1d_ago) as reviews_delta_1d,
-      (d.google_review_count - d.reviews_7d_ago) as reviews_delta_7d
+      (d.google_review_count - d.reviews_7d_ago) as reviews_delta_7d,
+      (d.google_review_count - d.reviews_period_start) as reviews_delta_30d
     from latest_per_competitor d
     join competitors c on c.id = d.competitor_id
     order by d.google_rating desc nulls last, d.google_review_count desc nulls last;

@@ -117,8 +117,36 @@ def _mark_schedule_run(schedule: dict, now: datetime) -> None:
         conn.commit()
 
 
+def _collect_all_snapshots() -> None:
+    """Collect a fresh snapshot for every business before running reports."""
+    from app.services.snapshot_service import collect_snapshots_for_business
+
+    sql = "SELECT DISTINCT business_id FROM competitors"
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql)
+            rows = cur.fetchall()
+
+    business_ids = [row["business_id"] for row in rows]
+    print(f"[scheduler] collecting snapshots for {len(business_ids)} businesses")
+
+    for biz_id in business_ids:
+        try:
+            collect_snapshots_for_business(UUID(str(biz_id)))
+            print(f"[scheduler] snapshot ok: {biz_id}")
+        except Exception as e:
+            print(f"[scheduler] snapshot failed: {biz_id}: {e}")
+
+
 def run_scheduled_reports() -> None:
     now = datetime.now(timezone.utc)
+
+    # Always collect fresh snapshots first so deltas are up to date
+    try:
+        _collect_all_snapshots()
+    except Exception as e:
+        print(f"[scheduler] snapshot collection error: {e}")
+
     schedules = _fetch_due_schedules(now)
 
     print(f"[scheduler] now={now.isoformat()} due_schedules={len(schedules)}")

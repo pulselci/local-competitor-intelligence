@@ -155,6 +155,19 @@
       <p class="muted">Form values autosave in this browser and remain after refresh.</p>
     </div>
 
+    <div style="background:#1a1a2e;padding:12px 20px;margin-bottom:24px;border-radius:6px;display:flex;align-items:center;gap:12px;">
+      <label for="admin-key-input" style="color:#aaa;font-size:13px;white-space:nowrap;">Admin Key</label>
+      <input
+        id="admin-key-input"
+        type="password"
+        placeholder="Enter admin key"
+        style="flex:1;padding:8px 12px;border:1px solid #444;border-radius:4px;background:#0d0d1a;color:#fff;font-size:13px;"
+        autocomplete="off"
+        onchange="loadHistoryDropdown()"
+        onblur="loadHistoryDropdown()"
+      />
+    </div>
+
     <div class="card">
       <h2>Client Business Info</h2>
       <div class="grid">
@@ -193,6 +206,16 @@
       </div>
 
       <div class="grid-1" style="margin-top:12px;">
+        <div>
+          <label for="customer_label">What do you call your customers?</label>
+          <select id="customer_label">
+            <option value="customers" selected>Customers</option>
+            <option value="patients">Patients</option>
+            <option value="clients">Clients</option>
+            <option value="guests">Guests</option>
+          </select>
+        </div>
+
         <div>
           <label for="notes">Notes</label>
           <textarea id="notes"></textarea>
@@ -274,8 +297,22 @@
 
   <script>
     const STORAGE_KEY = "lci_onboarding_current";
+    const API_BASE = window.PULSE_API_BASE || "http://localhost:8000";
+    // Admin key is entered by the user, not stored in code.
+    // The key is read from the #admin-key-input field at runtime.
+    let ADMIN_KEY = "";
+
     let selectedBusinessId = null;
     let latestGeneratedReportId = null;
+
+    function authHeaders(extra = {}) {
+      ADMIN_KEY = (document.getElementById("admin-key-input")?.value || "").trim();
+      if (!ADMIN_KEY) {
+        alert("Please enter your admin key first.");
+        throw new Error("Admin key not set");
+      }
+      return { "x-admin-key": ADMIN_KEY, ...extra };
+    }
 
     function competitorTemplate(index) {
       return `
@@ -320,6 +357,19 @@
           </div>
         </div>
       `;
+    }
+
+    async function parseResponse(response) {
+      const text = await response.text();
+
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+
+      return data;
     }
 
     function addCompetitor(data = null) {
@@ -486,12 +536,11 @@
       dropdown.innerHTML = '<option value="">Load previous client...</option>';
 
       try {
-        const response = await fetch("https://pulse-lci-api.onrender.com/admin/businesses", {
-            headers: {
-                "x-admin-key": "ChargerPantherCardinalBuckeyeBearcatNorseman"
-            }
+        const response = await fetch(`${API_BASE}/admin/businesses`, {
+          headers: authHeaders()
         });
-        const businesses = await response.json();
+
+        const businesses = await parseResponse(response);
 
         if (!response.ok) {
           document.getElementById("result").textContent = JSON.stringify({
@@ -589,18 +638,16 @@
       resultEl.textContent = `Generating report for business ${businessId}...`;
 
       try {
-        const response = await fetch(`/business/${businessId}/reports/generate`, {
-          method: "POST"
+        const response = await fetch(`${API_BASE}/business/${businessId}/reports/generate`, {
+          method: "POST",
+          headers: authHeaders({
+            "Content-Type": "application/json"
+          })
         });
 
-        const text = await response.text();
+        const data = await parseResponse(response);
 
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
-        }
+        console.log("Generated report:", data);
 
         if (!response.ok) {
           resultEl.textContent = JSON.stringify({
@@ -643,25 +690,21 @@
         }
 
         resultEl.textContent = `Sending report ${latestGeneratedReportId} to ${firstEmail}...`;
+        console.log("Sending report to:", firstEmail);
 
-        const response = await fetch(`/generated-reports/${latestGeneratedReportId}/send`, {
+        const response = await fetch(`${API_BASE}/generated-reports/${latestGeneratedReportId}/send`, {
           method: "POST",
-          headers: {
+          headers: authHeaders({
             "Content-Type": "application/json"
-          },
+          }),
           body: JSON.stringify({
             to_email: firstEmail
           })
         });
 
-        const text = await response.text();
+        const data = await parseResponse(response);
 
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
-        }
+        console.log("Send response:", data);
 
         if (!response.ok) {
           resultEl.textContent = JSON.stringify({
@@ -691,7 +734,7 @@
       }
 
       selectedBusinessId = businessId;
-      window.open(`/business/${businessId}/reports/latest`, "_blank");
+      window.open(`${API_BASE}/business/${businessId}/reports/latest`, "_blank");
     }
 
     document.getElementById("onboardingForm").addEventListener("submit", async function (e) {
@@ -705,6 +748,7 @@
           state: document.getElementById("state").value.trim() || null,
           country: document.getElementById("country").value.trim() || "US",
           notes: document.getElementById("notes").value.trim() || null,
+          customer_label: document.getElementById("customer_label").value || "customers",
           google_place_id: document.getElementById("google_place_id").value.trim() || null,
           google_maps_url: document.getElementById("google_maps_url").value.trim() || null,
           website_url: document.getElementById("website_url").value.trim() || null
@@ -729,15 +773,15 @@
       resultEl.textContent = "Submitting...";
 
       try {
-        const response = await fetch("/onboarding", {
+        const response = await fetch(`${API_BASE}/onboarding`, {
           method: "POST",
-          headers: {
+          headers: authHeaders({
             "Content-Type": "application/json"
-          },
+          }),
           body: JSON.stringify(payload)
         });
 
-        const data = await response.json();
+        const data = await parseResponse(response);
 
         if (!response.ok) {
           resultEl.textContent = JSON.stringify({
@@ -755,26 +799,26 @@
 
         if (newId) {
           selectedBusinessId = newId;
-          await loadHistoryDropdown();
-        } else {
-          console.warn("No business_id found in response:", data);
+          selectedBusinessId = newId;
+          await loadHistoryDropdown(newId);
         }
 
         resultEl.textContent = JSON.stringify(data, null, 2);
+
       } catch (err) {
-        resultEl.textContent = JSON.stringify({
+        document.getElementById("result").textContent = JSON.stringify({
           error: String(err)
         }, null, 2);
       }
     });
 
-    const restored = loadCurrentForm();
-    if (!restored) {
+    // ── Page init ──────────────────────────────────────────────────────────
+    document.addEventListener("DOMContentLoaded", () => {
       seedDefaults();
-    }
+      loadCurrentForm();
+      attachAutosaveListeners();
+    });
 
-    loadHistoryDropdown();
-    attachAutosaveListeners();
   </script>
 </body>
 </html>
