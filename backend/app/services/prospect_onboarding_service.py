@@ -26,6 +26,7 @@ from uuid import UUID
 from app.models.schemas import BusinessIntakeIn, CompetitorIn
 from app.services.business_service import create_business_and_competitors
 from app.services.place_resolver import resolve_place_id
+from app.services.report_schedule_service import upsert_schedule_for_business
 from app.services.review_batch import ingest_reviews_for_business
 from app.services.snapshot_service import collect_snapshots_for_business
 
@@ -142,7 +143,26 @@ def onboard_prospect(
             logger.warning("Review ingestion failed for %s: %s", business_id, exc)
 
         # ------------------------------------------------------------------
-        # 5. Generate first report
+        # 5. Ensure a schedule record exists (required by generated_reports FK)
+        # ------------------------------------------------------------------
+        try:
+            upsert_schedule_for_business(
+                business_id,
+                frequency="monthly",
+                day_of_week=None,
+                day_of_month=1,
+                hour=8,
+                minute=0,
+                timezone="America/New_York",
+                is_enabled=False,   # disabled until they become a paying client
+                next_run_at=None,
+            )
+            logger.info("Schedule upserted for %s", business_id)
+        except Exception as exc:
+            logger.warning("Schedule upsert failed for %s: %s", business_id, exc)
+
+        # ------------------------------------------------------------------
+        # 6. Generate first report
         # ------------------------------------------------------------------
         report_id: Optional[str] = None
         try:
@@ -158,7 +178,7 @@ def onboard_prospect(
             logger.error("Report generation failed for %s: %s", business_id, exc)
 
         # ------------------------------------------------------------------
-        # 6. Email the report
+        # 7. Email the report
         # ------------------------------------------------------------------
         if report_id and contact_email:
             try:
