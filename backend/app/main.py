@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from app.api.generated_reports import router as generated_reports_router
+from app.api.intake import router as intake_router
 from app.api.routes import router as api_router
 from app.core.db import close_pool
 
@@ -26,6 +27,9 @@ app.include_router(api_router)
 
 # Generated report PDF routes
 app.include_router(generated_reports_router)
+
+# Prospect intake (free report request form)
+app.include_router(intake_router)
 
 
 @app.get("/admin/onboarding", include_in_schema=False)

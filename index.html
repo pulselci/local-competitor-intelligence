@@ -440,23 +440,27 @@
     }
 
     .screenshot-frame {
+      position: relative;
+      display: block;
+      width: 100%;
       height: 220px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
       background: #f8fafc;
       border-radius: 18px;
       overflow: hidden;
       margin-bottom: 22px;
       cursor: zoom-in;
+      text-decoration: none;
     }
 
     .screenshot-frame img {
+      display: block;
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
+      object-position: center 8%;
       border-radius: 14px;
       transition: transform 0.18s ease;
+      pointer-events: none;
     }
 
     .screenshot-frame:hover img {
@@ -698,18 +702,6 @@
     </div>
   </nav>
 
-  <form name="free-report-request" method="POST" data-netlify="true" hidden>
-    <input type="hidden" name="form-name" value="free-report-request" />
-    <input name="name" />
-    <input name="email" />
-    <input name="business" />
-    <input name="location" />
-    <input name="competitor1" />
-    <input name="competitor2" />
-    <input name="competitor3" />
-  </form>
-
-
   <main id="top">
     <header class="hero">
       <div class="container hero-grid">
@@ -831,27 +823,27 @@
         <div class="product-strip">
 
           <div class="screenshot-card">
-            <div class="screenshot-frame" onclick="openLightbox('executive-summary.png')">
-              <img src="executive-summary.png" alt="Pulse LCI executive summary screenshot" style="pointer-events:none;" />
-              <div class="zoom-hint" style="pointer-events:none;"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
+            <div class="screenshot-frame" data-img="executive-summary.png" onclick="document.getElementById('lbImg').src='executive-summary.png';document.getElementById('lbOverlay').style.display='flex';document.body.style.overflow='hidden';" style="cursor:zoom-in;">
+              <img src="executive-summary.png" alt="Pulse LCI executive summary screenshot" />
+              <div class="zoom-hint"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
             </div>
             <h3>Executive summary</h3>
             <p>See exactly where you stand—and what it will take to stay ahead.</p>
           </div>
 
           <div class="screenshot-card">
-            <div class="screenshot-frame" onclick="openLightbox('review-chart.png')">
-              <img src="review-chart.png" alt="Pulse LCI review pulse screenshot" style="pointer-events:none;" />
-              <div class="zoom-hint" style="pointer-events:none;"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
+            <div class="screenshot-frame" data-img="review-chart.png" onclick="document.getElementById('lbImg').src='review-chart.png';document.getElementById('lbOverlay').style.display='flex';document.body.style.overflow='hidden';" style="cursor:zoom-in;">
+              <img src="review-chart.png" alt="Pulse LCI review pulse screenshot" />
+              <div class="zoom-hint"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
             </div>
             <h3>Review pulse</h3>
             <p>Track review momentum across you and nearby competitors.</p>
           </div>
 
           <div class="screenshot-card">
-            <div class="screenshot-frame" onclick="openLightbox('Execution-plan.png')">
-              <img src="Execution-plan.png" alt="Pulse LCI execution plan screenshot" style="pointer-events:none;" />
-              <div class="zoom-hint" style="pointer-events:none;"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
+            <div class="screenshot-frame" data-img="Execution-plan.png" onclick="document.getElementById('lbImg').src='Execution-plan.png';document.getElementById('lbOverlay').style.display='flex';document.body.style.overflow='hidden';" style="cursor:zoom-in;">
+              <img src="Execution-plan.png" alt="Pulse LCI execution plan screenshot" />
+              <div class="zoom-hint"><div class="zoom-hint-inner">&#128269; Click to expand</div></div>
             </div>
             <h3>Execution plan</h3>
             <p>Get clear, prioritized actions your team can execute this month.</p>
@@ -886,7 +878,9 @@
         </div>
         <div class="pricing-grid">
           <div class="price-card">
-            <div class="price-tag">Starter</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+              <div class="price-tag" style="margin-bottom:0;">Starter</div>
+            </div>
             <h3>For focused local tracking</h3>
             <div class="price">$99<span>/month</span></div>
             <ul>
@@ -941,50 +935,58 @@
           <p><strong style="color:white;">Good fit if:</strong> customers compare you against nearby competitors before calling, booking, or requesting a quote.</p>
         </div>
 
-        <form name="free-report-request" method="POST" data-netlify="true" netlify-honeypot="bot-field" id="reportForm">
-          <input type="hidden" name="form-name" value="free-report-request" />
-          <input type="hidden" name="subject" value="New Pulse LCI Free Report Request" />
+        <div id="formWrap">
+          <form name="free-report-request" method="POST" action="https://pulse-lci-api.onrender.com/intake/prospect">
+            
 
-          <p class="hidden">
-            <label>Do not fill this out: <input name="bot-field" /></label>
-          </p>
+            <p class="hidden">
+              <label>Do not fill this out: <input name="bot-field" /></label>
+            </p>
 
-          <label for="name">Your name</label>
-          <input id="name" name="name" type="text" placeholder="Your name" required />
+            <label for="fname">Your name <span style="color:#ef4444;">*</span></label>
+            <input id="fname" name="name" type="text" placeholder="Your name" required />
 
-          <label for="email">Work email</label>
-          <input id="email" name="email" type="email" placeholder="you@business.com" required />
+            <label for="femail">Work email <span style="color:#ef4444;">*</span></label>
+            <input id="femail" name="email" type="email" placeholder="you@business.com" required />
 
-          <label for="phone">Phone number</label>
-          <input id="phone" name="phone" type="tel" placeholder="(555) 555-5555" />
+            <label for="fphone">Phone number <span style="color:#ef4444;">*</span></label>
+            <input id="fphone" name="phone" type="tel" placeholder="(555) 555-5555" required />
 
-          <label for="business">Business name</label>
-          <input id="business" name="business" type="text" placeholder="Example Dental" required />
+            <label for="fbusiness">Business name <span style="color:#ef4444;">*</span></label>
+            <input id="fbusiness" name="business" type="text" placeholder="Example Dental" required />
 
-          <label for="location">City / State</label>
-          <input id="location" name="location" type="text" placeholder="Cincinnati, OH" required />
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <label for="city">City <span style="color:#ef4444;">*</span></label>
+                <input id="city" name="city" type="text" placeholder="Cincinnati" required />
+              </div>
+              <div>
+                <label for="state">State <span style="color:#ef4444;">*</span></label>
+                <input id="state" name="state" type="text" placeholder="OH" required />
+              </div>
+            </div>
+            <input type="hidden" name="location" id="location" />
 
-          <label for="competitor1">Competitor 1</label>
-          <input id="competitor1" name="competitor1" type="text" placeholder="Competitor business name" required />
+            <label for="competitor1">Competitor 1 <span style="color:#ef4444;">*</span></label>
+            <input id="competitor1" name="competitor1" type="text" placeholder="Competitor business name" required />
 
-          <label for="competitor2">Competitor 2</label>
-          <input id="competitor2" name="competitor2" type="text" placeholder="Competitor business name" required />
+            <label for="competitor2">Competitor 2 <span style="font-weight:400;opacity:0.65;">(optional)</span></label>
+            <input id="competitor2" name="competitor2" type="text" placeholder="Competitor business name" />
 
-          <label for="competitor3">Competitor 3</label>
-          <input id="competitor3" name="competitor3" type="text" placeholder="Competitor business name" required />
+            <label for="competitor3">Competitor 3 <span style="font-weight:400;opacity:0.65;">(optional)</span></label>
+            <input id="competitor3" name="competitor3" type="text" placeholder="Competitor business name" />
 
-          <button class="button" type="submit" style="width:100%;" id="submitBtn">Request my free report</button>
+            <button id="submitBtn" type="submit" style="display:block;width:100%;background:#2563eb;color:#fff;border:none;border-radius:999px;padding:15px 20px;font-size:16px;font-weight:700;cursor:pointer;margin-top:4px;">Request my free report</button>
 
-          <div id="successMessage" class="form-success" role="status" aria-live="polite">
-            ✅ Request received. We’ll review your market and follow up with your sample report.
-          </div>
+            <div id="errorMessage" style="display:none;margin-top:12px;padding:12px 16px;border-radius:12px;background:#fef2f2;border:1px solid #fecaca;color:#dc2626;font-size:14px;">
+              Something went wrong. Please try again or email reports@pulselci.com.
+            </div>
 
-          <div id="errorMessage" class="form-error" role="alert">
-            Something went wrong. Please try again or email reports@pulselci.com.
-          </div>
+            <div class="form-note">Submit your business and up to 3 local competitors. We’ll follow up with your sample report.</div>
+          </form>
 
-          <div class="form-note">Submit your business and 3 local competitors. We’ll review the market and follow up with a sample report.</div>
-        </form>
+        </div>
+
       </div>
     </section>
   </main>
@@ -1000,69 +1002,17 @@
     </div>
   </footer>
 
-  <!-- Lightbox -->
-  <div id="lbOverlay" onclick="closeLightbox()" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.92);align-items:center;justify-content:center;padding:40px 20px;cursor:zoom-out;">
-    <img id="lbImg" src="" alt="" onclick="event.stopPropagation()" style="max-width:100%;max-height:90vh;border-radius:12px;box-shadow:0 28px 90px rgba(0,0,0,0.5);cursor:default;display:block;" />
-    <button onclick="closeLightbox()" style="position:fixed;top:18px;right:24px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">&times;</button>
+  <!-- Lightbox overlay — click anywhere to close -->
+  <div id="lbOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(2,6,23,0.92);align-items:center;justify-content:center;padding:40px 20px;cursor:zoom-out;" onclick="this.style.display='none';document.getElementById('lbImg').src='';document.body.style.overflow='';">
+    <img id="lbImg" src="" alt="" style="max-width:100%;max-height:90vh;border-radius:12px;box-shadow:0 28px 90px rgba(0,0,0,0.5);cursor:default;display:block;" onclick="event.stopPropagation();" />
+    <button style="position:fixed;top:18px;right:24px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;font-size:28px;width:44px;height:44px;border-radius:50%;cursor:pointer;" onclick="event.stopPropagation();document.getElementById('lbOverlay').style.display='none';document.getElementById('lbImg').src='';document.body.style.overflow='';">&times;</button>
   </div>
 
   <script>
-    function openLightbox(src) {
-      var o = document.getElementById('lbOverlay');
-      var img = document.getElementById('lbImg');
-      img.src = src;
-      o.style.display = 'flex';
-      document.body.style.overflow = 'hidden';
-    }
-    function closeLightbox() {
-      document.getElementById('lbOverlay').style.display = 'none';
-      document.getElementById('lbImg').src = '';
-      document.body.style.overflow = '';
-    }
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') closeLightbox();
-    });
-
-    const reportForm = document.getElementById("reportForm");
-    const submitBtn = document.getElementById("submitBtn");
-    const successMessage = document.getElementById("successMessage");
-    const errorMessage = document.getElementById("errorMessage");
-
-    function encodeFormData(formData) {
-      return new URLSearchParams(formData).toString();
-    }
-
-    reportForm.addEventListener("submit", function(event) {
-      event.preventDefault();
-
-      successMessage.style.display = "none";
-      errorMessage.style.display = "none";
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Submitting...";
-
-      const formData = new FormData(reportForm);
-
-      fetch("/", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: encodeFormData(formData)
-      })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Form submission failed");
-        }
-        reportForm.reset();
-        successMessage.style.display = "block";
-      })
-      .catch(() => {
-        errorMessage.style.display = "block";
-      })
-      .finally(() => {
-        submitBtn.disabled = false;
-        submitBtn.textContent = "Request my free report";
-      });
+      if (e.key === 'Escape') { document.getElementById('lbOverlay').style.display='none'; document.getElementById('lbImg').src=''; document.body.style.overflow=''; }
     });
   </script>
 
 </body>
-</html>
+</html>                                                                                                                                                                                                                                                                                                                                                                                
