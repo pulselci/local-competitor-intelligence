@@ -179,7 +179,10 @@ def _build_executive_summary(
         f"{primary_action}."
     )
 
-def build_this_month_focus(action_plan: dict | None) -> list[dict]:
+def build_this_month_focus(
+    action_plan: dict | None,
+    sections: dict | None = None,
+) -> list[dict]:
     """
     Build a client-centric 'This Month's Focus' section.
 
@@ -188,6 +191,7 @@ def build_this_month_focus(action_plan: dict | None) -> list[dict]:
     - Only include items directly relevant to the client
     - Avoid general market trivia
     - Prefer positioning, rank pressure, and client gap signals
+    - Never show challenger urgency language to a market leader
     """
 
     if not action_plan or not isinstance(action_plan, dict):
@@ -195,40 +199,61 @@ def build_this_month_focus(action_plan: dict | None) -> list[dict]:
 
     immediate_items = action_plan.get("immediate") or []
     next_items = action_plan.get("next") or []
+    all_items = immediate_items + next_items
 
     focus_items: list[dict] = []
     seen_types: set[str] = set()
 
-    def _clean(text: str) -> str:
-        text = (text or "").strip()
-        text = text.replace("Positioning opening:", "").strip()
+    # ── Leader detection ─────────────────────────────────────────────────
+    # Prefer hard data from SOV rows (rank == 1) over text scanning.
+    # Fall back to text scanning only if SOV data is unavailable.
+    def _detect_owner_is_leader() -> bool:
+        sov = (sections or {}).get("share_of_voice") or {}
+        rows = sov.get("rows") or []
+        for row in rows:
+            if row.get("is_business"):
+                return int(row.get("rank") or 99) == 1
+        # Most reliable signal: baseline_rank insight stores owner_rank directly
+        # from the database — immune to text enrichment bugs.
+        all_plan_items = [
+            *(action_plan.get("immediate") or []),
+            *(action_plan.get("next") or []),
+            *(action_plan.get("monitor") or []),
+        ]
+        for item in all_plan_items:
+            if str(item.get("type") or "").lower() == "baseline_rank":
+                details = item.get("details") or {}
+                owner_rank = details.get("owner_rank")
+                if owner_rank is not None:
+                    return int(owner_rank) == 1
+        # Last resort: scan insight text across all plan items
+        leader_phrases = (
+            "you currently lead",
+            "you lead the market",
+            "lead the market",
+            "leading the market by",
+            "ranked #1",
+            "rank #1",
+            "leading position",
+            "you are ranked #1",
+            "#1 position",
+            "your #1",
+            "defend your",
+            "protect the lead",
+            "protect your lead",
+            "extend your lead",
+            "currently hold the leading",
+        )
+        return any(
+            any(phrase in str(item).lower() for phrase in leader_phrases)
+            for item in all_plan_items
+        )
 
-        if "Reposition by" in text:
-            text = text.split("Reposition by", 1)[0].strip().rstrip(".")
+    owner_is_leader = _detect_owner_is_leader()
+    print(f"[TMF] owner_is_leader={owner_is_leader} | baseline_in_plan={any(str(i.get('type','')).lower()=='baseline_rank' for i in [*(action_plan.get('immediate') or []),*(action_plan.get('next') or []),*(action_plan.get('monitor') or [])])}")
 
-        text = text.replace("you are outperforming on", "Your strongest edge is")
-        text = text.replace(", while ", ", but ")
-        text = text.replace(" is winning on ", " wins on ")
-        text = text.replace(", ,", ",").replace(",,", ",")
-
-        if text and not text.endswith("."):
-            text += "."
-
-        return text
-
-    all_items = immediate_items + next_items
-    owner_is_leader = any(
-        "you currently lead" in str(item).lower()
-        or "you lead the market" in str(item).lower()
-        or "lead the market" in str(item).lower()
-        or "leading the market by" in str(item).lower()
-        or "ranked #1" in str(item).lower()
-        or "leading position" in str(item).lower()
-        for item in (all_items or [])
-    )
-    
+    # ── Closest competitor name ───────────────────────────────────────────
     closest_competitor = None
-
     for item in all_items:
         details = item.get("details") or {}
         if isinstance(details, dict):
@@ -238,85 +263,119 @@ def build_this_month_focus(action_plan: dict | None) -> list[dict]:
                 or details.get("competitor_name")
                 or closest_competitor
             )
-
     closest_competitor = closest_competitor or "your closest competitor"
 
-def _add(item: dict, signal_type: str, priority: str) -> None:
-    summary = str(item.get("summary") or "").strip()
-    summary_lower = summary.lower()
-
-    raw_action = str(item.get("action") or item.get("recommended_action") or "").strip()
-
-    if not raw_action or raw_action.lower() == summary_lower:
-        if "controls" in summary_lower or "top 2 competitors" in summary_lower:
-            action = "Make speed and convenience the clearest reason customers choose you over competitors."
-
-        elif "leading the market by" in summary_lower:
-            action = "Maintain consistent review growth to preserve and extend your lead."
-
-        elif ("behind" in summary_lower or "gap" in summary_lower) and not owner_is_leader:
-            action = f"Maintain review growth and reinforce the advantages that keep you ahead of {closest_competitor}."
-
-        elif "ranked" in summary_lower or "tier" in summary_lower:
-            action = "Adjust your review and positioning strategy based on your current rank to move up one position."
-
-        else:
-            action = "Strengthen the customer-facing advantage most likely to influence buyer choice this month."
-
-    else:
-        if owner_is_leader and (
-            "close the review gap" in raw_action.lower()
-            or "closing distance to the leader" in raw_action.lower()
-            or "close distance to the leader" in raw_action.lower()
-        ):
-            action = "Maintain consistent review growth to preserve and extend your lead."
-        else:
-            action = raw_action
-
-    action = _clean(str(action))
-
-    if not action:
-        return
-
-    if signal_type in seen_types and len(focus_items) >= 3:
-        return
-
-    action_key = action.lower()
-
-    existing_actions = {
-        str(item.get("action") or "").lower()
-        for item in focus_items
-    }
-
-    if action_key in existing_actions:
-        return
-
-    focus_items.append(
-        {
-            "title": action,
-            "summary": action,
-            "action": action,
-            "priority": priority,
-            "detail": _build_execution_detail(action),
-        }
+    # ── Challenger language detector ──────────────────────────────────────
+    # Any action containing these phrases is inappropriate for a leader.
+    _CHALLENGER_PHRASES = (
+        "before the gap becomes harder to close",
+        "close the gap",
+        "closing the gap",
+        "close the review gap",
+        "closing distance to the leader",
+        "close distance to the leader",
+        "catch up",
+        "catch the leader",
+        "gain ground on",
+        "to overtake",
+        "within striking distance",
+        "trail the leader",
+        "you are behind",
+        "you trail",
+        "respond quickly",          # urgency framing implying you're losing
+        "before competitors catch",
+        "before the gap widens",
     )
 
-    seen_types.add(signal_type)
-    # 1. Positioning focus (take best available)
+    def _is_challenger_language(text: str) -> bool:
+        t = (text or "").lower()
+        return any(phrase in t for phrase in _CHALLENGER_PHRASES)
+
+    # ── Leader-appropriate replacements ───────────────────────────────────
+    _LEADER_ACTIONS = [
+        f"Maintain consistent review growth to protect your lead over {closest_competitor}.",
+        "Define and reinforce the one advantage that makes you the obvious choice in your market.",
+        "Make your credibility clear at the decision point — feature top reviews and trust signals prominently.",
+    ]
+
+    def _leader_safe_action(raw_action: str, slot_index: int) -> str:
+        """Return a leader-appropriate action for the given slot."""
+        return _LEADER_ACTIONS[min(slot_index, len(_LEADER_ACTIONS) - 1)]
+
+    # ── Text cleanup ──────────────────────────────────────────────────────
+    def _clean(text: str) -> str:
+        text = (text or "").strip()
+        text = text.replace("Positioning opening:", "").strip()
+        if "Reposition by" in text:
+            text = text.split("Reposition by", 1)[0].strip().rstrip(".")
+        text = text.replace("you are outperforming on", "Your strongest edge is")
+        text = text.replace(", while ", ", but ")
+        text = text.replace(" is winning on ", " wins on ")
+        text = text.replace(", ,", ",").replace(",,", ",")
+        if text and not text.endswith("."):
+            text += "."
+        return text
+
+    # ── _add closure ─────────────────────────────────────────────────────
+    def _add(item: dict, signal_type: str, priority: str) -> None:
+        summary = str(item.get("summary") or "").strip()
+        summary_lower = summary.lower()
+        raw_action = str(item.get("action") or item.get("recommended_action") or "").strip()
+
+        if not raw_action or raw_action.lower() == summary_lower:
+            # Build action from summary context
+            if "controls" in summary_lower or "top 2 competitors" in summary_lower:
+                action = "Make speed and convenience the clearest reason customers choose you over competitors."
+            elif "leading the market by" in summary_lower:
+                action = f"Maintain consistent review growth to protect your lead over {closest_competitor}."
+            elif ("behind" in summary_lower or "gap" in summary_lower) and not owner_is_leader:
+                action = f"Close the gap with consistent review growth and sharper positioning against {closest_competitor}."
+            elif "ranked" in summary_lower or "tier" in summary_lower:
+                action = "Adjust your review and positioning strategy based on your current rank to move up one position."
+            else:
+                action = "Strengthen the customer-facing advantage most likely to influence buyer choice this month."
+        else:
+            # raw_action exists — filter challenger language for leaders
+            if owner_is_leader and _is_challenger_language(raw_action):
+                action = _leader_safe_action(raw_action, len(focus_items))
+            else:
+                action = raw_action
+
+        action = _clean(str(action))
+
+        if not action:
+            return
+        if signal_type in seen_types and len(focus_items) >= 3:
+            return
+
+        action_key = action.lower()
+        existing_actions = {str(i.get("action") or "").lower() for i in focus_items}
+        if action_key in existing_actions:
+            return
+
+        focus_items.append(
+            {
+                "title": action,
+                "summary": action,
+                "action": action,
+                "priority": priority,
+                "detail": _build_execution_detail(action),
+            }
+        )
+        seen_types.add(signal_type)
+
+    # ── Pass 1: Positioning focus ─────────────────────────────────────────
     for item in all_items:
         _add(item, "positioning", item.get("priority") or "Immediate")
         break
 
-    # 2. Pressure focus (fallback if no explicit pressure insight)
+    # ── Pass 2: Pressure focus ────────────────────────────────────────────
     added = False
-
     for item in all_items:
-        insight_type = str(item.get("type") or "").strip().lower()
-        if insight_type == "competitive_tier_pressure":
+        if str(item.get("type") or "").strip().lower() == "competitive_tier_pressure":
             _add(item, "pressure", item.get("priority") or "Immediate")
             added = True
             break
-
     if not added:
         for item in all_items:
             summary = str(item.get("summary") or "").lower()
@@ -324,42 +383,32 @@ def _add(item: dict, signal_type: str, priority: str) -> None:
                 _add(item, "pressure", item.get("priority") or "Next")
                 break
 
-    # 3. Gap focus: your distance from the leader, only if it directly mentions you
+    # ── Pass 3: Gap focus (only if it directly names you) ─────────────────
     for item in all_items:
         insight_type = str(item.get("type") or "").strip().lower()
-        summary = item.get("summary") or ""
-        summary_lower = summary.lower()
-
+        summary_lower = (item.get("summary") or "").lower()
         if insight_type in {"challenger_gap", "market_dominance"}:
             if "you" in summary_lower or "your" in summary_lower:
                 _add(item, "gap", item.get("priority") or "Immediate")
                 break
 
-    # Fallback: fill remaining focus slots with any unique actions
+    # ── Fallback fill ─────────────────────────────────────────────────────
     if len(focus_items) < 3:
-        existing_actions = {
-            str(item.get("action") or "").strip().lower()
-            for item in focus_items
-        }
-
-        existing_decisions = {
-            _derive_decision({"action": item.get("action")})
-            for item in focus_items
-        }
+        existing_actions = {str(i.get("action") or "").strip().lower() for i in focus_items}
+        existing_decisions = {_derive_decision({"action": i.get("action")}) for i in focus_items}
 
         for item in all_items:
             raw_action = str(item.get("action") or item.get("recommended_action") or "").strip()
-
             if not raw_action:
                 continue
-
+            # Filter challenger language here too
+            if owner_is_leader and _is_challenger_language(raw_action):
+                raw_action = _leader_safe_action(raw_action, len(focus_items))
             action = _clean(raw_action)
             action_key = action.lower()
             decision = _derive_decision({"action": action})
-
             if not action or action_key in existing_actions or decision in existing_decisions:
                 continue
-
             focus_items.append(
                 {
                     "title": action,
@@ -369,40 +418,48 @@ def _add(item: dict, signal_type: str, priority: str) -> None:
                     "detail": _build_execution_detail(action),
                 }
             )
-
             existing_actions.add(action_key)
             existing_decisions.add(decision)
-
             if len(focus_items) >= 3:
                 break
 
-    existing_decisions = {
-        _derive_decision({"action": item.get("action")})
-        for item in focus_items
-    }
+    # ── Leader-specific fill ──────────────────────────────────────────────
+    if owner_is_leader and len(focus_items) < 3:
+        existing_actions = {str(i.get("action") or "").lower() for i in focus_items}
+        for leader_action in _LEADER_ACTIONS:
+            cleaned = _clean(leader_action)
+            if cleaned.lower() not in existing_actions:
+                focus_items.append(
+                    {
+                        "title": cleaned,
+                        "summary": cleaned,
+                        "action": cleaned,
+                        "priority": "Immediate",
+                        "detail": _build_execution_detail(cleaned),
+                    }
+                )
+                existing_actions.add(cleaned.lower())
+                if len(focus_items) >= 3:
+                    break
 
-    
-    existing_decisions = {
-        _derive_decision({"action": item.get("action")})
-        for item in focus_items
-    }
+    # ── Generic fill (non-leader) ─────────────────────────────────────────
+    if not owner_is_leader and len(focus_items) < 3:
+        generic = "Own one customer value clearly and reinforce it across all messaging."
+        existing_actions = {str(i.get("action") or "").lower() for i in focus_items}
+        if generic.lower() not in existing_actions:
+            focus_items.append(
+                {
+                    "title": generic,
+                    "summary": generic,
+                    "action": generic,
+                    "priority": "Next",
+                    "detail": "Choose one value (speed, trust, or convenience), highlight it on your homepage, and reinforce it through reviews and customer communication.",
+                }
+            )
 
-    # PRIORITY 2: positioning
-    if len(focus_items) < 3 and "win_positioning" not in existing_decisions:
-        focus_items.append(
-            {
-                "title": "Own one customer value clearly and reinforce it across all messaging.",
-                "summary": "Own one customer value clearly and reinforce it across all messaging.",
-                "action": "Own one customer value clearly and reinforce it across all messaging.",
-                "priority": "Next",
-                "detail": "Choose one value (speed, trust, or convenience), highlight it on your homepage, and reinforce it through reviews and customer communication.",
-            }
-        )
-
-    # FINAL DEDUPE
+    # ── Final dedupe ──────────────────────────────────────────────────────
     deduped = []
     seen = set()
-
     for item in focus_items:
         action = str(item.get("action") or "").lower().strip()
         if action in seen:
@@ -410,55 +467,24 @@ def _add(item: dict, signal_type: str, priority: str) -> None:
         seen.add(action)
         deduped.append(item)
 
-    focus_items = deduped
+    # ── Post-processing: last-line safety net for leader ──────────────────
+    # Catches anything that slipped through all the above filters.
+    if owner_is_leader:
+        cleaned_final = []
+        for i, item in enumerate(deduped):
+            action = str(item.get("action") or "")
+            if _is_challenger_language(action):
+                replacement = _clean(_leader_safe_action(action, i))
+                if not any(str(x.get("action") or "").lower() == replacement.lower() for x in cleaned_final):
+                    item = dict(item)
+                    item["title"] = replacement
+                    item["summary"] = replacement
+                    item["action"] = replacement
+                    item["detail"] = _build_execution_detail(replacement)
+            cleaned_final.append(item)
+        deduped = cleaned_final
 
-    # LEADER fallback: ensure a strong 3rd item if leader
-    if len(focus_items) < 3 and owner_is_leader:
-        existing_actions = {
-            str(item.get("action") or "").lower()
-            for item in focus_items
-        }
-
-        if "maintain consistent review growth to preserve your lead." not in existing_actions:
-            focus_items.append(
-                {
-                    "title": "Maintain consistent review growth to preserve your lead.",
-                    "summary": "Maintain consistent review growth to preserve your lead.",
-                    "action": "Maintain consistent review growth to preserve your lead.",
-                    "priority": "Immediate",
-                    "detail": f"Set a monthly review target that keeps you ahead of {closest_competitor} and reinforces your #1 position.",
-                }
-            )
-            seen.add("maintain consistent review growth to preserve your lead.")
-
-    # FORCE FILL to 3
-    if len(focus_items) < 3:
-        for item in all_items:
-            action = str(item.get("action") or "").strip()
-            if not action:
-                continue
-
-            action_key = action.lower()
-
-            if action_key in seen:
-                continue
-
-            focus_items.append(
-                {
-                    "title": action,
-                    "summary": action,
-                    "action": action,
-                    "priority": item.get("priority") or "Next",
-                    "detail": _build_execution_detail(action),
-                }
-            )
-
-            seen.add(action_key)
-
-            if len(focus_items) >= 3:
-                break
-
-    return focus_items[:3]
+    return deduped[:3]
 
 def _derive_decision(item: dict) -> str:
     text = " ".join([
@@ -691,7 +717,7 @@ def build_client_facing_insights(
         ],
     }
 
-    this_month_focus = build_this_month_focus(action_plan)
+    this_month_focus = build_this_month_focus(action_plan, sections=sections)
 
     # -------------------------
     # Review target recommendation
@@ -2796,15 +2822,10 @@ def build_review_overtake_projection(
             "months_to_overtake": 0,
         }
 
-    your_reviews = your_reviews or 0
-    next_reviews = next_reviews or 0
-    
     if net_gain_per_month <= 0:
-        gap = max(0, (next_reviews or 0) - (your_reviews or 0))
-
+        # Not closing — show what it would take to close in 6 or 12 months
         aggressive_months = 6
         moderate_months = 12
-
         aggressive_target = max(1, round(gap / aggressive_months))
         moderate_target = max(1, round(gap / moderate_months))
 
@@ -2812,9 +2833,13 @@ def build_review_overtake_projection(
             "status": "Not closing yet",
             "message": (
                 f"At the current pace, you are not closing the gap with {next_competitor}. "
-                f"To gain ground, you need to outpace them by roughly {moderate_target}–{aggressive_target} reviews per month."
+                f"To close within a year, you need to outpace them by roughly "
+                f"{moderate_target}–{aggressive_target} reviews per month."
             ),
             "months_to_overtake": None,
+            "gap": gap,
+            "monthly_target_to_close_12mo": moderate_target,
+            "monthly_target_to_close_6mo": aggressive_target,
         }
 
     months = max(1, round(gap / net_gain_per_month))

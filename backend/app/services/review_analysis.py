@@ -24,18 +24,17 @@ STOPWORDS = {
     "through", "under", "until", "up", "while", "years", "year",
     "went", "got", "go", "going", "came", "come", "back", "even",
 
-    # generic business/service words
-    "auto", "repair", "shop", "place", "service", "services", "car", "vehicle",
-    "work", "worked", "working", "job", "staff", "team", "business", "customer",
+    # generic business/service words (intentionally minimal — avoid removing useful terms)
+    "place", "service", "services", "work", "worked", "working", "job",
+    "staff", "team", "business", "customer",
 
     # weak review filler
     "experience", "time", "times", "thing", "things", "way", "lot", "lots",
     "need", "needs", "needed", "say", "said", "make", "made", "well", "really",
     "every", "text", "texts", "these", "get", "done", "take", "always",
 
-    # likely brand/entity words for your current dataset
-    "prewitt", "meineke", "sumner", "sumners", "vb", "autoworks", "healthy", "mt",
-    "jake",
+    # legacy brand/entity words (auto-shop specific, kept for backward compat)
+    "prewitt", "meineke", "sumner", "sumners", "vb", "autoworks", "mt", "jake",
 }
 
 POSITIVE_HINTS = {
@@ -142,31 +141,81 @@ def extract_phrases_by_sentiment(
           [phrase, phrase, ...]
     """
     praise_keywords = [
+        # Trust / reliability
         "honest",
         "trustworthy",
         "reliable",
+        "dependable",
+        "genuine",
+        "caring",
+        # Speed / efficiency
         "fast",
         "quick",
         "prompt",
+        "efficient",
+        "timely",
+        "same day",
+        # Professionalism
         "professional",
         "friendly",
         "knowledgeable",
+        "courteous",
+        "welcoming",
+        "compassionate",
+        "attentive",
+        "kind",
+        "warm",
+        "patient",
+        "personable",
+        "skilled",
+        "experienced",
+        "expert",
+        # Dental/healthcare-specific praise
+        "gentle",
+        "painless",
+        "comfortable",
+        "thorough",
+        "clean",
+        "careful",
+        "calming",
+        "relaxing",
+        "anxiety-free",
+        "no pain",
+        "pain free",
+        "excellent dentist",
+        "great dentist",
+        "best dentist",
+        # Communication
         "responsive",
         "helpful",
         "great communication",
         "kept me updated",
+        "explained",
+        "answered",
+        # Pricing
         "fair price",
         "reasonable price",
+        "affordable",
+        "worth it",
+        # Quality
         "excellent work",
+        "great work",
         "quality",
+        "outstanding",
+        "perfect",
+        "exceptional",
+        # Convenience
         "easy",
         "convenient",
-        "same day",
+        "easy to schedule",
+        "easy scheduling",
+        "on time",
     ]
 
     complaint_keywords = [
         "expensive",
         "overpriced",
+        "too expensive",
         "slow",
         "late",
         "rude",
@@ -180,6 +229,19 @@ def extract_phrases_by_sentiment(
         "poor quality",
         "inconvenient",
         "difficult",
+        "painful",
+        "hurt",
+        "rough",
+        "dismissed",
+        "rushed",
+        "cancelled",
+        "rescheduled",
+        "long wait",
+        "waiting too long",
+        "billing issue",
+        "insurance issue",
+        "upselling",
+        "unnecessary",
     ]
 
     praise_counter: Counter[str] = Counter()
@@ -405,19 +467,21 @@ def build_messaging_mismatch_insight(
     if not review_led:
         return None
 
+    # Only surface a meaningful gap — require at least 2 review themes missing from website,
+    # and the top review theme must be absent. Single-theme differences are too noisy.
+    top_review_theme = review_led[0] if review_led else None
+    top_theme_missing = top_review_theme in missing_from_website if top_review_theme else False
+
+    if len(missing_from_website) < 2 or not top_theme_missing:
+        return None
+
     review_text = _join_terms_for_sentence(review_led[:3])
     website_text_summary = _join_terms_for_sentence(website_led[:3]) if website_led else "general service language"
-    gap_text = _join_terms_for_sentence(missing_from_website[:3])
 
-    if missing_from_website:
-        summary = (
-            f"Customers repeatedly praise {competitor_name} for {review_text}, but the current "
-            f"website messaging emphasizes {website_text_summary}."
-        )
-    else:
-        summary = (
-            f"Website messaging is broadly aligned with customer review language for {competitor_name}."
-        )
+    summary = (
+        f"Customers repeatedly praise {competitor_name} for {review_text}, but the current "
+        f"website messaging emphasizes {website_text_summary}."
+    )
 
     return {
         "type": "messaging_mismatch",

@@ -223,3 +223,49 @@ def send_report_email(
             error=error_text,
         )
         return EmailSendResult(ok=False, error=error_text)
+
+def send_plain_email(
+    to_email: str,
+    subject: str,
+    body: str,
+) -> "EmailSendResult":
+    """
+    Send a plain-text email with no PDF attachment.
+    Uses the same SMTP credentials as send_report_email.
+    """
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    user = settings.SMTP_USER
+    password = settings.SMTP_PASS
+    host = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_email = os.getenv("SMTP_FROM") or user
+    use_tls = os.getenv("SMTP_TLS", "true").strip().lower() in ("1", "true", "yes")
+    dry_run = os.getenv("EMAIL_DRY_RUN", "false").strip().lower() in ("1", "true", "yes")
+
+    if dry_run:
+        logger.info(f"[EMAIL DRY RUN] plain email to={to_email} subject={subject}")
+        return EmailSendResult(ok=True, error=None)
+
+    if not user or not password:
+        return EmailSendResult(ok=False, error="Missing SMTP_USER or SMTP_PASS")
+
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = from_email
+        msg["To"] = to_email
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(host, port) as server:
+            if use_tls:
+                server.starttls()
+            server.login(user, password)
+            server.sendmail(from_email, [to_email], msg.as_string())
+
+        return EmailSendResult(ok=True, error=None)
+    except Exception as e:
+        logger.warning(f"[EMAIL] plain email failed to={to_email}: {e}")
+        return EmailSendResult(ok=False, error=str(e))

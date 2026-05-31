@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 GENERIC_BAD_PHRASES = [
@@ -373,38 +373,102 @@ def ensure_minimum_focus_items(
     report_experience["this_month_focus"] = focus_items[:3]
 
 
-def _leader_fallback_recommendations() -> List[Dict[str, Any]]:
+def _leader_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    # Pull real numbers from SOV data if available
+    sov = (sections or {}).get("share_of_voice") or {}
+    rows = sov.get("rows") or []
+
+    owner_reviews: int = 0
+    owner_share: float = 0.0
+    challenger_name: str = "your closest competitor"
+    challenger_reviews: int = 0
+
+    for row in rows:
+        if isinstance(row, dict) and row.get("is_business"):
+            owner_reviews = int(row.get("reviews_total") or 0)
+            owner_share = round(float(row.get("share_pct") or 0), 1)
+            break
+
+    for row in rows:
+        if isinstance(row, dict) and not row.get("is_business") and int(row.get("rank") or 99) == 2:
+            challenger_name = row.get("competitor_name") or "your closest competitor"
+            challenger_reviews = int(row.get("reviews_total") or 0)
+            break
+
+    gap = max(0, owner_reviews - challenger_reviews) if owner_reviews and challenger_reviews else 0
+    gap_threshold = max(100, gap // 3)
+
+    # ── Card 1: defend the lead ────────────────────────────────────────────
+    if owner_reviews and challenger_reviews:
+        why_defend = (
+            f"{challenger_name} holds {challenger_reviews:,} reviews — {gap:,} behind you. "
+            f"That gap shrinks if you stop growing and they don't."
+        )
+        how_defend = (
+            f"Aim for at least 10 new reviews per month. "
+            f"If {challenger_name} closes to within {gap_threshold:,} reviews of you, increase your cadence immediately."
+        )
+    else:
+        why_defend = "Without consistent growth, competitors can close the gap over time."
+        how_defend = "Maintain a steady review request process and track monthly gains against your closest competitor."
+
+    # ── Card 2: positioning ────────────────────────────────────────────────
+    if owner_reviews and owner_share:
+        why_position = (
+            f"You hold {owner_share}% of all market reviews, but no single competitor owns a clear perception advantage. "
+            "That's a window — claim a position before someone else does."
+        )
+    else:
+        why_position = "As the leader, owning a clear position makes your advantage harder to challenge."
+
+    # ── Card 3: credibility ────────────────────────────────────────────────
+    if owner_reviews:
+        why_credibility = (
+            f"With {owner_reviews:,} reviews and the #1 ranking, your lead should be visible to every patient comparing options. "
+            "Displaying it prominently turns your position into a conversion advantage."
+        )
+        how_credibility = (
+            f"Pin your strongest 2–3 reviews on your Google profile, respond to every new review within 48 hours, "
+            f"and display your review count and star rating on your website homepage."
+        )
+    else:
+        why_credibility = "Clear proof reinforces your leadership and reduces customer hesitation."
+        how_credibility = "Feature top reviews, respond to all reviews, and highlight credentials or guarantees prominently."
+
+    # ── Card 4: monitor challenger ─────────────────────────────────────────
+    challenger_label = challenger_name if challenger_name != "your closest competitor" else "your closest competitor"
+
     return [
         {
             "summary": "You lead the market, but competitors are close enough to challenge your position.",
             "action": "Protect and extend your lead by maintaining consistent review growth.",
             "priority": "Immediate",
-            "why_it_matters": "Without consistent growth, competitors can close the gap over time.",
-            "how_to_implement": "Maintain a steady review request process and track monthly gains against your closest competitor.",
+            "why_it_matters": why_defend,
+            "how_to_implement": how_defend,
             "is_fallback": True,
         },
         {
             "summary": "No competitor clearly owns a dominant customer perception.",
             "action": "Define and reinforce a clear positioning advantage before competitors do.",
             "priority": "Immediate",
-            "why_it_matters": "As the leader, owning a clear position makes your advantage harder to challenge.",
-            "how_to_implement": "Highlight one strength such as trust, comfort, convenience, or communication across your messaging and reviews.",
+            "why_it_matters": why_position,
+            "how_to_implement": "Highlight one strength — trust, comfort, convenience, or communication — across your messaging and review responses.",
             "is_fallback": True,
         },
         {
             "summary": "Strong leaders win by making credibility obvious at the decision point.",
             "action": "Improve how your reviews and trust signals are presented.",
             "priority": "Next",
-            "why_it_matters": "Clear proof reinforces your leadership and reduces customer hesitation.",
-            "how_to_implement": "Feature top reviews, respond to all reviews, and highlight credentials or guarantees prominently.",
+            "why_it_matters": why_credibility,
+            "how_to_implement": how_credibility,
             "is_fallback": True,
         },
         {
-            "summary": "Your closest challenger is still large enough to monitor closely.",
-            "action": "Track your lead monthly and respond quickly if the gap starts shrinking.",
+            "summary": f"Your closest challenger, {challenger_label}, is large enough to monitor closely.",
+            "action": f"Track your lead over {challenger_label} monthly and act quickly if the gap starts shrinking.",
             "priority": "Next",
             "why_it_matters": "Market leaders lose position when they stop watching challenger momentum.",
-            "how_to_implement": "Compare monthly review gains against the closest competitor and adjust review requests if they begin outpacing you.",
+            "how_to_implement": f"Compare monthly review gains against {challenger_label} and adjust your review request rate if they start outpacing you.",
             "is_fallback": True,
         },
     ]
@@ -493,7 +557,7 @@ def ensure_minimum_recommendations(
     flat = cleaned
 
     fallback = (
-        _leader_fallback_recommendations()
+        _leader_fallback_recommendations(sections)
         if is_leader
         else _challenger_fallback_recommendations()
     )

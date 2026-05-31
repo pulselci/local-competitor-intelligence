@@ -74,15 +74,24 @@ def format_insights_for_report(
         gap_left: Optional[str] = None
         gap_right: Optional[str] = None
 
+        raw_praise_phrases: list[str] = []  # actual words from review text
+        review_count: int = 0
+
         for item in items:
             t = str(item.get("type") or "").strip()
             s = _clean(item.get("summary"))
+            details = item.get("details") or {}
 
             if not s:
                 continue
 
             if t == "praise_themes":
                 praise = _clean(s.split(" for ", 1)[-1] if " for " in s else s)
+                # Extract the actual matched vocabulary from reviews
+                raw_phrases = details.get("praise_phrases") or []
+                raw_praise_phrases = [str(p).strip() for p in raw_phrases if p][:6]
+                # Use real Google total (market size), fall back to ingested count
+                review_count = int(details.get("reviews_total") or details.get("review_count") or 0)
 
             elif t == "hidden_opportunity":
                 if "while" in s and "Reposition by" in s:
@@ -156,6 +165,8 @@ def format_insights_for_report(
             {
                 "competitor_name": competitor_name,
                 "praise": praise,
+                "raw_praise_phrases": raw_praise_phrases,
+                "review_count": review_count,
                 "comp_strength": comp_strength,
                 "owner_strength": owner_strength,
                 "opportunity": opportunity,
@@ -187,109 +198,116 @@ def format_insights_for_report(
 
     sections: list[str] = []
 
-    market_sentences: list[str] = []
+    # Collect all raw praise phrases across all competitors for the market summary
+    all_raw_phrases: Counter[str] = Counter()
+    for row in competitor_rows:
+        for phrase in row.get("raw_praise_phrases") or []:
+            all_raw_phrases[phrase] += 1
 
-    if competitor_phrase and owner_phrase:
-        market_sentences.append(
+    # Pick the most evocative actual words (avoid theme labels like "professionalism")
+    _theme_label_words = {"professionalism", "quality", "speed", "trust", "pricing",
+                          "communication", "convenience"}
+    top_raw_phrases = [
+        w for w, _ in all_raw_phrases.most_common(8)
+        if w.lower() not in _theme_label_words
+    ][:4]
+    raw_phrase_str = _human_join(top_raw_phrases)
+
+    # Fallback to theme phrase if no concrete words
+    display_praise = raw_phrase_str or praise_phrase
+
+    # ── Section 1: What patients are saying ──────────────────────────────
+    what_patients_say: list[str] = []
+
+    if display_praise:
+        what_patients_say.append(
             _ensure_period(
-                f"Across the market, competitors are most visibly winning on {competitor_phrase}, while your clearest opening is {owner_phrase}"
-            )
-        )
-        market_sentences.append(
-            _ensure_period(
-                f"Win by making {owner_phrase} the clear reason customers choose you over competitors focused on {competitor_phrase}"
-            )
-        )
-    elif competitor_phrase:
-        market_sentences.append(
-            _ensure_period(
-                f"Across the market, competitors are most visibly winning on {competitor_phrase}"
-            )
-        )
-    elif owner_phrase:
-        market_sentences.append(
-            _ensure_period(
-                f"Your clearest positioning opportunity is to make {owner_phrase} more visible before buyers compare alternatives"
-            )
-        )
-    elif praise_phrase:
-        market_sentences.append(
-            _ensure_period(
-                f"Customer perception in this market is centered around {praise_phrase}"
+                f"When patients in your market leave positive reviews, the words that come up most are: {display_praise}. "
+                f"These are the signals that build trust before someone even picks up the phone"
             )
         )
 
-    if market_sentences:
+    if what_patients_say:
         sections.append(
-            "Market Story\n"
-            + "\n".join([s.strip() for s in market_sentences])
+            "What Patients Are Saying\n"
+            + "\n".join([s.strip() for s in what_patients_say])
         )
 
-    # Strongest competitive callouts only
+    # ── Section 2: Closest competitor = highest review count (biggest threat) ──
+    # Sort by review count descending so the most-reviewed competitor comes first
     ranked_rows = sorted(
         competitor_rows,
-        key=lambda r: (
-            1 if r.get("comp_strength") and r.get("owner_strength") else 0,
-            len(str(r.get("comp_strength") or "")),
-            len(str(r.get("praise") or "")),
-        ),
+        key=lambda r: r.get("review_count") or 0,
         reverse=True,
     )
 
-    callout_lines: list[str] = []
+    top_competitor = ranked_rows[0] if ranked_rows else None
+    if top_competitor:
+        top_name = top_competitor["competitor_name"]
+        raw_phrases = top_competitor.get("raw_praise_phrases") or []
+        actual_words = [w for w in raw_phrases if w.lower() not in _theme_label_words][:3]
+        actual_word_str = _human_join(actual_words)
 
-    for row in ranked_rows[:3]:
-        competitor_name = row["competitor_name"]
-        comp_strength = row.get("comp_strength")
-        owner_strength = row.get("owner_strength")
-        praise = row.get("praise")
-
-        if comp_strength and owner_strength:
-            callout_lines.append(
+        comp_lines: list[str] = []
+        if actual_word_str:
+            comp_lines.append(
                 _ensure_period(
-                    f"{competitor_name}: wins on {comp_strength}. Counter with {owner_strength}"
+                    f"Their patients use words like \"{actual_word_str}\" — that's the reputation they've built, "
+                    f"and it's what new patients see when they're comparing options"
                 )
             )
-        elif praise:
-            callout_lines.append(
+        elif top_competitor.get("praise"):
+            comp_lines.append(
                 _ensure_period(
-                    f"{competitor_name} is most associated with {praise}"
+                    f"Their patients are consistently praising them for {top_competitor['praise']}"
                 )
             )
 
-    if callout_lines:
-        sections.append(
-            "Competitive Readout\n"
-            + "\n".join([s.strip() for s in callout_lines])
-        )
+        if comp_lines:
+            sections.append(
+                f"Your Closest Competitor: {top_name}\n"
+                + "\n".join([s.strip() for s in comp_lines])
+            )
 
-    
+    # ── Section 3: Weak spot — prefer the same competitor, else best available ──
     if messaging_gap_rows:
-        gap = messaging_gap_rows[0]
+        # Try to match the gap to the top competitor first
+        top_name_lower = (top_competitor["competitor_name"] if top_competitor else "").lower()
+        matched_gap = next(
+            (g for g in messaging_gap_rows if g["competitor_name"].lower() == top_name_lower),
+            messaging_gap_rows[0],
+        )
+        gap_name = matched_gap["competitor_name"]
         sections.append(
-            "Messaging Gap\n"
+            f"{gap_name}'s Weak Spot\n"
             + _ensure_period(
-                f"{gap['competitor_name']} shows a messaging disconnect: reviews emphasize {gap['gap_left']}, while website messaging emphasizes {gap['gap_right']}"
+                f"Their patients rave about {matched_gap['gap_left']}, "
+                f"but their website leads with {matched_gap['gap_right']} — "
+                f"there's a gap between what patients value and what they're advertising"
             )
             + "\n"
             + _ensure_period(
-                "This matters because buyers may decide before contacting the business if the visible message does not match what customers actually value"
+                "Most patients decide where to go before they call. "
+                "If your messaging reflects what patients actually experience, you win more of those comparisons"
             )
         )
 
-    if owner_phrase:
+    # ── Section 4: What to do ─────────────────────────────────────────────
+    action_words = _human_join(top_raw_phrases[:2]) or praise_phrase
+    if action_words:
         sections.append(
-            "Recommended Position\n"
+            "Your Action This Month\n"
             + _ensure_period(
-                f"Make {owner_phrase} the core message across homepage copy, service descriptions, review requests, and follow-up messaging"
+                f"Make sure the words \"{action_words}\" show up in your Google Business profile, "
+                f"your website homepage, and in how you coach patients to leave reviews"
             )
             + "\n"
             + _ensure_period(
-                "The goal is not to mention every strength, but to repeat the strongest buyer-facing advantage until it becomes easy to remember"
+                "You don't need to say everything — just pick the one or two things patients already love and repeat them until they become your reputation"
             )
         )
 
     if not sections:
         return ""
 
-    return "Customer Perception Insights\n\n" + "\n\n".join(sections)
+    return "\n\n".join(sections)
