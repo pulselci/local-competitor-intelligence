@@ -3078,6 +3078,9 @@ def generate_business_report(
                 "owner_top_themes": [],
                 "insights": [],
             }
+            # Ensure perception body is always populated, even if the friction block failed
+            if not sections.get("customer_perception_insights", {}).get("body"):
+                sections["customer_perception_insights"]["body"] = customer_perception_text
 
 
         previous_insights = []
