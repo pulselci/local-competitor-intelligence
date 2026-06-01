@@ -302,6 +302,32 @@ def build_this_month_focus(
         """Return a leader-appropriate action for the given slot."""
         return _LEADER_ACTIONS[min(slot_index, len(_LEADER_ACTIONS) - 1)]
 
+    # ── Strategic headline generator ─────────────────────────────────────
+    def _make_headline(action: str, signal_type: str) -> str:
+        """Short 3-6 word strategic label for the card header."""
+        t = (action or "").lower()
+        if ("review gap" in t or "close" in t) and ("review" in t or "gap" in t):
+            return "Review Volume Gap"
+        if "defend" in t or "protect your lead" in t or ("protect" in t and "lead" in t):
+            return "Defend Your Market Lead"
+        if "extend your lead" in t or "leading position" in t or "maintain" in t and "lead" in t:
+            return "Extend Your Market Lead"
+        if "positioning" in t or "reinforce" in t or "advantage" in t:
+            return "Sharpen Your Positioning"
+        if "credibility" in t or "trust" in t or "proof" in t:
+            return "Strengthen Trust Signals"
+        if "review" in t and ("grow" in t or "generate" in t or "consistent" in t):
+            return "Build Review Momentum"
+        if "speed" in t or "convenience" in t:
+            return "Lead on Speed & Convenience"
+        if "rank" in t or "tier" in t:
+            return "Improve Your Market Rank"
+        if signal_type == "positioning":
+            return "Strategic Positioning Opportunity"
+        if signal_type == "pressure":
+            return "Competitive Pressure Signal"
+        return "Key Growth Opportunity"
+
     # ── Text cleanup ──────────────────────────────────────────────────────
     def _clean(text: str) -> str:
         text = (text or "").strip()
@@ -355,11 +381,14 @@ def build_this_month_focus(
 
         focus_items.append(
             {
+                "headline": _make_headline(action, signal_type),
                 "title": action,
                 "summary": action,
                 "action": action,
                 "priority": priority,
-                "detail": _build_execution_detail(action),
+                "detail": item.get("detail") or _build_execution_detail(action),
+                "why_it_matters": item.get("why_it_matters") or item.get("implication") or "",
+                "how_to_implement": item.get("how_to_implement") or "",
             }
         )
         seen_types.add(signal_type)
@@ -411,11 +440,14 @@ def build_this_month_focus(
                 continue
             focus_items.append(
                 {
+                    "headline": _make_headline(action, ""),
                     "title": action,
                     "summary": action,
                     "action": action,
                     "priority": item.get("priority") or "Next",
-                    "detail": _build_execution_detail(action),
+                    "detail": item.get("detail") or _build_execution_detail(action),
+                    "why_it_matters": item.get("why_it_matters") or item.get("implication") or "",
+                    "how_to_implement": item.get("how_to_implement") or "",
                 }
             )
             existing_actions.add(action_key)
