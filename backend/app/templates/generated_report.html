@@ -919,7 +919,50 @@
           {% endif %}
         {% endfor %}
       {% else %}
-        <div class="empty-note">No client-facing report experience data was available for this report.</div>
+        {# No grouped_sections — for free preview use this_month_focus items as placeholder cards #}
+        {% set focus_items = experience.get("this_month_focus") or [] %}
+        {% if sections.get("is_free_preview") and focus_items %}
+          {% for item in focus_items %}
+            {% set action_text = item.get("action") or item.get("summary") or item.get("title") or "" %}
+            {% set detail_text = item.get("detail") or "" %}
+            {% if loop.index0 == 0 %}
+              {# First item — show fully #}
+              <div class="insight-card" style="margin-bottom:10px;">
+                <div class="insight-top">
+                  <div class="insight-title-col"><p class="insight-summary">{{ action_text }}</p></div>
+                  <div class="insight-badge-col"><span class="badge badge-immediate">Immediate</span></div>
+                </div>
+                {% if detail_text %}
+                <div class="detail-grid">
+                  <div class="detail-col">
+                    <div class="detail-label">Action</div>
+                    <p class="detail-text">{{ detail_text }}</p>
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            {% else %}
+              {# Remaining items — blurred #}
+              <div class="premium-section-wrapper" style="margin-bottom:10px;">
+                <div class="premium-blur-content">
+                  <div class="insight-card">
+                    <div class="insight-top">
+                      <div class="insight-title-col"><p class="insight-summary">{{ action_text }}</p></div>
+                      <div class="insight-badge-col"><span class="badge badge-next">Next</span></div>
+                    </div>
+                  </div>
+                </div>
+                <div class="premium-overlay" style="border-radius:6px;">
+                  <div class="premium-lock-icon" style="font-size:20px;margin-bottom:6px;">🔒</div>
+                  <div class="premium-overlay-title" style="font-size:13px;">Subscribers Only</div>
+                  <a class="premium-cta-btn" href="https://pulselci.com/#pricing">Unlock Full Report</a>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <div class="empty-note">No client-facing report experience data was available for this report.</div>
+        {% endif %}
       {% endif %}
     </div>
 
