@@ -986,6 +986,7 @@ def admin_clients_dashboard(key: str = ""):
         return HTMLResponse("<h2>Unauthorized</h2>", status_code=401)
 
     # Fetch all businesses with their schedule + billing state
+    # (billing fields live directly on the businesses table)
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("""
@@ -996,11 +997,11 @@ def admin_clients_dashboard(key: str = ""):
                     b.state,
                     b.notes,
                     b.created_at,
+                    b.billing_status,
+                    b.stripe_customer_id,
                     rs.is_enabled,
                     rs.next_run_at,
                     rs.last_run_at,
-                    bb.billing_status,
-                    bb.stripe_customer_id,
                     (
                         SELECT MAX(gr.generated_at)
                         FROM generated_reports gr
@@ -1008,7 +1009,6 @@ def admin_clients_dashboard(key: str = ""):
                     ) AS last_report_at
                 FROM businesses b
                 LEFT JOIN report_schedules rs ON rs.business_id = b.id
-                LEFT JOIN business_billing bb ON bb.business_id = b.id
                 ORDER BY b.created_at DESC
             """)
             rows = cur.fetchall()
