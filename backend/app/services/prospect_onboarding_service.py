@@ -63,6 +63,65 @@ def _find_existing_business(business_name: str, city: str, state: str) -> Option
 
 
 
+def _upsert_new_competitors(business_id: UUID, competitors_in: list) -> None:
+    """
+    Add any competitors from the new signup that aren't already stored for this business.
+    Matches on google_place_id (preferred) or lowercase name to avoid duplicates.
+    """
+    from app.core.db import get_conn
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                # Fetch existing competitors for this business
+                cur.execute(
+                    "SELECT name, google_place_id FROM competitors WHERE business_id = %s",
+                    (str(business_id),),
+                )
+                existing = cur.fetchall()
+                existing_place_ids = {
+                    r["google_place_id"] for r in existing if r.get("google_place_id")
+                }
+                existing_names = {
+                    (r["name"] or "").lower() for r in existing
+                }
+
+                added = 0
+                for c in competitors_in:
+                    # Skip the is_business=True entry (the client itself)
+                    if getattr(c, "is_business", False):
+                        continue
+                    place_id = getattr(c, "google_place_id", None)
+                    name = getattr(c, "name", "") or ""
+                    # Already tracked?
+                    if place_id and place_id in existing_place_ids:
+                        continue
+                    if name.lower() in existing_names:
+                        continue
+                    cur.execute(
+                        """
+                        INSERT INTO public.competitors
+                            (business_id, name, website_url, google_place_id, google_maps_url, is_business)
+                        VALUES (%s, %s, %s, %s, %s, false)
+                        ON CONFLICT DO NOTHING
+                        """,
+                        (
+                            str(business_id),
+                            name,
+                            getattr(c, "website_url", None),
+                            place_id,
+                            getattr(c, "google_maps_url", None),
+                        ),
+                    )
+                    existing_names.add(name.lower())
+                    if place_id:
+                        existing_place_ids.add(place_id)
+                    added += 1
+            conn.commit()
+            logger.info("Added %d new competitor(s) to existing business %s", added, business_id)
+    except Exception as exc:
+        logger.warning("_upsert_new_competitors failed for %s: %s", business_id, exc)
+
+
 @dataclass
 class OnboardingResult:
     ok: bool
@@ -172,6 +231,9 @@ def onboard_prospect(
                     conn.commit()
             except Exception as exc:
                 logger.warning("Could not update notes for existing business: %s", exc)
+
+            # Add any new competitors that aren't already tracked
+            _upsert_new_competitors(business_id, competitors_in)
         else:
             intake = BusinessIntakeIn(
                 business_name=business_name,
