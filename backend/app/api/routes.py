@@ -442,6 +442,7 @@ def subscribe(payload: SubscribeIn):
         city=payload.city,
         state=payload.state,
         competitor_names=payload.competitor_names,
+        skip_report=True,  # Webhook generates full report after payment confirms
     )
 
     if not result.ok or not result.business_id:

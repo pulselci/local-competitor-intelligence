@@ -50,9 +50,12 @@ def onboard_prospect(
     city: str,
     state: str,
     competitor_names: list[str],
+    skip_report: bool = False,
 ) -> OnboardingResult:
     """
-    Full onboarding pipeline for a new free-report prospect.
+    Full onboarding pipeline for a new prospect.
+    Set skip_report=True for paid subscribers — the webhook handles report generation
+    after payment confirms so we don't send a blurred free-preview report by mistake.
     Safe to call in a background thread — all exceptions are caught and logged.
     """
     try:
@@ -162,69 +165,66 @@ def onboard_prospect(
             logger.warning("Schedule upsert failed for %s: %s", business_id, exc)
 
         # ------------------------------------------------------------------
-        # 6. Generate first report
+        # 6–8. Generate, mark, and email report (skipped for paid subscribers —
+        #       the Stripe webhook handles this after payment confirms)
         # ------------------------------------------------------------------
         report_id: Optional[str] = None
-        try:
-            from app.api.routes import generate_business_report
-            report = generate_business_report(business_id)
-            if hasattr(report, "model_dump"):
-                report = report.model_dump()
-            elif hasattr(report, "dict"):
-                report = report.dict()
-            report_id = str(report.get("id")) if isinstance(report, dict) else None
-            logger.info("Report generated: %s for business %s", report_id, business_id)
-        except Exception as exc:
-            logger.error("Report generation failed for %s: %s", business_id, exc)
-
-        # ------------------------------------------------------------------
-        # 7. Mark report as free preview (blurs premium sections in PDF)
-        # ------------------------------------------------------------------
-        if report_id:
+        if not skip_report:
             try:
-                from app.core.db import get_conn
-                with get_conn() as conn:
-                    with conn.cursor() as cur:
-                        cur.execute(
-                            """
-                            UPDATE generated_reports
-                            SET sections = sections || '{"is_free_preview": true}'::jsonb
-                            WHERE id = %s
-                            """,
-                            (report_id,),
-                        )
-                    conn.commit()
-                logger.info("Marked report %s as free preview", report_id)
+                from app.api.routes import generate_business_report
+                report = generate_business_report(business_id)
+                if hasattr(report, "model_dump"):
+                    report = report.model_dump()
+                elif hasattr(report, "dict"):
+                    report = report.dict()
+                report_id = str(report.get("id")) if isinstance(report, dict) else None
+                logger.info("Report generated: %s for business %s", report_id, business_id)
             except Exception as exc:
-                logger.warning("Could not mark report as free preview: %s", exc)
+                logger.error("Report generation failed for %s: %s", business_id, exc)
 
-        # ------------------------------------------------------------------
-        # 8. Email the report
-        # ------------------------------------------------------------------
-        if report_id and contact_email:
-            try:
-                from app.api.generated_reports import send_generated_report_email, SendReportRequest
+            if report_id:
+                try:
+                    from app.core.db import get_conn
+                    with get_conn() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                """
+                                UPDATE generated_reports
+                                SET sections = sections || '{"is_free_preview": true}'::jsonb
+                                WHERE id = %s
+                                """,
+                                (report_id,),
+                            )
+                        conn.commit()
+                    logger.info("Marked report %s as free preview", report_id)
+                except Exception as exc:
+                    logger.warning("Could not mark report as free preview: %s", exc)
 
-                send_generated_report_email(
-                    UUID(report_id),
-                    SendReportRequest(
-                        to_email=contact_email,
-                        subject=f"Your Free Competitive Intelligence Report — {business_name}",
-                        body_text=(
-                            f"Hi {contact_name},\n\n"
-                            "Attached is your free local competitor intelligence report. "
-                            "It covers your current competitive position, review standings, "
-                            "and the key opportunities we spotted in your market.\n\n"
-                            "This is your baseline report. Each month you'll receive an updated "
-                            "report showing exactly how your market is shifting.\n\n"
-                            "Reply to this email if you have any questions.\n\n"
-                            "— Pulse LCI"
+            if report_id and contact_email:
+                try:
+                    from app.api.generated_reports import send_generated_report_email, SendReportRequest
+                    send_generated_report_email(
+                        UUID(report_id),
+                        SendReportRequest(
+                            to_email=contact_email,
+                            subject=f"Your Free Competitive Intelligence Report — {business_name}",
+                            body_text=(
+                                f"Hi {contact_name},\n\n"
+                                "Attached is your free local competitor intelligence report. "
+                                "It covers your current competitive position, review standings, "
+                                "and the key opportunities we spotted in your market.\n\n"
+                                "This is your baseline report. Each month you'll receive an updated "
+                                "report showing exactly how your market is shifting.\n\n"
+                                "Reply to this email if you have any questions.\n\n"
+                                "— Pulse LCI"
+                            ),
                         ),
-                    ),
-                )
-                logger.info("Report emailed to %s for business %s", contact_email, business_id)
-            except Exception as exc:
-                logger.error("Email send failed for %s: %s", business_id, exc)
+                    )
+                    logger.info("Report emailed to %s for business %s", contact_email, business_id)
+                except Exception as exc:
+                    logger.error("Email send failed for %s: %s", business_id, exc)
+        else:
+            logger.info("Skipping report generation for subscriber %s — webhook will handle it after payment", business_id)
 
         return OnboardingResult(
             ok=True,
