@@ -1060,18 +1060,23 @@
 
       const formData = new FormData(reportForm);
 
-      // Post directly to backend — Netlify form handler doesn't forward to our API
+      // Post directly to backend
       fetch("https://pulse-lci-api.onrender.com/intake/prospect", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: encodeFormData(formData)
       })
       .then((response) => {
-        if (!response.ok) {
-          throw new Error("Form submission failed");
+        if (!response.ok) throw new Error("Submission failed");
+        return response.json();
+      })
+      .then((data) => {
+        if (data.ok) {
+          reportForm.reset();
+          successMessage.style.display = "block";
+        } else {
+          throw new Error("Unexpected response");
         }
-        reportForm.reset();
-        successMessage.style.display = "block";
       })
       .catch(() => {
         errorMessage.style.display = "block";

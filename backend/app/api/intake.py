@@ -91,4 +91,6 @@ def intake_prospect(
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
 
-    return RedirectResponse(url=THANK_YOU_URL, status_code=303)
+    # Return JSON so the website JS can handle success display
+    # (redirect would fail cross-origin in fetch)
+    return {"ok": True}
