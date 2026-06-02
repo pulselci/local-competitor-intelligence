@@ -890,7 +890,7 @@ def admin_send_full_report(business_id: str, x_admin_key: str = Header(None)):
     Regenerate a full (unblurred) report for a subscriber and email it.
     Use when a subscriber received a blurred free-preview report by mistake.
     """
-    if x_admin_key != settings.admin_api_key:
+    if x_admin_key != settings.ADMIN_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     import re as _re
@@ -982,7 +982,7 @@ def admin_clients_dashboard(key: str = ""):
     """
     import re as _re
 
-    if key != settings.admin_api_key:
+    if key != settings.ADMIN_API_KEY:
         return HTMLResponse("<h2>Unauthorized</h2>", status_code=401)
 
     # Fetch all businesses with their schedule state
@@ -2303,7 +2303,7 @@ def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTas
     from app.services.report_schedule_service import find_due_schedules, update_schedule_run_times
 
     admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
-    if admin_key != settings.admin_api_key:
+    if admin_key != settings.ADMIN_API_KEY:
         raise HTTPException(status_code=403, detail="Forbidden")
 
     now = datetime.now(timezone.utc)

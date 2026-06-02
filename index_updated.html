@@ -959,50 +959,56 @@
             <label>Do not fill this out: <input name="bot-field" /></label>
           </p>
 
-          <label for="name">Your name</label>
+          <label for="name">Your name <span style="color:#e53e3e;">*</span></label>
           <input id="name" name="name" type="text" placeholder="Your name" required />
 
-          <label for="email">Work email</label>
+          <label for="email">Work email <span style="color:#e53e3e;">*</span></label>
           <input id="email" name="email" type="email" placeholder="you@business.com" required />
 
-          <label for="phone">Phone number</label>
-          <input id="phone" name="phone" type="tel" placeholder="(555) 555-5555" />
+          <label for="phone">Phone number <span style="color:#e53e3e;">*</span></label>
+          <input id="phone" name="phone" type="tel" placeholder="(555) 555-5555" required />
 
-          <label for="business">Business name</label>
+          <label for="business">Business name <span style="color:#e53e3e;">*</span></label>
           <input id="business" name="business" type="text" placeholder="Example Dental" required />
 
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
             <div>
-              <label for="city">City</label>
+              <label for="city">City <span style="color:#e53e3e;">*</span></label>
               <input id="city" name="city" type="text" placeholder="Cincinnati" required />
             </div>
             <div>
-              <label for="state">State</label>
+              <label for="state">State <span style="color:#e53e3e;">*</span></label>
               <input id="state" name="state" type="text" placeholder="OH" maxlength="2" style="text-transform:uppercase;" required />
             </div>
           </div>
 
-          <label for="competitor1">Competitor 1</label>
+          <label for="competitor1">Competitor 1 <span style="color:#e53e3e;">*</span></label>
           <input id="competitor1" name="competitor1" type="text" placeholder="Competitor business name" required />
 
           <label for="competitor2">Competitor 2</label>
-          <input id="competitor2" name="competitor2" type="text" placeholder="Competitor business name" required />
+          <input id="competitor2" name="competitor2" type="text" placeholder="Competitor business name (optional)" />
 
           <label for="competitor3">Competitor 3</label>
-          <input id="competitor3" name="competitor3" type="text" placeholder="Competitor business name" required />
+          <input id="competitor3" name="competitor3" type="text" placeholder="Competitor business name (optional)" />
 
           <button class="button" type="submit" style="width:100%;" id="submitBtn">Request my free report</button>
-
-          <div id="successMessage" class="form-success" role="status" aria-live="polite">
-            ✅ Request received. We’ll review your market and follow up with your sample report.
-          </div>
 
           <div id="errorMessage" class="form-error" role="alert">
             Something went wrong. Please try again or email reports@pulselci.com.
           </div>
 
-          <div class="form-note">Submit your business and 3 local competitors. We’ll review the market and follow up with a sample report.</div>
+          <div class="form-note">Submit your business and up to 3 local competitors. We’ll follow up with your sample report.</div>
         </form>
+
+        <div id="successCard" style="display:none; text-align:center; padding:40px 32px; background:white; border-radius:20px; box-shadow:0 8px 32px rgba(0,0,0,0.10);">
+          <div style="font-size:56px; margin-bottom:18px;">📬</div>
+          <h2 style="font-size:26px; font-weight:900; color:#10233f; margin:0 0 12px;">Check your inbox.</h2>
+          <p style="font-size:16px; color:#475569; line-height:1.7; margin:0 0 8px;">Your free competitive intelligence report is being built right now.</p>
+          <p style="font-size:15px; color:#64748b; line-height:1.7; margin:0;">It covers your market position, how you compare to your competitors, and the top opportunities we found. Expect it within a few minutes.</p>
+          <div style="margin-top:28px; padding-top:20px; border-top:1px solid #e5e7eb; font-size:13px; color:#94a3b8;">
+            Didn’t get it? Check your spam folder or email <a href="mailto:reports@pulselci.com" style="color:#2563eb;">reports@pulselci.com</a>
+          </div>
+        </div>
       </div>
     </section>
   </main>
@@ -1043,7 +1049,6 @@
 
     const reportForm = document.getElementById("reportForm");
     const submitBtn = document.getElementById("submitBtn");
-    const successMessage = document.getElementById("successMessage");
     const errorMessage = document.getElementById("errorMessage");
 
     function encodeFormData(formData) {
@@ -1053,7 +1058,6 @@
     reportForm.addEventListener("submit", function(event) {
       event.preventDefault();
 
-      successMessage.style.display = "none";
       errorMessage.style.display = "none";
       submitBtn.disabled = true;
       submitBtn.textContent = "Submitting...";
@@ -1072,8 +1076,8 @@
       })
       .then((data) => {
         if (data.ok) {
-          reportForm.reset();
-          successMessage.style.display = "block";
+          reportForm.style.display = "none";
+          document.getElementById("successCard").style.display = "block";
         } else {
           throw new Error("Unexpected response");
         }
