@@ -839,7 +839,7 @@
             {% if item.get("priority") != "Immediate" %}{% set ns.items = ns.items + [item] %}{% endif %}
           {% endfor %}
 
-          {% if sections.get("is_free_preview") and loop_idx > 0 %}
+          {% if sections.get("is_free_preview") == true and loop_idx > 0 %}
             {# Blur groups after the first #}
             <div class="premium-section-wrapper" style="margin-bottom:14px;">
               <div class="premium-blur-content">
@@ -982,7 +982,7 @@
               </div>
             {% else %}
               {# Remaining cards — blurred #}
-              {% if sections.get("is_free_preview") %}
+              {% if sections.get("is_free_preview") == true %}
               <div class="premium-section-wrapper" style="margin-bottom:12px;">
                 <div class="premium-blur-content">
                   <div class="insight-card">
@@ -1075,7 +1075,7 @@
 
       {% set friction = sections.get("customer_friction_signals") or {} %}
       {% if friction %}
-        {% if sections.get("is_free_preview") %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
+        {% if sections.get("is_free_preview") == true %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
         <div class="summary-card">
           <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid #dce6f5;">{{ friction.get("title") or "Customer Friction Signals" }}</div>
 
@@ -1133,7 +1133,7 @@
             <div style="margin-top: 8px; font-size: 11px; color: #98a2b3;">Based on negative-review phrase matching across {{ friction_themes | length }} complaint themes.</div>
           {% endif %}
         </div>
-        {% if sections.get("is_free_preview") %}
+        {% if sections.get("is_free_preview") == true %}
           </div>{# end premium-blur-content #}
           <div class="premium-overlay">
             <div class="premium-lock-icon">🔒</div>
@@ -1223,7 +1223,7 @@
       {% endif %}
 
       {% if review_pulse %}
-        {% if sections.get("is_free_preview") %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
+        {% if sections.get("is_free_preview") == true %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
         <div class="summary-card">
           <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid #dce6f5;">Review Pulse</div>
           <div class="detail-text" style="margin-bottom: 10px;">
@@ -1231,7 +1231,7 @@
           </div>
           <img src="data:image/png;base64,{{ review_pulse.chart_base64 }}" alt="Review pulse chart" style="width: 100%; max-width: 620px; display: block; margin: 6px auto 4px auto;" />
         </div>
-        {% if sections.get("is_free_preview") %}
+        {% if sections.get("is_free_preview") == true %}
           </div>
           <div class="premium-overlay">
             <div class="premium-lock-icon">🔒</div>
@@ -1244,7 +1244,7 @@
       {% endif %}
 
     {% if experience.get("this_month_focus") %}
-    {% if sections.get("is_free_preview") %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
+    {% if sections.get("is_free_preview") == true %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
       <div class="section-title">Execution Plan</div>
     <div class="summary-card next-moves-card">
 
@@ -1329,7 +1329,7 @@
     </div>
     {% endif %}
 
-    {% if sections.get("is_free_preview") %}
+    {% if sections.get("is_free_preview") == true %}
       </div>{# end premium-blur-content #}
       <div class="premium-overlay">
         <div class="premium-lock-icon">🔒</div>
@@ -1340,7 +1340,7 @@
     </div>{# end premium-section-wrapper #}
     {% endif %}
 
-    {% if sections.get("is_free_preview") %}
+    {% if sections.get("is_free_preview") == true %}
     <div style="margin: 24px 0; padding: 18px 20px; background: #f0f6ff; border: 1.5px solid #bcd2f0; border-radius: 8px; text-align: center;">
       <div style="font-size: 13px; font-weight: 700; color: #1a3a5c; margin-bottom: 6px;">Want the full picture every month?</div>
       <div style="font-size: 12px; color: #4a5568; margin-bottom: 12px;">Subscribe to Pulse LCI and get complete strategic recommendations, market intelligence, and execution plans delivered monthly — automatically.</div>
