@@ -2285,7 +2285,7 @@ def cron_collect_snapshots(request: Request, background_tasks: BackgroundTasks):
                 logger.warning("cron snapshot failed for business_id=%s: %s", biz_id, exc)
 
     background_tasks.add_task(_run)
-    return {“status”: “started”, “businesses”: len(biz_ids)}
+    return {"status": "started", "businesses": len(biz_ids)}
 
 
 # ---------------------------------------------------------------------------
@@ -2293,73 +2293,73 @@ def cron_collect_snapshots(request: Request, background_tasks: BackgroundTasks):
 # POST /cron/run-scheduled-reports
 # Header: x-admin-key: <ADMIN_API_KEY>
 # ---------------------------------------------------------------------------
-@router.post(“/cron/run-scheduled-reports”)
+@router.post("/cron/run-scheduled-reports")
 def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTasks):
-    “””
+    """
     Finds all enabled schedules whose next_run_at is due, generates and
     emails each report, then advances next_run_at to the 1st of the next month.
     Safe to run via Render cron on the 1st of each month at 8am ET.
-    “””
+    """
     from app.services.report_schedule_service import find_due_schedules, update_schedule_run_times
 
-    admin_key = request.headers.get(“x-admin-key”) or request.headers.get(“X-Admin-Key”)
+    admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
     if admin_key != settings.admin_api_key:
-        raise HTTPException(status_code=403, detail=”Forbidden”)
+        raise HTTPException(status_code=403, detail="Forbidden")
 
     now = datetime.now(timezone.utc)
     due = find_due_schedules(now)
 
     if not due:
-        logger.info(“cron/run-scheduled-reports: no schedules due at %s”, now)
-        return {“status”: “ok”, “due”: 0, “queued”: 0}
+        logger.info("cron/run-scheduled-reports: no schedules due at %s", now)
+        return {"status": "ok", "due": 0, "queued": 0}
 
-    logger.info(“cron/run-scheduled-reports: %d schedule(s) due”, len(due))
+    logger.info("cron/run-scheduled-reports: %d schedule(s) due", len(due))
 
     def _run_one(schedule: dict):
         import re as _re
-        business_id = str(schedule.get(“business_id”) or “”)
-        schedule_id = str(schedule.get(“id”) or “”)
+        business_id = str(schedule.get("business_id") or "")
+        schedule_id = str(schedule.get("id") or "")
 
         if not business_id:
             return
 
         try:
-            print(f”[CRON-REPORTS] generating report for business {business_id}”, flush=True)
+            print(f"[CRON-REPORTS] generating report for business {business_id}", flush=True)
 
             # Generate full report
             report = generate_business_report(UUID(business_id))
-            if hasattr(report, “model_dump”):
+            if hasattr(report, "model_dump"):
                 report_dict = report.model_dump()
-            elif hasattr(report, “dict”):
+            elif hasattr(report, "dict"):
                 report_dict = report.dict()
             else:
                 report_dict = report if isinstance(report, dict) else {}
 
-            report_id = str(report_dict.get(“id”) or “”)
+            report_id = str(report_dict.get("id") or "")
             if not report_id:
-                logger.error(“cron-reports: report generation failed for %s”, business_id)
+                logger.error("cron-reports: report generation failed for %s", business_id)
                 return
 
             # Ensure not marked as free preview
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        “UPDATE generated_reports SET sections = sections || '{\”is_free_preview\”: false}'::jsonb WHERE id = %s”,
+                        "UPDATE generated_reports SET sections = sections || '{\"is_free_preview\": false}'::jsonb WHERE id = %s",
                         (report_id,),
                     )
                 conn.commit()
 
             # Look up contact email from business notes
             contact_email = None
-            contact_name = “there”
-            business_name_val = “”
+            contact_name = "there"
+            business_name_val = ""
             with get_conn() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(“SELECT name, notes FROM businesses WHERE id = %s”, (business_id,))
+                    cur.execute("SELECT name, notes FROM businesses WHERE id = %s", (business_id,))
                     biz = cur.fetchone()
                     if biz:
-                        business_name_val = biz.get(“name”) or “”
-                        notes = biz.get(“notes”) or “”
+                        business_name_val = biz.get("name") or ""
+                        notes = biz.get("notes") or ""
                         m = _re.search(r'<([^>]+@[^>]+)>', notes)
                         if m:
                             contact_email = m.group(1)
@@ -2374,19 +2374,19 @@ def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTas
                     UUID(report_id),
                     SendReportRequest(
                         to_email=contact_email,
-                        subject=f”Your Monthly Pulse LCI Report — {business_name_val}”,
+                        subject=f"Your Monthly Pulse LCI Report — {business_name_val}",
                         body_text=(
-                            f”Hi {contact_name},\n\n”
-                            “Your updated monthly competitive intelligence report is attached. “
-                            “It shows how your market has shifted over the past 30 days, “
-                            “where competitors are gaining ground, and your top priorities for this month.\n\n”
-                            “— Pulse LCI”
+                            f"Hi {contact_name},\n\n"
+                            "Your updated monthly competitive intelligence report is attached. "
+                            "It shows how your market has shifted over the past 30 days, "
+                            "where competitors are gaining ground, and your top priorities for this month.\n\n"
+                            "— Pulse LCI"
                         ),
                     ),
                 )
-                print(f”[CRON-REPORTS] report emailed to {contact_email} for {business_id}”, flush=True)
+                print(f"[CRON-REPORTS] report emailed to {contact_email} for {business_id}", flush=True)
             else:
-                logger.warning(“cron-reports: no email found for business %s”, business_id)
+                logger.warning("cron-reports: no email found for business %s", business_id)
 
             # Advance next_run_at to 1st of next month
             _now = datetime.now(timezone.utc)
@@ -2400,20 +2400,20 @@ def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTas
                 last_run_at=_now,
                 next_run_at=next_run,
             )
-            print(f”[CRON-REPORTS] schedule advanced to {next_run} for {business_id}”, flush=True)
+            print(f"[CRON-REPORTS] schedule advanced to {next_run} for {business_id}", flush=True)
 
         except Exception as exc:
             import traceback
-            print(f”[CRON-REPORTS] ERROR for business {business_id}: {exc}\n{traceback.format_exc()}”, flush=True)
+            print(f"[CRON-REPORTS] ERROR for business {business_id}: {exc}\n{traceback.format_exc()}", flush=True)
 
     for schedule in due:
         background_tasks.add_task(_run_one, dict(schedule))
 
-    return {“status”: “started”, “due”: len(due), “queued”: len(due)}
+    return {"status": "started", "due": len(due), "queued": len(due)}
 
 
 # --------------------
-# Reports (legacy “reports” table)
+# Reports (legacy "reports" table)
 # --------------------
 
 
@@ -3674,7 +3674,7 @@ def generate_business_report(
         if not customer_perception_text:
             customer_perception_text = (
                 "Recent customer review signals show where competitors are gaining trust, "
-                "where friction is appearing, and which themes should shape this month’s positioning. "
+                "where friction is appearing, and which themes should shape this month's positioning. "
                 "Use these signals to tighten messaging, improve weak spots, and reinforce the strongest reasons customers choose you."
             )
 
