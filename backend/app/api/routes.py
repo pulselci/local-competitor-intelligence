@@ -3497,7 +3497,14 @@ def generate_business_report(
 
             b = (business_obj or {}).get("business") or {}
             business_name = b.get("name")
-            customer_label = b.get("customer_label") or _detect_customer_label(business_name or "")
+            # Always auto-detect from business name — the schema default of "customers"
+            # on BusinessOut would otherwise mask the detection.
+            _stored_label = b.get("customer_label") or ""
+            customer_label = (
+                _stored_label
+                if _stored_label and _stored_label != "customers"
+                else _detect_customer_label(business_name or "")
+            )
 
             competitors_meta = (business_obj or {}).get("competitors") or []
             for comp in competitors_meta:
