@@ -703,6 +703,8 @@
     <input name="name" />
     <input name="email" />
     <input name="business" />
+    <input name="city" />
+    <input name="state" />
     <input name="location" />
     <input name="competitor1" />
     <input name="competitor2" />
@@ -885,11 +887,13 @@
           <p>No complicated contracts. No bloated software. Just a useful report every month.</p>
         </div>
         <div class="pricing-grid">
-          <div class="price-card" style="cursor:pointer;" onclick="openSubscribeModal('starter')">
-            <div class="price-tag">Starter</div>
+          <div class="price-card" style="cursor:pointer;display:flex;flex-direction:column;" onclick="openSubscribeModal('starter')">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;min-height:28px;">
+              <div class="price-tag" style="margin-bottom:0;">Starter</div>
+            </div>
             <h3>For focused local tracking</h3>
             <div class="price">$99<span>/month</span></div>
-            <ul>
+            <ul style="flex:1;">
               <li>Track up to 3 competitors</li>
               <li>Monthly competitor report</li>
               <li>Review and visibility insights</li>
@@ -899,14 +903,14 @@
               <button class="btn-subscribe" onclick="event.stopPropagation();openSubscribeModal('starter')">Get Started →</button>
             </div>
           </div>
-          <div class="price-card featured" style="cursor:pointer;" onclick="openSubscribeModal('growth')">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+          <div class="price-card featured" style="cursor:pointer;display:flex;flex-direction:column;" onclick="openSubscribeModal('growth')">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;min-height:28px;">
               <div class="price-tag" style="margin-bottom:0;">Growth</div>
               <div style="display:inline-flex;padding:5px 10px;border-radius:999px;background:#2563eb;color:white;font-weight:850;font-size:12px;letter-spacing:0.03em;">Most Popular</div>
             </div>
             <h3>For more competitive markets</h3>
             <div class="price">$179<span>/month</span></div>
-            <ul>
+            <ul style="flex:1;">
               <li>Track up to 10 competitors</li>
               <li>Monthly competitor report</li>
               <li>Expanded market context</li>
@@ -967,8 +971,16 @@
           <label for="business">Business name</label>
           <input id="business" name="business" type="text" placeholder="Example Dental" required />
 
-          <label for="location">City / State</label>
-          <input id="location" name="location" type="text" placeholder="Cincinnati, OH" required />
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;">
+            <div>
+              <label for="city">City</label>
+              <input id="city" name="city" type="text" placeholder="Cincinnati" required />
+            </div>
+            <div>
+              <label for="state">State</label>
+              <input id="state" name="state" type="text" placeholder="OH" maxlength="2" style="text-transform:uppercase;" required />
+            </div>
+          </div>
 
           <label for="competitor1">Competitor 1</label>
           <input id="competitor1" name="competitor1" type="text" placeholder="Competitor business name" required />
@@ -1048,7 +1060,8 @@
 
       const formData = new FormData(reportForm);
 
-      fetch("/", {
+      // Post directly to backend — Netlify form handler doesn't forward to our API
+      fetch("https://pulse-lci-api.onrender.com/intake/prospect", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: encodeFormData(formData)
@@ -1097,40 +1110,48 @@
 
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Your name *</label>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Your name <span style="color:#e53e3e;">*</span></label>
             <input name="contact_name" type="text" required placeholder="Jane Smith" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Phone</label>
-            <input name="contact_phone" type="tel" placeholder="(555) 555-5555" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Phone <span style="color:#e53e3e;">*</span></label>
+            <input name="contact_phone" type="tel" required placeholder="(555) 555-5555" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
           </div>
         </div>
 
         <div style="margin-bottom:12px;">
-          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Email address *</label>
+          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Email address <span style="color:#e53e3e;">*</span></label>
           <input name="contact_email" type="email" required placeholder="you@business.com" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
         </div>
 
         <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px;">
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Business name *</label>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Business name <span style="color:#e53e3e;">*</span></label>
             <input name="business_name" type="text" required placeholder="Acme Dental" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">City *</label>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">City <span style="color:#e53e3e;">*</span></label>
             <input name="city" type="text" required placeholder="Cincinnati" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
           </div>
           <div>
-            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">State *</label>
+            <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">State <span style="color:#e53e3e;">*</span></label>
             <input name="state" type="text" required placeholder="OH" maxlength="2" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;text-transform:uppercase;" />
           </div>
         </div>
 
         <div style="margin-bottom:20px;">
-          <label style="font-size:12px;font-weight:600;color:#374151;display:block;margin-bottom:4px;">Competitors to track <span style="font-weight:400;color:#9ca3af;">(up to 3)</span></label>
-          <input name="competitor_1" type="text" placeholder="Competitor 1" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" />
-          <input name="competitor_2" type="text" placeholder="Competitor 2" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" />
-          <input name="competitor_3" type="text" placeholder="Competitor 3" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;" />
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <label style="font-size:12px;font-weight:600;color:#374151;">Competitor 1 <span style="color:#e53e3e;">*</span></label>
+          </div>
+          <input name="competitor_1" type="text" required placeholder="e.g. Blue Ash Dental" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" />
+
+          <div id="competitorExtraFields"></div>
+
+          <div id="addCompetitorWrap" style="display:none;">
+            <button type="button" id="addCompetitorBtn" onclick="addCompetitorField()" style="background:none;border:1px dashed #d1d5db;border-radius:8px;width:100%;padding:9px;font-size:13px;color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+              <span style="font-size:16px;line-height:1;">+</span> Add another competitor
+            </button>
+          </div>
         </div>
 
         <div id="subscribeError" style="display:none;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px;font-size:13px;color:#b91c1c;margin-bottom:14px;"></div>
@@ -1146,19 +1167,42 @@
   <script>
     const PULSE_API = 'https://pulse-lci-api.onrender.com';
 
+    var _maxCompetitors = 3;
+    var _competitorCount = 1;
+
+    function addCompetitorField() {
+      _competitorCount++;
+      const wrap = document.getElementById('competitorExtraFields');
+      const div = document.createElement('div');
+      div.innerHTML = `<input name="competitor_${_competitorCount}" type="text" placeholder="Competitor ${_competitorCount}" style="width:100%;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:8px;" />`;
+      wrap.appendChild(div);
+      if (_competitorCount >= _maxCompetitors) {
+        document.getElementById('addCompetitorWrap').style.display = 'none';
+      }
+    }
+
+    function resetCompetitorFields() {
+      _competitorCount = 1;
+      document.getElementById('competitorExtraFields').innerHTML = '';
+    }
+
     function openSubscribeModal(plan) {
       document.getElementById('selectedPlan').value = plan;
       const badge = document.getElementById('modalPlanBadge');
       if (plan === 'growth') {
         badge.textContent = 'Growth — $179/month';
         badge.style.cssText += ';background:#dbeafe;color:#1d4ed8;';
+        _maxCompetitors = 10;
       } else {
         badge.textContent = 'Starter — $99/month';
         badge.style.cssText += ';background:#f1f5f9;color:#334155;';
+        _maxCompetitors = 3;
       }
       document.getElementById('subscribeError').style.display = 'none';
       document.getElementById('subscribeForm').reset();
       document.getElementById('selectedPlan').value = plan;
+      resetCompetitorFields();
+      document.getElementById('addCompetitorWrap').style.display = 'block';
       document.getElementById('subscribeModal').classList.add('open');
       document.body.style.overflow = 'hidden';
     }
@@ -1185,11 +1229,11 @@
       btn.disabled = true;
       btn.textContent = 'Setting up your account…';
 
-      const competitors = [
-        form.competitor_1.value.trim(),
-        form.competitor_2.value.trim(),
-        form.competitor_3.value.trim(),
-      ].filter(Boolean);
+      const competitors = [];
+      for (let i = 1; i <= _competitorCount; i++) {
+        const el = form['competitor_' + i];
+        if (el && el.value.trim()) competitors.push(el.value.trim());
+      }
 
       const payload = {
         plan: document.getElementById('selectedPlan').value,
