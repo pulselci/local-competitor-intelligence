@@ -261,6 +261,25 @@ def _upsert_business_billing_state(
         conn.commit()
 
 
+def _disable_report_schedule(business_id: str) -> None:
+    """Disable the report schedule for a business when their subscription ends or payment fails."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE report_schedules
+                    SET is_enabled = false, next_run_at = NULL
+                    WHERE business_id = %s
+                    """,
+                    (str(business_id),),
+                )
+            conn.commit()
+        logger.info("Report schedule disabled for business %s", business_id)
+    except Exception as exc:
+        logger.warning("Could not disable report schedule for %s: %s", business_id, exc)
+
+
 def _get_business_id_from_subscription_obj(subscription: Any) -> str | None:
     subscription = _stripe_obj_to_dict(subscription)
     metadata = subscription.get("metadata") or {}
@@ -767,6 +786,10 @@ async def stripe_webhook(request: Request):
                     is_active=_is_billing_active(status),
                 )
 
+                # Disable report schedule when subscription is cancelled or lapses
+                if event_type == "customer.subscription.deleted" or not _is_billing_active(status):
+                    _disable_report_schedule(str(business_id))
+
         elif event_type == "invoice.payment_failed":
             subscription_id = obj.get("subscription")
             customer_id = obj.get("customer")
@@ -811,6 +834,10 @@ async def stripe_webhook(request: Request):
                     billing_current_period_end=current_period_end_dt,
                     is_active=_is_billing_active(status),
                 )
+
+                # Disable schedule so failed-payment businesses stop receiving reports
+                if business_id:
+                    _disable_report_schedule(str(business_id))
 
 
     except Exception as e:
