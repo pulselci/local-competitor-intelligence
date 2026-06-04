@@ -261,6 +261,19 @@ def _upsert_business_billing_state(
         conn.commit()
 
 
+def _send_admin_alert(subject: str, body: str) -> None:
+    """Send a plain-text alert email to the admin address. Never raises."""
+    try:
+        from app.services.email_service import send_plain_email
+        send_plain_email(
+            to_email="craigw0503@gmail.com",
+            subject=subject,
+            body=body,
+        )
+    except Exception as exc:
+        logger.warning("Admin alert email failed: %s", exc)
+
+
 def _disable_report_schedule(business_id: str) -> None:
     """Disable the report schedule for a business when their subscription ends or payment fails."""
     try:
@@ -2422,6 +2435,10 @@ def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTas
             report_id = str(report_dict.get("id") or "")
             if not report_id:
                 logger.error("cron-reports: report generation failed for %s", business_id)
+                _send_admin_alert(
+                    subject=f"⚠️ Report generation failed — {business_id}",
+                    body=f"Report generation returned no ID for business {business_id}.\nSchedule: {schedule_id}",
+                )
                 return
 
             # Ensure not marked as free preview
@@ -2488,7 +2505,12 @@ def cron_run_scheduled_reports(request: Request, background_tasks: BackgroundTas
 
         except Exception as exc:
             import traceback
-            print(f"[CRON-REPORTS] ERROR for business {business_id}: {exc}\n{traceback.format_exc()}", flush=True)
+            tb = traceback.format_exc()
+            print(f"[CRON-REPORTS] ERROR for business {business_id}: {exc}\n{tb}", flush=True)
+            _send_admin_alert(
+                subject=f"⚠️ Cron report crashed — {business_name_val or business_id}",
+                body=f"Business: {business_name_val or business_id}\nError: {exc}\n\n{tb}",
+            )
 
     for schedule in due:
         background_tasks.add_task(_run_one, dict(schedule))

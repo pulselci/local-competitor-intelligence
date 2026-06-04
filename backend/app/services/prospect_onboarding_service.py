@@ -301,6 +301,15 @@ def onboard_prospect(
                 logger.info("Report generated: %s for business %s", report_id, business_id)
             except Exception as exc:
                 logger.error("Report generation failed for %s: %s", business_id, exc)
+                try:
+                    from app.services.email_service import send_plain_email
+                    send_plain_email(
+                        to_email="craigw0503@gmail.com",
+                        subject=f"⚠️ Report generation failed — {business_name}",
+                        body=f"Business: {business_name}\nID: {business_id}\nContact: {contact_email}\nError: {exc}",
+                    )
+                except Exception:
+                    pass
 
             if report_id:
                 try:
