@@ -258,10 +258,13 @@ def send_plain_email(
     to_email: str,
     subject: str,
     body: str,
+    from_name: str = "Craig",
+    from_address: str = "craig@pulselci.com",
 ) -> "EmailSendResult":
     """
     Send a plain-text email with no PDF attachment.
-    Uses the same SMTP credentials as send_report_email.
+    Outreach emails come from Craig personally (craig@pulselci.com).
+    SMTP credentials still authenticate via SMTP_USER/SMTP_PASS.
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -271,12 +274,13 @@ def send_plain_email(
     password = settings.SMTP_PASS
     host = os.getenv("SMTP_HOST", "smtp.gmail.com")
     port = int(os.getenv("SMTP_PORT", "587"))
-    from_email = os.getenv("SMTP_FROM") or user
     use_tls = os.getenv("SMTP_TLS", "true").strip().lower() in ("1", "true", "yes")
     dry_run = os.getenv("EMAIL_DRY_RUN", "false").strip().lower() in ("1", "true", "yes")
 
+    display_from = f"{from_name} <{from_address}>"
+
     if dry_run:
-        logger.info(f"[EMAIL DRY RUN] plain email to={to_email} subject={subject}")
+        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject}")
         return EmailSendResult(ok=True, error=None)
 
     if not user or not password:
@@ -285,7 +289,8 @@ def send_plain_email(
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
-        msg["From"] = from_email
+        msg["From"] = display_from
+        msg["Reply-To"] = display_from
         msg["To"] = to_email
         msg.attach(MIMEText(body, "plain"))
 

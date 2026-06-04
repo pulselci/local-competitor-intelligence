@@ -55,9 +55,9 @@ def generate_draft(
         gap = reviews - top_competitor_reviews
         if gap > 0:
             comp_line = (
-                f"You're {gap} reviews ahead of {top_competitor_name} — "
-                f"the risk for leaders is a challenger quietly accelerating. "
-                f"It's worth knowing how fast they're moving."
+                f"You're {gap} reviews ahead of {top_competitor_name}. "
+                f"The risk for leaders is a challenger quietly accelerating, "
+                f"and it's worth knowing how fast they're moving."
             )
         elif gap < 0:
             comp_line = (
@@ -74,7 +74,7 @@ def generate_draft(
     else:
         comp_line = (
             f"Most {cat}s in competitive markets don't realize how much review velocity "
-            f"affects which business shows up first — and gets called first."
+            f"affects which business shows up first and gets called first."
         )
         competitor_mention = ""
 
@@ -90,20 +90,20 @@ def generate_draft(
 
     body = f"""Hi,
 
-I ran a quick competitive snapshot for {business_name} — {review_line}.
+I ran a quick competitive snapshot for {business_name} - {review_line}.
 
 {comp_line}
 
-I built Pulse LCI to track this automatically. You get a monthly report showing exactly where you stand vs. your local competitors and the clearest actions to take — no manual searching.
+I built Pulse LCI to track this automatically. You get a monthly report showing exactly where you stand vs. your local competitors and the clearest actions to take.
 
-Here's a free competitive report for {city} {cat}s: https://pulselci.com
+Here's a free report for {city} {cat}s: https://pulselci.com
 
-Takes about 30 seconds to see your full picture.
+Takes about 30 seconds.
 
-— Craig
-Pulse LCI | pulselci.com
+Craig
+Founder/CEO, Pulse LCI
+craig@pulselci.com
 
----
 To stop receiving these emails, reply with "unsubscribe" in the subject line.
 """
 

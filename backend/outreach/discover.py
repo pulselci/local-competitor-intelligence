@@ -166,10 +166,37 @@ EMAIL_PATTERN = re.compile(
 SKIP_EMAIL_DOMAINS = {
     "sentry.io", "example.com", "wixpress.com", "squarespace.com",
     "wordpress.com", "shopify.com", "adobe.com", "google.com",
-    "schema.org", "w3.org", "gravatar.com",
+    "schema.org", "w3.org", "gravatar.com", "jsdelivr.net",
+    "cloudflare.com", "amazonaws.com", "fontawesome.com",
 }
 
-PREFERRED_PREFIXES = {"contact", "info", "hello", "office", "admin", "appointments", "booking"}
+# File extensions that appear in image/asset filenames scraped as fake emails
+SKIP_LOCAL_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".ico", ".pdf", ".js", ".css"}
+
+SKIP_LOCAL_PREFIXES = {"noreply", "no-reply", "donotreply", "bounce", "mailer-daemon", "postmaster"}
+
+PREFERRED_PREFIXES = {"contact", "info", "hello", "office", "admin", "appointments", "booking", "front", "reception"}
+
+
+def _is_junk_email(email: str) -> bool:
+    """Return True if this looks like a scraped image filename or other junk."""
+    local, _, domain = email.partition("@")
+    local_lower = local.lower()
+    domain_lower = domain.lower()
+
+    # Reject if local part ends with an image/file extension (e.g. phone@2x.png)
+    if any(local_lower.endswith(ext) for ext in SKIP_LOCAL_EXTENSIONS):
+        return True
+    # Reject known junk prefixes
+    if any(local_lower.startswith(p) for p in SKIP_LOCAL_PREFIXES):
+        return True
+    # Reject known junk domains
+    if any(skip in domain_lower for skip in SKIP_EMAIL_DOMAINS):
+        return True
+    # Reject obviously invalid: no dot in domain
+    if "." not in domain_lower:
+        return True
+    return False
 
 
 def scrape_email_from_website(url: str) -> str | None:
@@ -186,8 +213,7 @@ def scrape_email_from_website(url: str) -> str | None:
     emails = EMAIL_PATTERN.findall(text)
     candidates = [
         e for e in emails
-        if not any(skip in e.lower() for skip in SKIP_EMAIL_DOMAINS)
-        and len(e) < 80
+        if not _is_junk_email(e) and len(e) < 80
     ]
 
     if not candidates:
