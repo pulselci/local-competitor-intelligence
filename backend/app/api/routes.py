@@ -4163,12 +4163,35 @@ def generate_business_report(
             if isinstance(prev_sections, dict):
                 previous_insights = prev_sections.get("insights") or []
 
+            def _apply_label_to_experience(exp: dict) -> dict:
+                """Apply customer label replacement to a report_experience dict."""
+                if not customer_label or not isinstance(exp, dict):
+                    return exp
+                _lpl = customer_label
+                _lsg = customer_label.rstrip("s") if customer_label.endswith("s") else customer_label
+                def _rt(text):
+                    if not isinstance(text, str):
+                        return text
+                    text = text.replace("patients", _lpl).replace("Patients", _lpl.capitalize())
+                    text = text.replace("patient", _lsg).replace("Patient", _lsg.capitalize())
+                    text = text.replace("customers", _lpl).replace("Customers", _lpl.capitalize())
+                    text = text.replace("customer", _lsg).replace("Customer", _lsg.capitalize())
+                    return text
+                def _walk(obj):
+                    if isinstance(obj, str): return _rt(obj)
+                    if isinstance(obj, dict): return {k: _walk(v) for k, v in obj.items()}
+                    if isinstance(obj, list): return [_walk(i) for i in obj]
+                    return obj
+                return _walk(exp)
+
             if pc:
                 created.setdefault("sections", {}).setdefault("insights", []).append(pc)
-                created["sections"]["report_experience"] = _build_report_experience_payload(
-                    created["sections"].get("insights"),
-                    previous_insights=previous_insights,
-                    sections=created.get("sections") or {},
+                created["sections"]["report_experience"] = _apply_label_to_experience(
+                    _build_report_experience_payload(
+                        created["sections"].get("insights"),
+                        previous_insights=previous_insights,
+                        sections=created.get("sections") or {},
+                    )
                 )
                 _append_insight_to_report_in_db(
                     created_id,
@@ -4178,10 +4201,12 @@ def generate_business_report(
 
             if mm:
                 created.setdefault("sections", {}).setdefault("insights", []).append(mm)
-                created["sections"]["report_experience"] = _build_report_experience_payload(
-                    created["sections"].get("insights"),
-                    previous_insights=previous_insights,
-                    sections=created.get("sections") or {},
+                created["sections"]["report_experience"] = _apply_label_to_experience(
+                    _build_report_experience_payload(
+                        created["sections"].get("insights"),
+                        previous_insights=previous_insights,
+                        sections=created.get("sections") or {},
+                    )
                 )
                 _append_insight_to_report_in_db(
                     created_id,
