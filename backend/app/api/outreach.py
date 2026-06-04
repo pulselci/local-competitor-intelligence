@@ -136,21 +136,41 @@ def discovery_status() -> dict:
     }
 
 
+@router.post("/clear")
+def clear_queue() -> dict:
+    """Delete all prospects except sent/converted records."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM outreach_prospects WHERE status NOT IN ('sent', 'converted')"
+            )
+            deleted = cur.rowcount
+        conn.commit()
+    return {"ok": True, "deleted": deleted}
+
+
 @router.get("/queue")
 def list_queue(status: str = "draft_ready", limit: int = 50) -> list[dict]:
-    """List prospects in the approval queue."""
+    """List prospects in the approval queue, flagging any previously contacted."""
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, business_name, category, address, city, state,
-                       website, phone, contact_email, reviews_count, rating,
-                       top_competitor_name, top_competitor_reviews,
-                       draft_subject, draft_body, status,
-                       created_at::text
-                FROM outreach_prospects
-                WHERE status = %s
-                ORDER BY reviews_count DESC NULLS LAST
+                SELECT
+                    p.id, p.business_name, p.category, p.address, p.city, p.state,
+                    p.website, p.phone, p.contact_email, p.reviews_count, p.rating,
+                    p.top_competitor_name, p.top_competitor_reviews,
+                    p.draft_subject, p.draft_body, p.status,
+                    p.created_at::text,
+                    EXISTS (
+                        SELECT 1 FROM outreach_prospects prev
+                        WHERE prev.place_id = p.place_id
+                          AND prev.status IN ('sent', 'converted')
+                          AND prev.id != p.id
+                    ) AS previously_contacted
+                FROM outreach_prospects p
+                WHERE p.status = %s
+                ORDER BY p.reviews_count DESC NULLS LAST
                 LIMIT %s
                 """,
                 (status, limit),

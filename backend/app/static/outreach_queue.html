@@ -70,7 +70,10 @@
     <div class="topbar-title">Pulse LCI — Outreach Queue</div>
     <div class="topbar-sub">Review and approve cold email drafts before they send</div>
   </div>
-  <button class="btn-save" onclick="loadQueue()" style="font-size:12px;padding:6px 14px;">↻ Refresh</button>
+  <div style="display:flex;gap:8px;">
+    <button class="btn-skip" onclick="clearQueue()" style="font-size:12px;padding:6px 14px;color:#c62828;">🗑 Clear Queue</button>
+    <button class="btn-save" onclick="loadQueue()" style="font-size:12px;padding:6px 14px;">↻ Refresh</button>
+  </div>
 </div>
 
 <div class="stats-bar" id="stats-bar">
@@ -188,7 +191,10 @@ function renderCard(p) {
         <div class="card-title">${escHtml(p.business_name)}</div>
         <div class="card-meta">${escHtml(p.address || '')} &nbsp;${reviewPill}</div>
       </div>
-      <span class="badge ${badgeClass}">${badgeLabel}</span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${p.previously_contacted ? '<span style="font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;background:#fff3e0;color:#e65100;">✉ Previously contacted</span>' : ''}
+        <span class="badge ${badgeClass}">${badgeLabel}</span>
+      </div>
     </div>
     <div class="card-body">
       <div class="info-block">
@@ -296,6 +302,19 @@ async function approve(id) {
 
 function escHtml(str) {
   return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function clearQueue() {
+  if (!confirm('Clear all queued prospects? Sent records will be kept.')) return;
+  try {
+    const r = await fetch(`${API}/outreach/clear`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    loadQueue();
+    loadStats();
+  } catch(e) {
+    alert(`Clear failed: ${e.message}`);
+  }
 }
 
 async function startDiscovery() {
