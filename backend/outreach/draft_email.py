@@ -98,7 +98,7 @@ Quick question: is staying on top of your local review position something you're
 
 I ask because I built a tool called Pulse LCI that tracks this monthly and sends a report showing exactly where you stand vs. your local competitors and the clearest move to make.
 
-If it sounds useful, you can either reply to this email and I'll pull a free report for you personally, or request one yourself at pulselci.com/#free-report.
+If it sounds useful, just reply with the names of up to 3 of your closest local competitors and I'll pull a free report for you. Or you can request one yourself at pulselci.com/#free-report.
 
 Craig White
 Founder/CEO, Pulse LCI
