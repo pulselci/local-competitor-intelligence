@@ -11,11 +11,25 @@ import logging
 from dataclasses import dataclass
 from typing import Optional
 
+import re
+
 import requests
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_place_name(name: str) -> str:
+    """Strip Google Maps UI artifacts from place names.
+    e.g. '🔲 See photos Broadway Dental Co.' → 'Broadway Dental Co.'
+    """
+    if not name:
+        return name
+    # Remove leading emoji/symbols + 'See photos' prefix Google sometimes includes
+    name = re.sub(r'^[\U00010000-\U0010ffff -⿿　-〿\s]*', '', name)
+    name = re.sub(r'^See photos\s*', '', name, flags=re.IGNORECASE)
+    return name.strip()
 
 
 @dataclass
@@ -77,7 +91,7 @@ def resolve_place_id(
 
     return PlaceResult(
         place_id=place_id,
-        name=top.get("name") or name,
+        name=_clean_place_name(top.get("name") or name),
         formatted_address=top.get("formatted_address") or f"{city}, {state}",
         google_maps_url=f"https://www.google.com/maps/place/?q=place_id:{place_id}",
         rating=float(rating_raw) if rating_raw is not None else None,

@@ -1296,14 +1296,31 @@
 
         {% if you and leader and not leader.get("is_business") %}
           {% set you_reviews = you.get("reviews_total") or you.get("review_count") or 0 %}
-          {% set leader_reviews = leader.get("reviews_total") or leader.get("review_count") or 0 %}
-          {% set leader_name = leader.get("competitor_name") or leader.get("name") or "the market leader" %}
-          {% set gap = leader_reviews - you_reviews %}
-          {% set moderate_target = ((gap / 12)|round(0, "ceil"))|int %}
-          {% set aggressive_target = ((gap / 6)|round(0, "ceil"))|int %}
 
-          How to execute on each priority — with specific targets and steps.
-          To gain ground on {{ leader_name }}, you need to outpace them by roughly <strong>{{ moderate_target }}-{{ aggressive_target }} reviews per month</strong>.
+          {# Find the nearest competitor with more reviews than you (most achievable target) #}
+          {% set nearest_ahead = none %}
+          {% for row in sorted_rows %}
+            {% set row_reviews = row.get("reviews_total") or row.get("review_count") or 0 %}
+            {% if not row.get("is_business") and row_reviews > you_reviews and row_reviews > 0 %}
+              {% if nearest_ahead is none %}
+                {% set nearest_ahead = row %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+
+          {% if nearest_ahead %}
+            {% set target_reviews = nearest_ahead.get("reviews_total") or nearest_ahead.get("review_count") or 0 %}
+            {% set target_name = nearest_ahead.get("competitor_name") or nearest_ahead.get("name") or "the next competitor" %}
+            {% set gap = target_reviews - you_reviews %}
+            {# Cap monthly target at 30 reviews — anything higher is unrealistic for most small businesses #}
+            {% set monthly_low = [((gap / 12)|round(0, "ceil"))|int, 5]|max %}
+            {% set monthly_high = [((gap / 6)|round(0, "ceil"))|int, 30]|min %}
+            How to execute on each priority — with specific targets and steps.
+            Your nearest milestone: overtake <strong>{{ target_name }}</strong> ({{ target_reviews }} reviews).
+            Aim for <strong>{{ monthly_low }}–{{ monthly_high }} new reviews per month</strong> to reach that within 6–12 months.
+          {% else %}
+            How to execute on each priority — with specific targets and steps.
+          {% endif %}
         {% else %}
           How to execute on each priority — with specific targets and steps.
         {% endif %}
