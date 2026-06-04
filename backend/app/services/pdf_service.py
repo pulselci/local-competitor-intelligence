@@ -16,6 +16,26 @@ from playwright.sync_api import sync_playwright
 TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "templates"
 
 
+def _get_next_report_date(schedule_id: Any) -> str:
+    """Look up next_run_at for the schedule and return a formatted date string."""
+    if not schedule_id:
+        return "~30 days"
+    try:
+        from app.core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT next_run_at FROM report_schedules WHERE id = %s LIMIT 1",
+                    (str(schedule_id),),
+                )
+                row = cur.fetchone()
+                if row and row["next_run_at"]:
+                    return row["next_run_at"].strftime("%B %-d, %Y")
+    except Exception:
+        pass
+    return "~30 days"
+
+
 def _to_template_dict(report: Any) -> Dict[str, Any]:
     if isinstance(report, dict):
         return report
@@ -69,7 +89,8 @@ def render_report_pdf(report: Any) -> bytes:
 
     try:
         template = env.get_template("generated_report.html")
-        html = template.render(report=report_dict)
+        next_report_date = _get_next_report_date(report_dict.get("schedule_id"))
+        html = template.render(report=report_dict, next_report_date=next_report_date)
 
         html_debug_path = debug_dir / "last_rendered_report.html"
         html_debug_path.write_text(html, encoding="utf-8")
