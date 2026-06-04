@@ -2066,6 +2066,7 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
 
     color_index = 0
     plotted_any = False
+    any_nonzero_delta = False
 
     for comp_id, payload in sorted(
         series_by_competitor.items(),
@@ -2119,6 +2120,9 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
 
         if not x_values or not y_values:
             continue
+
+        if any(v != 0 for v in y_values):
+            any_nonzero_delta = True
 
         ax.plot(
             x_values,
@@ -2174,6 +2178,7 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
 
     return {
         "chart_base64": chart_base64,
+        "is_baseline": not any_nonzero_delta,
     }
 
 
@@ -4199,6 +4204,23 @@ def generate_business_report(
                 "summary": "Set a clear monthly review-growth target, improve your positioning against top competitors, and track whether you are closing the gap.",
                 "priority": "Immediate"
             }]
+
+        # Apply customer label normalization to the execution plan before saving to DB
+        _cl = sections.get("customer_label") or "customers"
+        _cl_sg = _cl.rstrip("s") if _cl.endswith("s") else _cl
+        def _fix_term(text: str) -> str:
+            if not text:
+                return text
+            text = text.replace("patients", _cl).replace("Patients", _cl.capitalize())
+            text = text.replace("patient", _cl_sg).replace("Patient", _cl_sg.capitalize())
+            text = text.replace("customers", _cl).replace("Customers", _cl.capitalize())
+            text = text.replace("customer", _cl_sg).replace("Customer", _cl_sg.capitalize())
+            return text
+        def _fix_item(item):
+            if not isinstance(item, dict):
+                return item
+            return {k: _fix_term(v) if isinstance(v, str) else v for k, v in item.items()}
+        final_focus = [_fix_item(f) for f in final_focus]
 
         # Patch just this_month_focus in the DB — read current saved sections,
         # update only the execution plan, write back. Avoids overwriting the
