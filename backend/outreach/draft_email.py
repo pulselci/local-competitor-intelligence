@@ -87,6 +87,8 @@ def generate_draft(
 
     body = f"""Hi,
 
+When someone searches for a {cat} in {city}, they're comparing options side by side. Research consistently shows they're more likely to call the business with more reviews, not necessarily the best one.
+
 {opening}
 
 {gap_line + chr(10) + chr(10) if gap_line else ""}{comp_context}
@@ -97,7 +99,7 @@ Is improving your local review position something you're actively tracking, or m
 
 I built a tool called Pulse LCI that tracks this automatically and shows exactly where competitors are gaining ground.
 
-If you'd like, reply with the names of your top 3 competitors and I'll send a free report. Or request one at pulselci.com/#free-report.
+If you'd like, reply with the names of up to 3 of your closest competitors and I'll pull a free report for you. Or request one at pulselci.com/#free-report.
 
 Craig White
 Pulse LCI
