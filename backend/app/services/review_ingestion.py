@@ -365,7 +365,9 @@ def upsert_google_reviews(records: List[GoogleReviewRecord]) -> int:
     with get_conn() as conn:
         with conn.cursor() as cur:
             for row in rows:
-                cur.execute(sql, row)
+                # prepare=False prevents psycopg3 DuplicatePreparedStatement
+                # errors when the same SQL runs many times across connection pool workers
+                cur.execute(sql, row, prepare=False)
         conn.commit()
 
     return len(rows)
