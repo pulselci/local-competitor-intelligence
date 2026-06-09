@@ -80,7 +80,7 @@ def run_cold_email_followups() -> dict:
                     f"Just making sure this didn't get buried — happy to run the free "
                     f"competitive snapshot for {p['business_name']} whenever it works for you.\n\n"
                     f"It shows exactly where you stand against local competitors in {market} "
-                    f"and what to focus on this month. Takes us about 20 minutes to pull together.\n\n"
+                    f"and what to focus on this month. Free report lands in your inbox in less than 5 minutes.\n\n"
                     f"{FREE_REPORT_URL}\n\n"
                     f"Craig\n"
                     f"Pulse LCI"

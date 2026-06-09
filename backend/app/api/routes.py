@@ -2620,6 +2620,99 @@ def cron_send_followups(request: Request, background_tasks: BackgroundTasks):
     return {"status": "started"}
 
 
+@router.get("/followups/report-prospects")
+def followup_report_prospects():
+    """
+    Returns all businesses that received a free report, with follow-up
+    status for Day 5, 12, and 21, and whether they've since subscribed.
+    Powers the follow-up dashboard.
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    b.id::text            AS business_id,
+                    b.name                AS business_name,
+                    b.notes,
+                    rdl.recipient_email   AS contact_email,
+                    MIN(rdl.sent_at)      AS report_sent_at,
+                    MAX(CASE WHEN pfl.day = 5  THEN pfl.sent_at END) AS fu5_sent,
+                    MAX(CASE WHEN pfl.day = 12 THEN pfl.sent_at END) AS fu12_sent,
+                    MAX(CASE WHEN pfl.day = 21 THEN pfl.sent_at END) AS fu21_sent,
+                    EXISTS (
+                        SELECT 1 FROM report_schedules rs
+                        WHERE rs.business_id = b.id AND rs.is_enabled = true
+                    ) AS subscribed
+                FROM report_delivery_logs rdl
+                JOIN generated_reports gr ON gr.id = rdl.report_id
+                JOIN businesses b ON b.id = gr.business_id
+                LEFT JOIN prospect_followup_log pfl ON pfl.business_id = b.id
+                WHERE rdl.status = 'sent'
+                GROUP BY b.id, b.name, b.notes, rdl.recipient_email
+                ORDER BY MIN(rdl.sent_at) DESC
+                LIMIT 200
+            """)
+            rows = cur.fetchall()
+            return [
+                {
+                    "business_id":    r["business_id"],
+                    "business_name":  r["business_name"],
+                    "contact_email":  r["contact_email"],
+                    "report_sent_at": r["report_sent_at"].isoformat() if r["report_sent_at"] else None,
+                    "fu5_sent":       r["fu5_sent"].isoformat() if r["fu5_sent"] else None,
+                    "fu12_sent":      r["fu12_sent"].isoformat() if r["fu12_sent"] else None,
+                    "fu21_sent":      r["fu21_sent"].isoformat() if r["fu21_sent"] else None,
+                    "subscribed":     bool(r["subscribed"]),
+                }
+                for r in rows
+            ]
+
+
+@router.get("/followups/cold-prospects")
+def followup_cold_prospects():
+    """
+    Returns outreach prospects with status='sent', including follow-up
+    timestamps. Powers the follow-up dashboard.
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    id::text, business_name, contact_email,
+                    city, state, sent_at,
+                    followup1_sent_at, followup2_sent_at, status
+                FROM outreach_prospects
+                WHERE status IN ('sent', 'converted')
+                  AND sent_at IS NOT NULL
+                ORDER BY sent_at DESC
+                LIMIT 200
+            """)
+            rows = cur.fetchall()
+            return [
+                {
+                    "id":                 r["id"],
+                    "business_name":      r["business_name"],
+                    "contact_email":      r["contact_email"],
+                    "city":               r["city"],
+                    "state":              r["state"],
+                    "sent_at":            r["sent_at"].isoformat() if r["sent_at"] else None,
+                    "followup1_sent_at":  r["followup1_sent_at"].isoformat() if r["followup1_sent_at"] else None,
+                    "followup2_sent_at":  r["followup2_sent_at"].isoformat() if r["followup2_sent_at"] else None,
+                    "status":             r["status"],
+                }
+                for r in rows
+            ]
+
+
+@router.get("/followups/ui", response_class=HTMLResponse, include_in_schema=False)
+def followup_ui():
+    """Serve the follow-up tracking dashboard."""
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "../static/followup_dashboard.html")
+    with open(html_path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 # --------------------
 # Reports (legacy "reports" table)
 # --------------------
