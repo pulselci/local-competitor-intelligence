@@ -139,19 +139,23 @@ def _build_alert_lines(deltas: list[dict], new_competitors: list[str]) -> list[d
     return alerts
 
 
-def _build_email(name: str, business: str, alert_lines: list[dict]) -> tuple[str, str]:
+def _build_email(name: str, business: str, alert_lines: list[dict], business_id: str = "") -> tuple[str, str]:
     subject = f"Market update for {business} this week"
 
     intro = f"Hi {name},\n\nA few things moved in your market this week worth knowing about.\n\n"
 
     body_lines = "\n".join(f"- {a['detail']}" for a in alert_lines)
 
+    unsub_url = f"{BACKEND_URL}/unsubscribe?id={business_id}&type=business"
     outro = (
         "\n\nThese signals can shift quickly. Your next monthly report will include "
         "the full picture, but wanted to flag these now.\n\n"
         "Reply to this email if you have questions.\n\n"
         "Craig\n"
         "Pulse LCI"
+        "\n\n---\n"
+        f"To stop receiving emails from Pulse LCI: {unsub_url}\n"
+        "Pulse LCI · United States"
     )
 
     return subject, intro + body_lines + outro
@@ -181,6 +185,7 @@ def run_growth_alerts() -> dict:
                 WHERE b.is_active = true
                   AND b.stripe_price_id = %s
                   AND rs.is_enabled = true
+                  AND COALESCE(b.email_unsubscribed, FALSE) = FALSE
                 """,
                 (settings.stripe_price_growth or "__none__",),
             )
@@ -229,7 +234,7 @@ def run_growth_alerts() -> dict:
                 continue
 
             # Send email
-            subject, body = _build_email(contact_name, business_name, alert_lines)
+            subject, body = _build_email(contact_name, business_name, alert_lines, business_id)
             result = send_plain_email(
                 to_email=contact_email,
                 subject=subject,

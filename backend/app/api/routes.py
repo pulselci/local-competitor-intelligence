@@ -2969,6 +2969,62 @@ def followups_growth_alerts():
         for r in rows
     ]
 
+
+
+@router.get("/unsubscribe", response_class=HTMLResponse, include_in_schema=False)
+def unsubscribe_email(id: str, type: str = "prospect"):
+    """
+    CAN-SPAM one-click unsubscribe. Marks the prospect or business as
+    email_unsubscribed=true and returns a plain confirmation page.
+    """
+    label = "unknown"
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                if type == "prospect":
+                    cur.execute(
+                        "UPDATE outreach_prospects SET email_unsubscribed = TRUE WHERE id = %s RETURNING business_name",
+                        (id,),
+                    )
+                    row = cur.fetchone()
+                    label = row["business_name"] if row else id
+                elif type == "business":
+                    cur.execute(
+                        "UPDATE businesses SET email_unsubscribed = TRUE WHERE id = %s RETURNING name",
+                        (id,),
+                    )
+                    row = cur.fetchone()
+                    label = row["name"] if row else id
+            conn.commit()
+        logger.info("Unsubscribed %s id=%s", type, id)
+    except Exception as exc:
+        logger.warning("Unsubscribe failed for %s id=%s: %s", type, id, exc)
+
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Unsubscribed — Pulse LCI</title>
+<style>
+  body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;
+       background:#f0f4f9;display:flex;align-items:center;justify-content:center;
+       min-height:100vh;margin:0;color:#172033;}}
+  .card{{background:#fff;border:1px solid #dce6f5;border-radius:14px;
+         padding:40px 48px;max-width:460px;text-align:center;}}
+  h2{{margin:0 0 12px;font-size:22px;color:#122033;}}
+  p{{margin:0;font-size:14px;line-height:1.6;color:#475569;}}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>You've been unsubscribed</h2>
+  <p>We've removed <strong>{label}</strong> from Pulse LCI email communications.<br><br>
+  You won't receive any further emails from us.</p>
+</div>
+</body>
+</html>""")
+
 @router.get("/followups/ui", response_class=HTMLResponse, include_in_schema=False)
 def followup_ui():
     """Serve the follow-up tracking dashboard."""

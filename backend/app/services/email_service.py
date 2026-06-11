@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import smtplib
@@ -202,7 +202,7 @@ def send_report_email(
                style="color: #8a9ab5; text-decoration: underline;">
                 Manage or cancel your subscription
             </a> &nbsp;·&nbsp; ''' if business_id and _has_stripe_customer(business_id) else ''}
-            <span>To unsubscribe from these reports, reply to this email with "unsubscribe" in the subject line.</span>
+            {f'<a href="https://pulse-lci-api.onrender.com/unsubscribe?id={business_id}&type=business" style="color:#8a9ab5;text-decoration:underline;">Unsubscribe from all Pulse LCI emails</a>' if business_id else '<span>To unsubscribe, reply with &quot;unsubscribe&quot; in the subject.</span>'}
             <br>
             <span>Pulse LCI &nbsp;·&nbsp; United States</span>
         </div>

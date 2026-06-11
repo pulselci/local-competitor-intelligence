@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 PRICING_URL = "https://pulselci.com/#pricing"
 FREE_REPORT_URL = "https://pulselci.com/#free-report"
+BACKEND_URL = "https://pulse-lci-api.onrender.com"
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -38,6 +39,16 @@ def _parse_contact_name(notes: str) -> str:
     """Extract contact name from business notes field."""
     m = re.search(r"Contact:\s*([^<\n]+?)(?:\s*<|$)", notes or "")
     return m.group(1).strip().split()[0] if m else "there"
+
+
+def _unsub_footer(record_id: str, record_type: str) -> str:
+    """CAN-SPAM required unsubscribe footer."""
+    url = f"{BACKEND_URL}/unsubscribe?id={record_id}&type={record_type}"
+    return (
+        "\n\n---\n"
+        f"To stop receiving emails from Pulse LCI: {url}\n"
+        "Pulse LCI · United States"
+    )
 
 
 def _send(to_email: str, subject: str, body: str) -> bool:
@@ -52,7 +63,8 @@ def _send(to_email: str, subject: str, body: str) -> bool:
 def run_cold_email_followups() -> dict:
     """
     Day-5 and Day-12 follow-ups for outreach_prospects with status='sent'.
-    Uses a ±1 day window to avoid missing sends due to cron timing.
+    Skips prospects who have unsubscribed.
+    Uses a +-1 day window to avoid missing sends due to cron timing.
     """
     sent1 = sent2 = 0
 
@@ -65,6 +77,7 @@ def run_cold_email_followups() -> dict:
                        draft_subject, top_competitor_name
                 FROM outreach_prospects
                 WHERE status = 'sent'
+                  AND email_unsubscribed = FALSE
                   AND followup1_sent_at IS NULL
                   AND sent_at IS NOT NULL
                   AND sent_at >= NOW() - INTERVAL '7 days'
@@ -84,6 +97,7 @@ def run_cold_email_followups() -> dict:
                     f"{FREE_REPORT_URL}\n\n"
                     f"Craig\n"
                     f"Pulse LCI"
+                    + _unsub_footer(str(p['id']), "prospect")
                 )
                 subject = f"Re: {p['draft_subject'] or 'competitive snapshot for ' + p['business_name']}"
                 if _send(p['contact_email'], subject, body):
@@ -99,6 +113,7 @@ def run_cold_email_followups() -> dict:
                        top_competitor_name, reviews_count, rating
                 FROM outreach_prospects
                 WHERE status = 'sent'
+                  AND email_unsubscribed = FALSE
                   AND followup2_sent_at IS NULL
                   AND sent_at IS NOT NULL
                   AND sent_at >= NOW() - INTERVAL '14 days'
@@ -122,6 +137,7 @@ def run_cold_email_followups() -> dict:
                     f"{FREE_REPORT_URL}\n\n"
                     f"Craig\n"
                     f"Pulse LCI"
+                    + _unsub_footer(str(p['id']), "prospect")
                 )
                 subject = f"One thing I noticed in {market}'s market"
                 if _send(p['contact_email'], subject, body):
@@ -142,8 +158,8 @@ def run_cold_email_followups() -> dict:
 def run_report_followups() -> dict:
     """
     Day-5, Day-12, and Day-21 follow-ups for businesses that received a
-    free report but haven't subscribed yet.
-    Skips any business where report_schedules.is_enabled = true (already subscribed).
+    free report but have not subscribed yet.
+    Skips businesses who have unsubscribed.
     Tracks sends in prospect_followup_log to prevent duplicates.
     """
     counts = {5: 0, 12: 0, 21: 0}
@@ -172,6 +188,7 @@ def run_report_followups() -> dict:
                       AND rdl.sent_at >= NOW() - INTERVAL '{max_age}'
                       AND rdl.sent_at <= NOW() - INTERVAL '{min_age}'
                       AND rdl.recipient_email IS NOT NULL
+                      AND b.email_unsubscribed = FALSE
                       -- not yet a paying subscriber
                       AND NOT EXISTS (
                           SELECT 1 FROM report_schedules rs
@@ -189,14 +206,15 @@ def run_report_followups() -> dict:
                     name = _parse_contact_name(row['notes'] or "")
                     business = row['business_name']
                     email = row['recipient_email']
+                    business_id = str(row['business_id'])
 
                     ok = False
                     if day == 5:
-                        ok = _send(email, *_report_followup_day5(name, business))
+                        ok = _send(email, *_report_followup_day5(name, business, business_id))
                     elif day == 12:
-                        ok = _send(email, *_report_followup_day12(name, business))
+                        ok = _send(email, *_report_followup_day12(name, business, business_id))
                     elif day == 21:
-                        ok = _send(email, *_report_followup_day21(name, business))
+                        ok = _send(email, *_report_followup_day21(name, business, business_id))
 
                     if ok:
                         cur.execute(
@@ -205,7 +223,7 @@ def run_report_followups() -> dict:
                             VALUES (%s, %s, %s)
                             ON CONFLICT (business_id, day) DO NOTHING
                             """,
-                            (str(row['business_id']), day, email),
+                            (business_id, day, email),
                         )
                         counts[day] += 1
 
@@ -220,7 +238,7 @@ def run_report_followups() -> dict:
 
 # ── email templates ───────────────────────────────────────────────────────────
 
-def _report_followup_day5(name: str, business: str) -> tuple[str, str]:
+def _report_followup_day5(name: str, business: str, business_id: str) -> tuple[str, str]:
     subject = f"Did you get a chance to review your report, {name}?"
     body = (
         f"Hi {name},\n\n"
@@ -232,11 +250,12 @@ def _report_followup_day5(name: str, business: str) -> tuple[str, str]:
         f"Happy to answer any questions. Just reply to this email.\n\n"
         f"Craig\n"
         f"Pulse LCI"
+        + _unsub_footer(business_id, "business")
     )
     return subject, body
 
 
-def _report_followup_day12(name: str, business: str) -> tuple[str, str]:
+def _report_followup_day12(name: str, business: str, business_id: str) -> tuple[str, str]:
     subject = f"One thing worth knowing about your market, {name}"
     body = (
         f"Hi {name},\n\n"
@@ -244,18 +263,19 @@ def _report_followup_day12(name: str, business: str) -> tuple[str, str]:
         f"Your market moves every month. Review counts shift, complaint patterns change, "
         f"and competitors gain or lose ground. The snapshot you received shows where things "
         f"stood when we ran it, but that picture is already getting older.\n\n"
-        f"For $99/month, you'd get this updated every month — tracking exactly how your "
+        f"For $99/month, you'd get this updated every month -- tracking exactly how your "
         f"competitive position is shifting and what to focus on. Cancel anytime, no contracts.\n\n"
         f"{PRICING_URL}\n\n"
         f"Worth trying for one month?\n\n"
         f"Craig\n"
         f"Pulse LCI"
+        + _unsub_footer(business_id, "business")
     )
     return subject, body
 
 
-def _report_followup_day21(name: str, business: str) -> tuple[str, str]:
-    subject = f"Last check-in — {business}"
+def _report_followup_day21(name: str, business: str, business_id: str) -> tuple[str, str]:
+    subject = f"Last check-in -- {business}"
     body = (
         f"Hi {name},\n\n"
         f"Last follow-up on this.\n\n"
@@ -265,10 +285,11 @@ def _report_followup_day21(name: str, business: str) -> tuple[str, str]:
         f"That's what the monthly subscription does. $99/month. Report delivered to your "
         f"inbox the first of every month. Cancel anytime.\n\n"
         f"{PRICING_URL}\n\n"
-        f"If the timing isn't right, no worries — but if you'd like to keep watching "
+        f"If the timing isn't right, no worries -- but if you'd like to keep watching "
         f"your market, that's the link.\n\n"
         f"Craig\n"
         f"Pulse LCI"
+        + _unsub_footer(business_id, "business")
     )
     return subject, body
 
