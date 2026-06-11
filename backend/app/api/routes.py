@@ -2937,6 +2937,38 @@ def admin_stats(key: str = "", expenses: float = 250.0):
         },
     }
 
+
+@router.get("/followups/growth-alerts")
+def followups_growth_alerts():
+    """Return growth_alert_log rows joined with business names, most recent first."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    gal.id::text        AS id,
+                    gal.sent_at,
+                    gal.to_email,
+                    gal.triggers,
+                    b.name              AS business_name
+                FROM growth_alert_log gal
+                JOIN businesses b ON b.id = gal.business_id
+                ORDER BY gal.sent_at DESC
+                LIMIT 200
+                """
+            )
+            rows = cur.fetchall()
+    return [
+        {
+            "id":            r["id"],
+            "sent_at":       r["sent_at"].isoformat() if r["sent_at"] else None,
+            "to_email":      r["to_email"],
+            "triggers":      r["triggers"] if isinstance(r["triggers"], list) else [],
+            "business_name": r["business_name"],
+        }
+        for r in rows
+    ]
+
 @router.get("/followups/ui", response_class=HTMLResponse, include_in_schema=False)
 def followup_ui():
     """Serve the follow-up tracking dashboard."""

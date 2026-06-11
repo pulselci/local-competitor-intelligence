@@ -56,6 +56,21 @@
   button.refresh:hover { background: #1d4ed8; }
 
   .divider { border: none; border-top: 1px solid #e2e8f0; margin: 0 28px; }
+
+  /* Tabs */
+  .tab-bar { display: flex; gap: 0; padding: 0 28px; background: #fff; border-bottom: 1px solid #dce6f5; }
+  .tab-btn { font-size: 13px; font-weight: 600; padding: 12px 20px; border: none; background: none; cursor: pointer; color: #64748b; border-bottom: 3px solid transparent; margin-bottom: -1px; transition: all .15s; }
+  .tab-btn.active { color: #0f172a; border-bottom-color: #2563eb; }
+  .tab-btn:hover:not(.active) { color: #0f172a; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Trigger badges */
+  .trig { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin: 1px; }
+  .trig-review_spike    { background: #fef3c7; color: #92400e; }
+  .trig-rating_move     { background: #dbeafe; color: #1e40af; }
+  .trig-rating_danger   { background: #fee2e2; color: #991b1b; }
+  .trig-new_competitor  { background: #dcfce7; color: #15803d; }
 </style>
 </head>
 <body>
@@ -70,6 +85,13 @@
     <button class="refresh" onclick="loadAll()">↻ Refresh</button>
   </div>
 </div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('followups',this)">Follow-ups</button>
+  <button class="tab-btn" onclick="switchTab('alerts',this)">Alert History</button>
+</div>
+
+<div id="tab-followups" class="tab-panel active">
 
 <div class="stats-row" id="stats-row">
   <div class="stat-box urgent"><div class="s-label">Overdue follow-ups</div><div class="s-val" id="s-overdue">—</div></div>
@@ -141,9 +163,32 @@
   </table>
 </div>
 
+</div><!-- /tab-followups -->
+
+<!-- ── ALERT HISTORY TAB ── -->
+<div id="tab-alerts" class="tab-panel">
+  <div class="section">
+    <div class="section-title">
+      Growth alert emails sent
+      <span class="count-badge" id="alert-count">0</span>
+    </div>
+    <table id="alert-table">
+      <thead>
+        <tr>
+          <th>Date sent</th>
+          <th>Business</th>
+          <th>Email</th>
+          <th>Triggers</th>
+        </tr>
+      </thead>
+      <tbody id="alert-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
+</div><!-- /tab-alerts -->
+
 <script>
 const API = window.location.origin;
-let reportData = [], coldData = [];
+let reportData = [], coldData = [], alertData = [];
 let reportFilter = 'all', coldFilter = 'all';
 
 function daysBetween(dateStr) {
@@ -267,64 +312,4 @@ function updateStats() {
     const u = rowUrgency(r, 'report');
     if (u === 2) overdue++;
     else if (u === 1) due++;
-    else awaiting++;
-  });
-
-  coldData.forEach(r => {
-    if (r.status === 'converted') return;
-    const u = rowUrgency(r, 'cold');
-    if (u === 2) overdue++;
-    else if (u === 1) due++;
-  });
-
-  document.getElementById('s-overdue').textContent = overdue;
-  document.getElementById('s-due').textContent = due;
-  document.getElementById('s-awaiting').textContent = awaiting;
-  document.getElementById('s-subscribed').textContent = subscribed;
-  document.getElementById('s-reports').textContent = reportData.length;
-}
-
-function setFilter(type, val, btn) {
-  if (type === 'report') {
-    reportFilter = val;
-    document.querySelectorAll('#report-table ~ .filter-row .filter-btn, .section .filter-btn').forEach(b => {
-      b.closest('.section') && b.closest('.section').querySelector('#report-table') && b.classList.remove('active');
-    });
-    btn.classList.add('active');
-    renderReports(reportData);
-  } else {
-    coldFilter = val;
-    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderCold(coldData);
-  }
-}
-
-async function loadAll() {
-  try {
-    const [rRes, cRes] = await Promise.all([
-      fetch(`${API}/followups/report-prospects`),
-      fetch(`${API}/followups/cold-prospects`),
-    ]);
-    reportData = rRes.ok ? await rRes.json() : [];
-    coldData   = cRes.ok ? await cRes.json() : [];
-  } catch(e) {
-    console.warn('Load failed', e);
-    reportData = [];
-    coldData = [];
-  }
-  renderReports(reportData);
-  renderCold(coldData);
-  updateStats();
-  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-}
-
-function esc(s) {
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-loadAll();
-setInterval(loadAll, 60000);
-</script>
-</body>
-</html>
+    
