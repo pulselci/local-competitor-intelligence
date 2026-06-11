@@ -259,8 +259,9 @@
 
       <label for="billing_mode">Billing Mode</label>
       <select id="billing_mode">
-        <option value="free_preview" selected>Free Preview</option>
-        <option value="paid_now">Paid Now</option>
+        <option value="free_blurred" selected>Blurred Free Preview (teaser email)</option>
+        <option value="free_preview">Full One-Off (no subscription)</option>
+        <option value="paid_now">Paid Checkout (Stripe)</option>
       </select>
 
       <label class="inline-check">
@@ -814,11 +815,4 @@
 
     // ── Page init ──────────────────────────────────────────────────────────
     document.addEventListener("DOMContentLoaded", () => {
-      seedDefaults();
-      loadCurrentForm();
-      attachAutosaveListeners();
-    });
-
-  </script>
-</body>
-</html>
+      seed

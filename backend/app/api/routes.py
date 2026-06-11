@@ -1457,10 +1457,30 @@ def onboarding(payload: OnboardingIn):
         checkout = None
         billing_mode = (payload.billing_mode or "").strip().lower()
 
-        if billing_mode not in {"free_preview", "paid_now"}:
+        if billing_mode not in {"free_preview", "free_blurred", "full_oneoff", "paid_now"}:
             raise HTTPException(
                 status_code=400,
-                detail="billing_mode must be 'free_preview' or 'paid_now'",
+                detail="billing_mode must be 'free_preview', 'free_blurred', 'full_oneoff', or 'paid_now'",
+            )
+
+        # free_blurred: re-run the prospect onboarding pipeline (blurred report + free report email)
+        if billing_mode == "free_blurred":
+            from app.services.prospect_onboarding_service import onboard_prospect
+            import re as _re2
+            _notes = created.business.notes or ""
+            _m_name = _re2.search(r"Contact:\s*([^<\n]+?)(?:\s*<|$)", _notes)
+            _contact_name = _m_name.group(1).strip().split()[0] if _m_name else ""
+            _emails = [str(r.email).strip() for r in recipients if str(r.email).strip()]
+            _contact_email = _emails[0] if _emails else ""
+            _competitor_names = [c.name for c in created.competitors if not getattr(c, "is_business", False)]
+            onboard_prospect(
+                contact_name=_contact_name,
+                contact_email=_contact_email,
+                contact_phone="",
+                business_name=created.business.name,
+                city=created.business.city or "",
+                state=created.business.state or "",
+                competitor_names=_competitor_names,
             )
 
         if billing_mode == "paid_now":
@@ -2793,17 +2813,20 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             # cold_total = emails actually sent
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped')")
             cold_total = (cur.fetchone() or {}).get("cnt", 0)
-            # cold_converted = cold prospects whose contact_email also appears in
-            # report_delivery_logs (i.e. they requested and received a free report)
+            # cold_converted = prospects manually marked converted OR whose email
+            # appears in report_delivery_logs (clicked link and got report)
             cur.execute("""
                 SELECT COUNT(DISTINCT op.id) AS cnt
                 FROM outreach_prospects op
                 WHERE op.contact_email IS NOT NULL
                   AND op.status IN ('sent','converted','bounced','skipped')
-                  AND EXISTS (
-                      SELECT 1 FROM report_delivery_logs rdl
-                      WHERE rdl.recipient_email = op.contact_email
-                        AND rdl.status = 'sent'
+                  AND (
+                      op.status = 'converted'
+                      OR EXISTS (
+                          SELECT 1 FROM report_delivery_logs rdl
+                          WHERE rdl.recipient_email = op.contact_email
+                            AND rdl.status = 'sent'
+                      )
                   )
             """)
             cold_converted = (cur.fetchone() or {}).get("cnt", 0)
@@ -2982,6 +3005,27 @@ def followups_growth_alerts():
         for r in rows
     ]
 
+
+
+@router.patch("/outreach/{prospect_id}/convert")
+def mark_prospect_converted(prospect_id: str):
+    """Mark a cold outreach prospect as converted (replied, running manual report)."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE outreach_prospects
+                SET status = 'converted'
+                WHERE id = %s
+                RETURNING id, business_name, contact_email
+                """,
+                (prospect_id,),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    if not row:
+        raise HTTPException(status_code=404, detail="Prospect not found")
+    return {"ok": True, "business_name": row["business_name"], "contact_email": row["contact_email"]}
 
 
 @router.get("/unsubscribe", response_class=HTMLResponse, include_in_schema=False)
