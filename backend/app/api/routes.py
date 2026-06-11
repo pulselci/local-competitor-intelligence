@@ -2790,9 +2790,17 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             churn_rate = round((churned_count / total_ever * 100), 1) if total_ever > 0 else 0.0
 
             # -- Cold outreach conversion
+            # cold_total = emails actually sent (any status except unsent drafts)
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped')")
             cold_total = (cur.fetchone() or {}).get("cnt", 0)
-            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status = 'converted'")
+            # cold_converted = distinct businesses that received a free report
+            # (proxy for "cold email led to free report request")
+            cur.execute("""
+                SELECT COUNT(DISTINCT gr.business_id) AS cnt
+                FROM generated_reports gr
+                JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
+                WHERE rdl.status = 'sent'
+            """)
             cold_converted = (cur.fetchone() or {}).get("cnt", 0)
             cold_to_report_pct = round((cold_converted / cold_total * 100), 1) if cold_total > 0 else 0.0
 
