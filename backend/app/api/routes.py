@@ -1463,25 +1463,15 @@ def onboarding(payload: OnboardingIn):
                 detail="billing_mode must be 'free_preview', 'free_blurred', 'full_oneoff', or 'paid_now'",
             )
 
-        # free_blurred: re-run the prospect onboarding pipeline (blurred report + free report email)
+        # free_blurred: disable the schedule so report is generated as is_free_preview=True (blurred)
         if billing_mode == "free_blurred":
-            from app.services.prospect_onboarding_service import onboard_prospect
-            import re as _re2
-            _notes = created.business.notes or ""
-            _m_name = _re2.search(r"Contact:\s*([^<\n]+?)(?:\s*<|$)", _notes)
-            _contact_name = _m_name.group(1).strip().split()[0] if _m_name else ""
-            _emails = [str(r.email).strip() for r in recipients if str(r.email).strip()]
-            _contact_email = _emails[0] if _emails else ""
-            _competitor_names = [c.name for c in created.competitors if not getattr(c, "is_business", False)]
-            onboard_prospect(
-                contact_name=_contact_name,
-                contact_email=_contact_email,
-                contact_phone="",
-                business_name=created.business.name,
-                city=created.business.city or "",
-                state=created.business.state or "",
-                competitor_names=_competitor_names,
-            )
+            with get_conn() as _conn_b:
+                with _conn_b.cursor() as _cur_b:
+                    _cur_b.execute(
+                        "UPDATE report_schedules SET is_enabled = FALSE WHERE business_id = %s",
+                        (str(business_id),),
+                    )
+                _conn_b.commit()
 
         if billing_mode == "paid_now":
             checkout = create_checkout_session(
