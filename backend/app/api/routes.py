@@ -2620,6 +2620,35 @@ def cron_send_followups(request: Request, background_tasks: BackgroundTasks):
     return {"status": "started"}
 
 
+
+@router.post("/cron/send-growth-alerts")
+def cron_send_growth_alerts(request: Request, background_tasks: BackgroundTasks):
+    """
+    Sends weekly market alert emails to Growth plan subscribers.
+    Fires when snapshot deltas cross defined thresholds (review spike,
+    rating move, competitor drops below 4.0, new competitor).
+
+    Run weekly via Render cron. Safe to call daily — internal guards
+    prevent more than one alert per subscriber per week and suppress
+    alerts within 5 days of the monthly report.
+    """
+    admin_key = request.headers.get("x-admin-key") or request.headers.get("X-Admin-Key")
+    if admin_key != settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    from app.jobs.send_growth_alerts import run_growth_alerts
+
+    def _run():
+        try:
+            result = run_growth_alerts()
+            logger.info("cron/send-growth-alerts complete: %s", result)
+        except Exception as exc:
+            logger.exception("cron/send-growth-alerts failed: %s", exc)
+
+    background_tasks.add_task(_run)
+    return {"status": "started"}
+
+
 @router.get("/followups/report-prospects")
 def followup_report_prospects():
     """
