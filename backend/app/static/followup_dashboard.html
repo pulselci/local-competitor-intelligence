@@ -67,10 +67,10 @@
 
   /* Trigger badges */
   .trig { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin: 1px; }
-  .trig-review_spike    { background: #fef3c7; color: #92400e; }
-  .trig-rating_move     { background: #dbeafe; color: #1e40af; }
-  .trig-rating_danger   { background: #fee2e2; color: #991b1b; }
-  .trig-new_competitor  { background: #dcfce7; color: #15803d; }
+  .trig-review_spike   { background: #fef3c7; color: #92400e; }
+  .trig-rating_move    { background: #dbeafe; color: #1e40af; }
+  .trig-rating_danger  { background: #fee2e2; color: #991b1b; }
+  .trig-new_competitor { background: #dcfce7; color: #15803d; }
 </style>
 </head>
 <body>
@@ -92,7 +92,6 @@
 </div>
 
 <div id="tab-followups" class="tab-panel active">
-
 <div class="stats-row" id="stats-row">
   <div class="stat-box urgent"><div class="s-label">Overdue follow-ups</div><div class="s-val" id="s-overdue">—</div></div>
   <div class="stat-box warn"><div class="s-label">Due today</div><div class="s-val" id="s-due">—</div></div>
@@ -165,7 +164,6 @@
 
 </div><!-- /tab-followups -->
 
-<!-- ── ALERT HISTORY TAB ── -->
 <div id="tab-alerts" class="tab-panel">
   <div class="section">
     <div class="section-title">
@@ -173,15 +171,8 @@
       <span class="count-badge" id="alert-count">0</span>
     </div>
     <table id="alert-table">
-      <thead>
-        <tr>
-          <th>Date sent</th>
-          <th>Business</th>
-          <th>Email</th>
-          <th>Triggers</th>
-        </tr>
-      </thead>
-      <tbody id="alert-body"><tr><td colspan="4" class="loading">Loading…</td></tr></tbody>
+      <thead><tr><th>Date sent</th><th>Business</th><th>Email</th><th>Triggers</th></tr></thead>
+      <tbody id="alert-body"><tr><td colspan="4" class="loading">Loading...</td></tr></tbody>
     </table>
   </div>
 </div><!-- /tab-alerts -->
@@ -312,4 +303,109 @@ function updateStats() {
     const u = rowUrgency(r, 'report');
     if (u === 2) overdue++;
     else if (u === 1) due++;
-    
+    else awaiting++;
+  });
+
+  coldData.forEach(r => {
+    if (r.status === 'converted') return;
+    const u = rowUrgency(r, 'cold');
+    if (u === 2) overdue++;
+    else if (u === 1) due++;
+  });
+
+  document.getElementById('s-overdue').textContent = overdue;
+  document.getElementById('s-due').textContent = due;
+  document.getElementById('s-awaiting').textContent = awaiting;
+  document.getElementById('s-subscribed').textContent = subscribed;
+  document.getElementById('s-reports').textContent = reportData.length;
+}
+
+function setFilter(type, val, btn) {
+  if (type === 'report') {
+    reportFilter = val;
+    document.querySelectorAll('#report-table ~ .filter-row .filter-btn, .section .filter-btn').forEach(b => {
+      b.closest('.section') && b.closest('.section').querySelector('#report-table') && b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    renderReports(reportData);
+  } else {
+    coldFilter = val;
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCold(coldData);
+  }
+}
+
+const TRIGGER_LABELS = {
+  review_spike:   'Review spike',
+  rating_move:    'Rating moved',
+  rating_danger:  'Rating danger',
+  new_competitor: 'New competitor'
+};
+
+function renderAlerts(data) {
+  var tbody = document.getElementById('alert-body');
+  document.getElementById('alert-count').textContent = data.length;
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="empty">No alert emails sent yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(function(r) {
+    var d = r.sent_at ? new Date(r.sent_at) : null;
+    var dateStr = d ? d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '-';
+    var trigs = (r.triggers || []).map(function(t) {
+      return '<span class="trig trig-' + t + '">' + (TRIGGER_LABELS[t] || t) + '</span>';
+    }).join('');
+    return '<tr><td style="white-space:nowrap">' + dateStr + '</td>' +
+      '<td><div class="business-name">' + esc(r.business_name) + '</div></td>' +
+      '<td><div class="email-text">' + esc(r.to_email) + '</div></td>' +
+      '<td>' + trigs + '</td></tr>';
+  }).join('');
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'alerts') loadAlerts();
+}
+
+async function loadAlerts() {
+  try {
+    var res = await fetch(API + '/followups/growth-alerts');
+    alertData = res.ok ? await res.json() : [];
+  } catch(e) {
+    alertData = [];
+  }
+  renderAlerts(alertData);
+}
+
+async function loadAll() {
+  try {
+    const [rRes, cRes] = await Promise.all([
+      fetch(`${API}/followups/report-prospects`),
+      fetch(`${API}/followups/cold-prospects`),
+    ]);
+    reportData = rRes.ok ? await rRes.json() : [];
+    coldData   = cRes.ok ? await cRes.json() : [];
+  } catch(e) {
+    console.warn('Load failed', e);
+    reportData = [];
+    coldData = [];
+  }
+  renderReports(reportData);
+  renderCold(coldData);
+  updateStats();
+  document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadAll();
+setInterval(loadAll, 60000);
+</script>
+</body>
+</html>
