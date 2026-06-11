@@ -2704,6 +2704,187 @@ def followup_cold_prospects():
             ]
 
 
+@router.get("/admin/stats")
+def admin_stats(key: str = "", expenses: float = 250.0):
+    """
+    Returns a comprehensive stats payload for the Pulse LCI dashboard.
+    ?key=ADMIN_KEY  required
+    ?expenses=250   optional monthly expense override (default $250)
+    """
+    if key != settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    PRICE_STARTER = 99.0
+    PRICE_GROWTH  = 179.0
+    TAX_RATE      = 0.30
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+
+            # ── Subscribers ───────────────────────────────────────────────
+            cur.execute("""
+                SELECT
+                    stripe_price_id,
+                    COUNT(*) AS cnt
+                FROM businesses
+                WHERE is_active = true
+                  AND stripe_subscription_id IS NOT NULL
+                GROUP BY stripe_price_id
+            """)
+            plan_rows = cur.fetchall()
+
+            starter_count  = 0
+            growth_count   = 0
+            unknown_count  = 0
+            price_starter  = settings.stripe_price_starter or ""
+            price_growth   = settings.stripe_price_growth  or ""
+
+            for row in plan_rows:
+                pid = row["stripe_price_id"] or ""
+                cnt = row["cnt"]
+                if pid == price_starter:
+                    starter_count += cnt
+                elif pid == price_growth:
+                    growth_count += cnt
+                else:
+                    unknown_count += cnt
+
+            active_subscribers = starter_count + growth_count + unknown_count
+            monthly_revenue    = (starter_count * PRICE_STARTER) + (growth_count * PRICE_GROWTH) + (unknown_count * PRICE_STARTER)
+
+            # ── Churn (businesses that had a sub but are now inactive) ────
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM businesses
+                WHERE is_active = false
+                  AND stripe_subscription_id IS NOT NULL
+            """)
+            churned_count = (cur.fetchone() or {}).get("cnt", 0)
+            total_ever_subscribed = active_subscribers + churned_count
+            churn_rate = round((churned_count / total_ever_subscribed * 100), 1) if total_ever_subscribed > 0 else 0.0
+
+            # ── Cold outreach → free report conversion ────────────────────
+            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped')")
+            cold_total = (cur.fetchone() or {}).get("cnt", 0)
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status = 'converted'")
+            cold_converted = (cur.fetchone() or {}).get("cnt", 0)
+
+            cold_to_report_pct = round((cold_converted / cold_total * 100), 1) if cold_total > 0 else 0.0
+
+            # ── Free report → subscription conversion ─────────────────────
+            cur.execute("""
+                SELECT COUNT(DISTINCT gr.business_id) AS cnt
+                FROM generated_reports gr
+                JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
+                WHERE rdl.status = 'sent'
+            """)
+            reports_sent_to_businesses = (cur.fetchone() or {}).get("cnt", 0)
+
+            cur.execute("""
+                SELECT COUNT(DISTINCT b.id) AS cnt
+                FROM businesses b
+                WHERE b.is_active = true
+                  AND b.stripe_subscription_id IS NOT NULL
+                  AND EXISTS (
+                      SELECT 1 FROM generated_reports gr
+                      JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
+                      WHERE gr.business_id = b.id AND rdl.status = 'sent'
+                  )
+            """)
+            report_to_sub_converted = (cur.fetchone() or {}).get("cnt", 0)
+
+            report_to_sub_pct = round((report_to_sub_converted / reports_sent_to_businesses * 100), 1) if reports_sent_to_businesses > 0 else 0.0
+
+            # ── Total reports delivered ───────────────────────────────────
+            cur.execute("SELECT COUNT(*) AS cnt FROM report_delivery_logs WHERE status = 'sent'")
+            total_reports_delivered = (cur.fetchone() or {}).get("cnt", 0)
+
+            # ── Follow-up stats ───────────────────────────────────────────
+            cur.execute("""
+                SELECT day, COUNT(*) AS cnt
+                FROM prospect_followup_log
+                GROUP BY day ORDER BY day
+            """)
+            followup_rows = cur.fetchall()
+            followup_counts = {str(r["day"]): r["cnt"] for r in followup_rows}
+
+            cur.execute("""
+                SELECT
+                    COUNT(*) FILTER (WHERE followup1_sent_at IS NOT NULL) AS fu1,
+                    COUNT(*) FILTER (WHERE followup2_sent_at IS NOT NULL) AS fu2
+                FROM outreach_prospects
+                WHERE status IN ('sent','converted')
+            """)
+            cold_fu = cur.fetchone() or {}
+
+            # ── Totals for context ────────────────────────────────────────
+            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects")
+            total_prospects_discovered = (cur.fetchone() or {}).get("cnt", 0)
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM businesses")
+            total_businesses = (cur.fetchone() or {}).get("cnt", 0)
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM generated_reports")
+            total_reports_generated = (cur.fetchone() or {}).get("cnt", 0)
+
+            # ── Recent subscriber growth (last 30 days) ───────────────────
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM businesses
+                WHERE is_active = true
+                  AND stripe_subscription_id IS NOT NULL
+                  AND created_at >= NOW() - INTERVAL '30 days'
+            """)
+            new_subs_30d = (cur.fetchone() or {}).get("cnt", 0)
+
+    # ── Financial calculations ────────────────────────────────────────────
+    profit          = monthly_revenue - expenses
+    taxes_due       = max(0.0, profit * TAX_RATE)
+    take_home       = profit - taxes_due
+
+    return {
+        "subscribers": {
+            "active_total":    active_subscribers,
+            "starter":         starter_count,
+            "growth":          growth_count,
+            "new_last_30d":    new_subs_30d,
+            "churned_total":   churned_count,
+        },
+        "financials": {
+            "monthly_revenue":  round(monthly_revenue, 2),
+            "monthly_expenses": round(expenses, 2),
+            "profit":           round(profit, 2),
+            "taxes_due":        round(taxes_due, 2),
+            "take_home":        round(take_home, 2),
+            "tax_rate_pct":     TAX_RATE * 100,
+            "price_starter":    PRICE_STARTER,
+            "price_growth":     PRICE_GROWTH,
+        },
+        "conversions": {
+            "cold_outreach_sent":         cold_total,
+            "cold_to_free_report_pct":    cold_to_report_pct,
+            "free_reports_to_businesses": reports_sent_to_businesses,
+            "report_to_sub_converted":    report_to_sub_converted,
+            "report_to_sub_pct":          report_to_sub_pct,
+            "churn_rate_pct":             churn_rate,
+        },
+        "pipeline": {
+            "total_prospects_discovered": total_prospects_discovered,
+            "total_businesses_in_db":     total_businesses,
+            "total_reports_generated":    total_reports_generated,
+            "total_reports_delivered":    total_reports_delivered,
+        },
+        "followups": {
+            "report_day5":    followup_counts.get("5",  0),
+            "report_day12":   followup_counts.get("12", 0),
+            "report_day21":   followup_counts.get("21", 0),
+            "cold_day5_sent": cold_fu.get("fu1", 0),
+            "cold_day12_sent":cold_fu.get("fu2", 0),
+        },
+    }
+
+
 @router.get("/followups/ui", response_class=HTMLResponse, include_in_schema=False)
 def followup_ui():
     """Serve the follow-up tracking dashboard."""
@@ -4225,184 +4406,4 @@ def generate_business_report(
         )
 
         created = _as_dict(created_any)
-        created_id_val = created.get("id")
-
-        try:
-            created_id = UUID(str(created_id_val)) if created_id_val else None
-        except Exception:
-            created_id = None
-
-        # ✅ Step 5/6: compare PREVIOUS (pre-insert) vs THIS new report
-        if prev_sections and isinstance(prev_sections, dict) and isinstance(sections, dict) and created_id:
-            pc = build_position_change_insight(prev_sections, sections)
-
-            mm = build_market_movers_insight(
-                prev_sections,
-                sections,
-                min_share_delta_pp=0.1,
-                min_review_delta=1,
-            )
-
-            if not pc and not mm:
-                owner_name_for_flat = business_name
-                owner_rank = None
-
-                try:
-                    sov = sections.get("share_of_voice") or {}
-                    rows = sov.get("rows") or []
-
-                    for i, r in enumerate(rows):
-                        name = r.get("name") or r.get("competitor_name")
-                        if (
-                            name
-                            and owner_name_for_flat
-                            and str(name).strip().lower() == str(owner_name_for_flat).strip().lower()
-                        ):
-                            owner_rank = i + 1
-                            break
-                except Exception:
-                    owner_rank = None
-
-                if owner_rank:
-                    summary = f"Market was mostly flat versus the prior report. {owner_name_for_flat} held position #{owner_rank}."
-                else:
-                    summary = "Market was mostly flat versus the prior report."
-
-                mm = {
-                    "type": "market_movers",
-                    "summary": summary,
-                    "details": {
-                        "flat_comparison": True,
-                        "owner_rank": owner_rank,
-                    },
-                    "severity": "info",
-                }
-
-            previous_insights = []
-            if isinstance(prev_sections, dict):
-                previous_insights = prev_sections.get("insights") or []
-
-            def _apply_label_to_experience(exp: dict) -> dict:
-                """Apply customer label replacement to a report_experience dict."""
-                if not customer_label or not isinstance(exp, dict):
-                    return exp
-                _lpl = customer_label
-                _lsg = customer_label.rstrip("s") if customer_label.endswith("s") else customer_label
-                def _rt(text):
-                    if not isinstance(text, str):
-                        return text
-                    text = text.replace("patients", _lpl).replace("Patients", _lpl.capitalize())
-                    text = text.replace("patient", _lsg).replace("Patient", _lsg.capitalize())
-                    text = text.replace("customers", _lpl).replace("Customers", _lpl.capitalize())
-                    text = text.replace("customer", _lsg).replace("Customer", _lsg.capitalize())
-                    return text
-                def _walk(obj):
-                    if isinstance(obj, str): return _rt(obj)
-                    if isinstance(obj, dict): return {k: _walk(v) for k, v in obj.items()}
-                    if isinstance(obj, list): return [_walk(i) for i in obj]
-                    return obj
-                return _walk(exp)
-
-            if pc:
-                created.setdefault("sections", {}).setdefault("insights", []).append(pc)
-                created["sections"]["report_experience"] = _apply_label_to_experience(
-                    _build_report_experience_payload(
-                        created["sections"].get("insights"),
-                        previous_insights=previous_insights,
-                        sections=created.get("sections") or {},
-                    )
-                )
-                _append_insight_to_report_in_db(
-                    created_id,
-                    pc,
-                    previous_insights=previous_insights,
-                )
-
-            if mm:
-                created.setdefault("sections", {}).setdefault("insights", []).append(mm)
-                created["sections"]["report_experience"] = _apply_label_to_experience(
-                    _build_report_experience_payload(
-                        created["sections"].get("insights"),
-                        previous_insights=previous_insights,
-                        sections=created.get("sections") or {},
-                    )
-                )
-                _append_insight_to_report_in_db(
-                    created_id,
-                    mm,
-                    previous_insights=previous_insights,
-                )
-
-        sections = created.get("sections") or {}
-
-        if not sections.get("report_experience"):
-            sections["report_experience"] = {}
-
-        # ── Re-apply data-driven execution plan after Step 5/6 rebuilds report_experience ──
-        final_focus = _build_data_driven_execution_plan(sections)
-        if not final_focus:
-            final_focus = sections["report_experience"].get("this_month_focus") or []
-        if not final_focus:
-            final_focus = [{
-                "type": "fallback_focus",
-                "summary": "Set a clear monthly review-growth target, improve your positioning against top competitors, and track whether you are closing the gap.",
-                "priority": "Immediate"
-            }]
-
-        # Apply customer label normalization to the execution plan before saving to DB
-        _cl = sections.get("customer_label") or "customers"
-        _cl_sg = _cl.rstrip("s") if _cl.endswith("s") else _cl
-        def _fix_term(text: str) -> str:
-            if not text:
-                return text
-            text = text.replace("patients", _cl).replace("Patients", _cl.capitalize())
-            text = text.replace("patient", _cl_sg).replace("Patient", _cl_sg.capitalize())
-            text = text.replace("customers", _cl).replace("Customers", _cl.capitalize())
-            text = text.replace("customer", _cl_sg).replace("Customer", _cl_sg.capitalize())
-            return text
-        def _fix_item(item):
-            if not isinstance(item, dict):
-                return item
-            return {k: _fix_term(v) if isinstance(v, str) else v for k, v in item.items()}
-        final_focus = [_fix_item(f) for f in final_focus]
-
-        # Patch just this_month_focus in the DB — read current saved sections,
-        # update only the execution plan, write back. Avoids overwriting the
-        # good report_experience cards built by _append_insight_to_report_in_db.
-        try:
-            import json as _json
-            with get_conn() as _conn:
-                with _conn.cursor() as _cur:
-                    _cur.execute(
-                        "SELECT sections FROM generated_reports WHERE id = %s",
-                        (str(created_id),),
-                    )
-                    _saved = _cur.fetchone()
-
-                if _saved:
-                    _saved_sections = _saved["sections"]
-                    if isinstance(_saved_sections, str):
-                        _saved_sections = _json.loads(_saved_sections)
-                    if isinstance(_saved_sections, dict):
-                        if "report_experience" not in _saved_sections:
-                            _saved_sections["report_experience"] = {}
-                        _saved_sections["report_experience"]["this_month_focus"] = final_focus[:3]
-                        _saved_sections["report_experience"]["immediate_priorities"] = len(final_focus[:3]) or 1
-                        with get_conn() as _conn2:
-                            with _conn2.cursor() as _cur2:
-                                _cur2.execute(
-                                    "UPDATE generated_reports SET sections = %s WHERE id = %s",
-                                    (_json.dumps(_saved_sections), str(created_id)),
-                                )
-                            _conn2.commit()
-                        created["sections"] = _saved_sections
-                        sections = _saved_sections
-        except Exception as _e:
-            logger.warning("failed to persist final execution plan to DB: %s", _e)
-
-        return created
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
+        created_id_val 

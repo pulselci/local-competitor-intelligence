@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulse LCI — Stats Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e8eaf0;
+    --muted: #8b8fa8;
+    --accent: #5b6af7;
+    --green: #22c55e;
+    --yellow: #f59e0b;
+    --red: #ef4444;
+    --blue: #38bdf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  header .subtitle { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .refresh-btn {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+  .refresh-btn:hover { opacity: 0.85; }
+  .key-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 28px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .key-bar input {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    width: 280px;
+  }
+  .key-bar label { color: var(--muted); font-size: 12px; }
+  .key-bar .exp-input { width: 90px; }
+  main { padding: 24px 28px; max-width: 1200px; }
+  .section-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 28px 0 12px;
+  }
+  .section-title:first-child { margin-top: 0; }
+  .grid { display: grid; gap: 12px; }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-5 { grid-template-columns: repeat(5, 1fr); }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .card .label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+  .card .sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+  .card.green .value { color: var(--green); }
+  .card.yellow .value { color: var(--yellow); }
+  .card.red .value { color: var(--red); }
+  .card.blue .value { color: var(--blue); }
+  .card.accent .value { color: var(--accent); }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-top: 4px;
+  }
+  .pill.green { background: rgba(34,197,94,.15); color: var(--green); }
+  .pill.yellow { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .pill.red { background: rgba(239,68,68,.15); color: var(--red); }
+  .breakdown {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .breakdown .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .breakdown .row:last-child { border-bottom: none; }
+  .breakdown .row .name { color: var(--muted); }
+  .breakdown .row .val { font-weight: 600; }
+  .bar-wrap { margin-top: 10px; }
+  .bar-track {
+    background: var(--border);
+    border-radius: 99px;
+    height: 6px;
+    width: 100%;
+    margin-top: 4px;
+  }
+  .bar-fill {
+    height: 6px;
+    border-radius: 99px;
+    background: var(--accent);
+    transition: width 0.6s ease;
+  }
+  .bar-fill.green { background: var(--green); }
+  .bar-fill.yellow { background: var(--yellow); }
+  .loading {
+    color: var(--muted);
+    font-size: 13px;
+    padding: 40px;
+    text-align: center;
+  }
+  .error-msg {
+    background: rgba(239,68,68,.1);
+    border: 1px solid var(--red);
+    color: var(--red);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin: 20px 0;
+    font-size: 13px;
+  }
+  .updated-at { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  @media (max-width: 900px) {
+    .grid-4 { grid-template-columns: repeat(2, 1fr); }
+    .grid-5 { grid-template-columns: repeat(2, 1fr); }
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .grid-4, .grid-3, .grid-2, .grid-5 { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+    header, .key-bar { padding: 12px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Pulse LCI — Business Stats</h1>
+    <div class="subtitle" id="updated-at">Not loaded yet</div>
+  </div>
+  <button class="refresh-btn" onclick="load()">Refresh</button>
+</header>
+
+<div class="key-bar">
+  <label>Admin key</label>
+  <input type="password" id="api-key" placeholder="Enter admin key..." oninput="saveKey()" />
+  <label style="margin-left:12px;">Monthly expenses $</label>
+  <input type="number" id="expenses" class="exp-input" value="250" min="0" step="10" />
+  <button class="refresh-btn" onclick="load()">Load</button>
+</div>
+
+<main id="content">
+  <div class="loading">Enter your admin key above and click Load.</div>
+</main>
+
+<script>
+  const API_BASE = window.location.origin;
+
+  function saveKey() {
+    const k = document.getElementById('api-key').value;
+    try { sessionStorage.setItem('pulse_admin_key', k); } catch(e) {}
+  }
+
+  function loadKey() {
+    try {
+      const k = sessionStorage.getItem('pulse_admin_key');
+      if (k) document.getElementById('api-key').value = k;
+    } catch(e) {}
+  }
+
+  function fmt$(n) {
+    if (n == null) return '$0';
+    return '$' + Number(n).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
+  }
+  function fmtPct(n) { return (n == null ? '0' : n) + '%'; }
+  function fmtNum(n) { return n == null ? '0' : Number(n).toLocaleString(); }
+
+  function pctColor(n) {
+    if (n >= 15) return 'green';
+    if (n >= 5)  return 'yellow';
+    return 'red';
+  }
+  function churnColor(n) {
+    if (n === 0) return 'green';
+    if (n <= 5)  return 'yellow';
+    return 'red';
+  }
+  function profitColor(n) {
+    if (n > 0) return 'green';
+    if (n === 0) return 'yellow';
+    return 'red';
+  }
+
+  async function load() {
+    const key      = document.getElementById('api-key').value.trim();
+    const expenses = document.getElementById('expenses').value || 250;
+    const content  = document.getElementById('content');
+
+    if (!key) {
+      content.innerHTML = '<div class="loading">Enter your admin key to load stats.</div>';
+      return;
+    }
+
+    content.innerHTML = '<div class="loading">Loading...</div>';
+
+    try {
+      const url = `${API_BASE}/admin/stats?key=${encodeURIComponent(key)}&expenses=${expenses}`;
+      const res = await fetch(url);
+      if (res.status === 401) {
+        content.innerHTML = '<div class="error-msg">Invalid admin key.</div>';
+        return;
+      }
+      if (!res.ok) {
+        const text = await res.text();
+        content.innerHTML = `<div class="error-msg">Error ${res.status}: ${text}</div>`;
+        return;
+      }
+      const d = await res.json();
+      render(d);
+      document.getElementById('updated-at').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    } catch (err) {
+      content.innerHTML = `<div class="error-msg">Failed to fetch: ${err.message}</div>`;
+    }
+  }
+
+  function render(d) {
+    const s = d.subscribers;
+    const f = d.financials;
+    const c = d.conversions;
+    const p = d.pipeline;
+    const fu = d.followups;
+
+    const churnClr  = churnColor(c.churn_rate_pct);
+    const profitClr = profitColor(f.profit);
+    const rptClr    = pctColor(c.report_to_sub_pct);
+    const coldClr   = pctColor(c.cold_to_free_report_pct);
+
+    const html = `
+      <!-- REVENUE -->
+      <div class="section-title">Revenue &amp; Profit</div>
+      <div class="grid grid-5">
+        <div class="card green">
+          <div class="label">Monthly Revenue</div>
+          <div class="value">${fmt$(f.monthly_revenue)}</div>
+          <div class="sub">${fmtNum(s.active_total)} active subscriber${s.active_total !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="card">
+          <div class="label">Monthly Expenses</div>
+          <div class="value" style="font-size:24px;">${fmt$(f.monthly_expenses)}</div>
+          <div class="sub">Hosting, tools, misc</div>
+        </div>
+        <div class="card ${profitClr}">
+          <div class="label">Profit (pre-tax)</div>
+          <div class="value">${fmt$(f.profit)}</div>
+          <div class="sub">${fmt$(f.monthly_revenue)} &minus; ${fmt$(f.monthly_expenses)}</div>
+        </div>
+        <div class="card yellow">
+          <div class="label">Est. Taxes Due</div>
+          <div class="value">${fmt$(f.taxes_due)}</div>
+          <div class="sub">${f.tax_rate_pct}% of profit</div>
+        </div>
+        <div class="card ${profitClr}">
+          <div class="label">Take-Home (after tax)</div>
+          <div class="value">${fmt$(f.take_home)}</div>
+          <div class="sub">Monthly net</div>
+        </div>
+      </div>
+
+      <!-- SUBSCRIBERS -->
+      <div class="section-title">Subscribers</div>
+      <div class="grid grid-4">
+        <div class="card accent">
+          <div class="label">Active Subscribers</div>
+          <div class="value">${fmtNum(s.active_total)}</div>
+          <div class="sub">Paying right now</div>
+        </div>
+        <div class="card">
+          <div class="label">Starter ($${f.price_starter}/mo)</div>
+          <div class="value" style="font-size:24px;">${fmtNum(s.starter)}</div>
+          <div class="sub">${fmt$(s.starter * f.price_starter)}/mo</div>
+        </div>
+        <div class="card">
+          <div class="label">Growth ($${f.price_growth}/mo)</div>
+          <div class="value" style="font-size:24px;">${fmtNum(s.growth)}</div>
+          <div class="sub">${fmt$(s.growth * f.price_growth)}/mo</div>
+        </div>
+        <div class="card">
+          <div class="label">New (last 30 days)</div>
+          <div class="value" style="font-size:24px; color:var(--green);">${fmtNum(s.new_last_30d)}</div>
+          <div class="sub">${fmtNum(s.churned_total)} churned all-time</div>
+        </div>
+      </div>
+
+      <!-- CONVERSION & CHURN -->
+      <div class="section-title">Conversion &amp; Churn</div>
+      <div class="grid grid-3">
+        <div class="card ${coldClr}">
+          <div class="label">Cold Outreach → Free Report</div>
+          <div class="value">${fmtPct(c.cold_to_free_report_pct)}</div>
+          <div class="sub">${fmtNum(c.cold_outreach_sent)} cold emails sent</div>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill ${coldClr}" style="width:${Math.min(c.cold_to_free_report_pct, 100)}%"></div></div>
+          </div>
+        </div>
+        <div class="card ${rptClr}">
+          <div class="label">Free Report → Subscription</div>
+          <div class="value">${fmtPct(c.report_to_sub_pct)}</div>
+          <div class="sub">${fmtNum(c.report_to_sub_converted)} of ${fmtNum(c.free_reports_to_businesses)} converted</div>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill ${rptClr}" style="width:${Math.min(c.report_to_sub_pct, 100)}%"></div></div>
+          </div>
+        </div>
+        <div class="card ${churnClr}">
+          <div class="label">Churn Rate</div>
+          <div class="value">${fmtPct(c.churn_rate_pct)}</div>
+          <div class="sub">${fmtNum(s.churned_total)} churned / ${fmtNum(s.churned_total + s.active_total)} ever subscribed</div>
+          <div class="bar-wrap">
+            <div class="bar-track"><div class="bar-fill ${churnClr}" style="width:${Math.min(c.churn_rate_pct, 100)}%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PIPELINE -->
+      <div class="section-title">Pipeline Overview</div>
+      <div class="grid grid-4">
+        <div class="card">
+          <div class="label">Prospects Discovered</div>
+          <div class="value" style="font-size:24px;">${fmtNum(p.total_prospects_discovered)}</div>
+          <div class="sub">In outreach table</div>
+        </div>
+        <div class="card">
+          <div class="label">Cold Emails Sent</div>
+          <div class="value" style="font-size:24px;">${fmtNum(c.cold_outreach_sent)}</div>
+          <div class="sub">Status: sent/converted</div>
+        </div>
+        <div class="card">
+          <div class="label">Free Reports Delivered</div>
+          <div class="value" style="font-size:24px;">${fmtNum(p.total_reports_delivered)}</div>
+          <div class="sub">To ${fmtNum(c.free_reports_to_businesses)} unique businesses</div>
+        </div>
+        <div class="card">
+          <div class="label">Reports Generated</div>
+          <div class="value" style="font-size:24px;">${fmtNum(p.total_reports_generated)}</div>
+          <div class="sub">All-time</div>
+        </div>
+      </div>
+
+      <!-- FOLLOW-UPS -->
+      <div class="section-title">Follow-up Sequences Sent</div>
+      <div class="grid grid-2">
+        <div class="breakdown">
+          <div class="label" style="margin-bottom:4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Post Free Report</div>
+          <div class="row"><span class="name">Day 5</span><span class="val">${fmtNum(fu.report_day5)}</span></div>
+          <div class="row"><span class="name">Day 12</span><span class="val">${fmtNum(fu.report_day12)}</span></div>
+          <div class="row"><span class="name">Day 21</span><span class="val">${fmtNum(fu.report_day21)}</span></div>
+        </div>
+        <div class="breakdown">
+          <div class="label" style="margin-bottom:4px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px;">Cold Email</div>
+          <div class="row"><span class="name">Day 5</span><span class="val">${fmtNum(fu.cold_day5_sent)}</span></div>
+          <div class="row"><span class="name">Day 12</span><span class="val">${fmtNum(fu.cold_day12_sent)}</span></div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('content').innerHTML = html;
+  }
+
+  loadKey();
+</script>
+</body>
+</html>

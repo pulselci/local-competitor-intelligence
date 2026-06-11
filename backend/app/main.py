@@ -43,6 +43,12 @@ def onboarding_form():
     return FileResponse(html_path)
 
 
+@app.get("/admin/dashboard", include_in_schema=False)
+def stats_dashboard():
+    html_path = Path(__file__).resolve().parent / "static" / "stats_dashboard.html"
+    return FileResponse(html_path)
+
+
 @app.get("/outreach/ui", include_in_schema=False)
 def outreach_queue_ui():
     html_path = Path(__file__).resolve().parent / "static" / "outreach_queue.html"
