@@ -286,8 +286,23 @@
     const coldClr   = pctColor(c.cold_to_free_report_pct);
 
     const html = `
-      <!-- REVENUE -->
-      <div class="section-title">Revenue &amp; Profit</div>
+      <!-- REVENUE TOTALS -->
+      <div class="section-title">Revenue Totals</div>
+      <div class="grid grid-2" style="margin-bottom:0;">
+        <div class="card green">
+          <div class="label">Year-to-Date Revenue (est.)</div>
+          <div class="value">${fmt$(f.ytd_revenue)}</div>
+          <div class="sub">Subscribers signed up this calendar year &times; months active</div>
+        </div>
+        <div class="card green">
+          <div class="label">All-Time Revenue (est.)</div>
+          <div class="value">${fmt$(f.alltime_revenue)}</div>
+          <div class="sub">Every subscriber &times; months active since signup</div>
+        </div>
+      </div>
+
+      <!-- MONTHLY P&L -->
+      <div class="section-title">Monthly P&amp;L</div>
       <div class="grid grid-5">
         <div class="card green">
           <div class="label">Monthly Revenue</div>

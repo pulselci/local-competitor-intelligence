@@ -2723,23 +2723,20 @@ def admin_stats(key: str = "", expenses: float = 250.0):
     with get_conn() as conn:
         with conn.cursor() as cur:
 
-            # ── Subscribers ───────────────────────────────────────────────
+            # -- Subscribers
             cur.execute("""
-                SELECT
-                    stripe_price_id,
-                    COUNT(*) AS cnt
+                SELECT stripe_price_id, COUNT(*) AS cnt
                 FROM businesses
-                WHERE is_active = true
-                  AND stripe_subscription_id IS NOT NULL
+                WHERE is_active = true AND stripe_subscription_id IS NOT NULL
                 GROUP BY stripe_price_id
             """)
             plan_rows = cur.fetchall()
 
-            starter_count  = 0
-            growth_count   = 0
-            unknown_count  = 0
-            price_starter  = settings.stripe_price_starter or ""
-            price_growth   = settings.stripe_price_growth  or ""
+            starter_count = 0
+            growth_count  = 0
+            unknown_count = 0
+            price_starter = settings.stripe_price_starter or ""
+            price_growth  = settings.stripe_price_growth  or ""
 
             for row in plan_rows:
                 pid = row["stripe_price_id"] or ""
@@ -2752,29 +2749,25 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                     unknown_count += cnt
 
             active_subscribers = starter_count + growth_count + unknown_count
-            monthly_revenue    = (starter_count * PRICE_STARTER) + (growth_count * PRICE_GROWTH) + (unknown_count * PRICE_STARTER)
+            monthly_revenue = (starter_count * PRICE_STARTER) + (growth_count * PRICE_GROWTH) + (unknown_count * PRICE_STARTER)
 
-            # ── Churn (businesses that had a sub but are now inactive) ────
+            # -- Churn
             cur.execute("""
-                SELECT COUNT(*) AS cnt
-                FROM businesses
-                WHERE is_active = false
-                  AND stripe_subscription_id IS NOT NULL
+                SELECT COUNT(*) AS cnt FROM businesses
+                WHERE is_active = false AND stripe_subscription_id IS NOT NULL
             """)
             churned_count = (cur.fetchone() or {}).get("cnt", 0)
-            total_ever_subscribed = active_subscribers + churned_count
-            churn_rate = round((churned_count / total_ever_subscribed * 100), 1) if total_ever_subscribed > 0 else 0.0
+            total_ever = active_subscribers + churned_count
+            churn_rate = round((churned_count / total_ever * 100), 1) if total_ever > 0 else 0.0
 
-            # ── Cold outreach → free report conversion ────────────────────
+            # -- Cold outreach conversion
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped')")
             cold_total = (cur.fetchone() or {}).get("cnt", 0)
-
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status = 'converted'")
             cold_converted = (cur.fetchone() or {}).get("cnt", 0)
-
             cold_to_report_pct = round((cold_converted / cold_total * 100), 1) if cold_total > 0 else 0.0
 
-            # ── Free report → subscription conversion ─────────────────────
+            # -- Free report to subscription conversion
             cur.execute("""
                 SELECT COUNT(DISTINCT gr.business_id) AS cnt
                 FROM generated_reports gr
@@ -2786,8 +2779,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             cur.execute("""
                 SELECT COUNT(DISTINCT b.id) AS cnt
                 FROM businesses b
-                WHERE b.is_active = true
-                  AND b.stripe_subscription_id IS NOT NULL
+                WHERE b.is_active = true AND b.stripe_subscription_id IS NOT NULL
                   AND EXISTS (
                       SELECT 1 FROM generated_reports gr
                       JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
@@ -2795,19 +2787,14 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                   )
             """)
             report_to_sub_converted = (cur.fetchone() or {}).get("cnt", 0)
-
             report_to_sub_pct = round((report_to_sub_converted / reports_sent_to_businesses * 100), 1) if reports_sent_to_businesses > 0 else 0.0
 
-            # ── Total reports delivered ───────────────────────────────────
+            # -- Reports delivered
             cur.execute("SELECT COUNT(*) AS cnt FROM report_delivery_logs WHERE status = 'sent'")
             total_reports_delivered = (cur.fetchone() or {}).get("cnt", 0)
 
-            # ── Follow-up stats ───────────────────────────────────────────
-            cur.execute("""
-                SELECT day, COUNT(*) AS cnt
-                FROM prospect_followup_log
-                GROUP BY day ORDER BY day
-            """)
+            # -- Follow-up stats
+            cur.execute("SELECT day, COUNT(*) AS cnt FROM prospect_followup_log GROUP BY day ORDER BY day")
             followup_rows = cur.fetchall()
             followup_counts = {str(r["day"]): r["cnt"] for r in followup_rows}
 
@@ -2815,43 +2802,76 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                 SELECT
                     COUNT(*) FILTER (WHERE followup1_sent_at IS NOT NULL) AS fu1,
                     COUNT(*) FILTER (WHERE followup2_sent_at IS NOT NULL) AS fu2
-                FROM outreach_prospects
-                WHERE status IN ('sent','converted')
+                FROM outreach_prospects WHERE status IN ('sent','converted')
             """)
             cold_fu = cur.fetchone() or {}
 
-            # ── Totals for context ────────────────────────────────────────
+            # -- Pipeline totals
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects")
             total_prospects_discovered = (cur.fetchone() or {}).get("cnt", 0)
-
             cur.execute("SELECT COUNT(*) AS cnt FROM businesses")
             total_businesses = (cur.fetchone() or {}).get("cnt", 0)
-
             cur.execute("SELECT COUNT(*) AS cnt FROM generated_reports")
             total_reports_generated = (cur.fetchone() or {}).get("cnt", 0)
 
-            # ── Recent subscriber growth (last 30 days) ───────────────────
+            # -- New subs last 30 days
             cur.execute("""
-                SELECT COUNT(*) AS cnt
-                FROM businesses
-                WHERE is_active = true
-                  AND stripe_subscription_id IS NOT NULL
+                SELECT COUNT(*) AS cnt FROM businesses
+                WHERE is_active = true AND stripe_subscription_id IS NOT NULL
                   AND created_at >= NOW() - INTERVAL '30 days'
             """)
             new_subs_30d = (cur.fetchone() or {}).get("cnt", 0)
 
-    # ── Financial calculations ────────────────────────────────────────────
-    profit          = monthly_revenue - expenses
-    taxes_due       = max(0.0, profit * TAX_RATE)
-    take_home       = profit - taxes_due
+            # -- Year-to-date revenue (est.)
+            cur.execute("""
+                SELECT stripe_price_id, created_at FROM businesses
+                WHERE is_active = true AND stripe_subscription_id IS NOT NULL
+                  AND created_at >= DATE_TRUNC('year', NOW())
+            """)
+            ytd_rows = cur.fetchall()
+
+            from datetime import timezone as _tz, datetime as _dt
+            ytd_revenue = 0.0
+            for row in ytd_rows:
+                pid   = row["stripe_price_id"] or ""
+                price = PRICE_GROWTH if pid == price_growth else PRICE_STARTER
+                signup = row["created_at"]
+                if signup.tzinfo is None:
+                    signup = signup.replace(tzinfo=_tz.utc)
+                now_utc = _dt.now(_tz.utc)
+                months = max(1, (now_utc.year - signup.year) * 12 + (now_utc.month - signup.month) + 1)
+                ytd_revenue += price * months
+
+            # -- All-time revenue (est.)
+            cur.execute("""
+                SELECT stripe_price_id, created_at FROM businesses
+                WHERE stripe_subscription_id IS NOT NULL
+            """)
+            alltime_rows = cur.fetchall()
+
+            alltime_revenue = 0.0
+            for row in alltime_rows:
+                pid   = row["stripe_price_id"] or ""
+                price = PRICE_GROWTH if pid == price_growth else PRICE_STARTER
+                signup = row["created_at"]
+                if signup.tzinfo is None:
+                    signup = signup.replace(tzinfo=_tz.utc)
+                now_utc = _dt.now(_tz.utc)
+                months = max(1, (now_utc.year - signup.year) * 12 + (now_utc.month - signup.month) + 1)
+                alltime_revenue += price * months
+
+    # -- Financial calculations
+    profit    = monthly_revenue - expenses
+    taxes_due = max(0.0, profit * TAX_RATE)
+    take_home = profit - taxes_due
 
     return {
         "subscribers": {
-            "active_total":    active_subscribers,
-            "starter":         starter_count,
-            "growth":          growth_count,
-            "new_last_30d":    new_subs_30d,
-            "churned_total":   churned_count,
+            "active_total":  active_subscribers,
+            "starter":       starter_count,
+            "growth":        growth_count,
+            "new_last_30d":  new_subs_30d,
+            "churned_total": churned_count,
         },
         "financials": {
             "monthly_revenue":  round(monthly_revenue, 2),
@@ -2862,6 +2882,8 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             "tax_rate_pct":     TAX_RATE * 100,
             "price_starter":    PRICE_STARTER,
             "price_growth":     PRICE_GROWTH,
+            "ytd_revenue":      round(ytd_revenue, 2),
+            "alltime_revenue":  round(alltime_revenue, 2),
         },
         "conversions": {
             "cold_outreach_sent":         cold_total,
