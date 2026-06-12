@@ -8,8 +8,9 @@ tmp_*
 _debug_*
 *.log
 
-# PDFs / outputs
+# PDFs / outputs (except deployed static assets)
 *.pdf
+!app/static/*.pdf
 out/
 
 # Local scripts
