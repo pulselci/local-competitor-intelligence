@@ -278,19 +278,24 @@ def approve_and_send(prospect_id: str) -> dict:
     if not body:
         raise HTTPException(status_code=400, detail="No draft_body set")
 
-    # Attach one-sheet for agency prospects
+    # Attach relevant one-sheet based on prospect type
     attachment_path = None
     attachment_filename = None
-    prospect_type = prospect.get("prospect_type")
-    onesheet = Path(__file__).resolve().parent.parent / "static" / "pulse_lci_agency_onesheet.pdf"
-    print(f"[APPROVE] prospect_id={prospect_id} prospect_type={prospect_type!r} onesheet_exists={onesheet.exists()} onesheet_path={onesheet}")
+    prospect_type = prospect.get("prospect_type") or "local_business"
+    static_dir = Path(__file__).resolve().parent.parent / "static"
+
     if prospect_type == "agency":
-        if onesheet.exists():
-            attachment_path = str(onesheet)
-            attachment_filename = "Pulse_LCI_Agency_Partner_Program.pdf"
-            print(f"[APPROVE] attaching one-sheet: {attachment_path}")
-        else:
-            print(f"[APPROVE] WARNING: one-sheet PDF not found at {onesheet}")
+        onesheet = static_dir / "pulse_lci_agency_onesheet.pdf"
+        fname = "Pulse_LCI_Agency_Partner_Program.pdf"
+    else:
+        onesheet = static_dir / "pulse_lci_business_onesheet.pdf"
+        fname = "Pulse_LCI_Overview.pdf"
+
+    if onesheet.exists():
+        attachment_path = str(onesheet)
+        attachment_filename = fname
+    else:
+        print(f"[APPROVE] WARNING: one-sheet not found at {onesheet}")
 
     result = send_plain_email(
         to_email=to_email,

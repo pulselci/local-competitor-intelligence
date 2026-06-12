@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -31,6 +32,9 @@ logger = logging.getLogger(__name__)
 PRICING_URL = "https://pulselci.com/#pricing"
 FREE_REPORT_URL = "https://pulselci.com/#free-report"
 BACKEND_URL = "https://pulse-lci-api.onrender.com"
+
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+_BUSINESS_ONESHEET = _STATIC / "pulse_lci_business_onesheet.pdf"
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -51,8 +55,15 @@ def _unsub_footer(record_id: str, record_type: str) -> str:
     )
 
 
-def _send(to_email: str, subject: str, body: str) -> bool:
-    result = send_plain_email(to_email=to_email, subject=subject, body=body)
+def _send(to_email: str, subject: str, body: str, attach_onesheet: bool = False) -> bool:
+    attachment_path = str(_BUSINESS_ONESHEET) if attach_onesheet and _BUSINESS_ONESHEET.exists() else None
+    result = send_plain_email(
+        to_email=to_email,
+        subject=subject,
+        body=body,
+        attachment_path=attachment_path,
+        attachment_filename="Pulse_LCI_Overview.pdf" if attachment_path else None,
+    )
     if not result.ok:
         logger.warning("Follow-up send failed to %s: %s", to_email, result.error)
     return result.ok
@@ -100,7 +111,7 @@ def run_cold_email_followups() -> dict:
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 subject = f"Re: {p['draft_subject'] or 'competitive snapshot for ' + p['business_name']}"
-                if _send(p['contact_email'], subject, body):
+                if _send(p['contact_email'], subject, body, attach_onesheet=True):
                     cur.execute(
                         "UPDATE outreach_prospects SET followup1_sent_at = NOW() WHERE id = %s",
                         (p['id'],)
@@ -210,7 +221,7 @@ def run_report_followups() -> dict:
 
                     ok = False
                     if day == 5:
-                        ok = _send(email, *_report_followup_day5(name, business, business_id))
+                        ok = _send(email, *_report_followup_day5(name, business, business_id), attach_onesheet=True)
                     elif day == 12:
                         ok = _send(email, *_report_followup_day12(name, business, business_id))
                     elif day == 21:
