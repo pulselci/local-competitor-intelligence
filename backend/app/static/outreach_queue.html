@@ -12,6 +12,12 @@
   .topbar-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
   .topbar-sub { font-size: 12px; color: #8a9fbe; }
 
+  /* Tab nav */
+  .tab-nav { background: #122033; border-top: 1px solid #1e3550; display: flex; gap: 0; padding: 0 28px; }
+  .tab-btn { font-size: 13px; font-weight: 600; color: #8a9fbe; padding: 10px 18px; cursor: pointer; border: none; background: none; border-bottom: 3px solid transparent; transition: color 0.15s; letter-spacing: 0.02em; }
+  .tab-btn:hover { color: #c8d8f0; }
+  .tab-btn.active { color: #fff; border-bottom-color: #4a80e8; }
+
   .stats-bar { background: #fff; border-bottom: 1px solid #dce6f5; padding: 12px 28px; display: flex; gap: 24px; }
   .stat { font-size: 13px; color: #5c6f91; }
   .stat strong { color: #122033; font-size: 16px; margin-right: 4px; }
@@ -31,6 +37,9 @@
   .badge-no-email { background: #fff3e0; color: #e65100; }
   .badge-sent { background: #e8f5e9; color: #2e7d32; }
   .badge-skipped { background: #f5f5f5; color: #9e9e9e; }
+  .badge-reseller { background: #ede7f6; color: #5b21b6; }
+  .badge-referral { background: #e0f2fe; color: #075985; }
+  .badge-both { background: #f0fdf4; color: #15803d; }
 
   .card-body { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .info-block h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a9ab5; font-weight: 700; margin-bottom: 6px; }
@@ -61,6 +70,19 @@
   .loading { text-align: center; padding: 60px; color: #8a9ab5; }
 
   .review-pill { display: inline-flex; align-items: center; gap: 5px; background: #f0f4f9; border-radius: 20px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: #30415f; }
+
+  /* Agency add form */
+  .add-agency-form { background: #fff; border-bottom: 1px solid #dce6f5; padding: 20px 28px; }
+  .add-agency-form .form-title { font-size: 13px; font-weight: 700; color: #122033; margin-bottom: 14px; }
+  .add-agency-form .form-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; align-items: flex-end; }
+  .add-agency-form .form-field { display: flex; flex-direction: column; gap: 3px; }
+  .add-agency-form .form-field label { font-size: 11px; color: #62738f; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .add-agency-form .form-field input,
+  .add-agency-form .form-field select,
+  .add-agency-form .form-field textarea { font-size: 13px; padding: 7px 10px; border: 1px solid #c8d8ee; border-radius: 8px; font-family: inherit; color: #172033; background: #fff; }
+  .add-agency-form .form-field textarea { resize: vertical; height: 80px; }
+  .add-agency-form .toggle-btn { font-size: 12px; color: #2c5eff; background: none; border: none; padding: 0; cursor: pointer; font-weight: 600; }
+  .add-agency-form .toggle-btn:hover { opacity: 0.75; }
 </style>
 </head>
 <body>
@@ -71,10 +93,19 @@
     <div class="topbar-sub">Review and approve cold email drafts before they send</div>
   </div>
   <div style="display:flex;gap:8px;">
-    <button class="btn-skip" onclick="clearQueue()" style="font-size:12px;padding:6px 14px;color:#c62828;">🗑 Clear Queue</button>
-    <button class="btn-save" onclick="loadQueue()" style="font-size:12px;padding:6px 14px;">↻ Refresh</button>
+    <button class="btn-skip" id="clear-btn" onclick="handleClear()" style="font-size:12px;padding:6px 14px;color:#c62828;">🗑 Clear Queue</button>
+    <button class="btn-save" onclick="handleRefresh()" style="font-size:12px;padding:6px 14px;">↻ Refresh</button>
   </div>
 </div>
+
+<!-- Tab nav -->
+<div class="tab-nav">
+  <button class="tab-btn active" id="tab-btn-business" onclick="switchTab('business')">Business Outreach</button>
+  <button class="tab-btn" id="tab-btn-agency" onclick="switchTab('agency')">Agency Pipeline</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ BUSINESS TAB -->
+<div id="tab-business">
 
 <div class="stats-bar" id="stats-bar">
   <div class="stat"><strong id="stat-draft">—</strong> ready to review</div>
@@ -131,8 +162,129 @@
   <div class="loading">Loading prospects…</div>
 </div>
 
+</div><!-- /tab-business -->
+
+<!-- ═══════════════════════════════════════════════════════ AGENCY TAB -->
+<div id="tab-agency" style="display:none;">
+
+<div class="stats-bar" id="agency-stats-bar">
+  <div class="stat"><strong id="agency-stat-total">—</strong> total agencies</div>
+  <div class="stat"><strong id="agency-stat-draft">—</strong> ready to send</div>
+  <div class="stat"><strong id="agency-stat-sent">—</strong> sent</div>
+  <div class="stat"><strong id="agency-stat-skipped">—</strong> skipped</div>
+</div>
+
+<div class="add-agency-form">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+    <div class="form-title" style="margin-bottom:0;">Add Agency</div>
+    <button class="toggle-btn" id="form-toggle-btn" onclick="toggleAddForm()">▼ Expand</button>
+  </div>
+
+  <div id="add-agency-fields" style="display:none;">
+    <div class="form-row">
+      <div class="form-field" style="flex:2; min-width:200px;">
+        <label>Agency Name *</label>
+        <input id="ag-name" type="text" placeholder="Apex Digital Marketing">
+      </div>
+      <div class="form-field" style="flex:1; min-width:160px;">
+        <label>Contact Email</label>
+        <input id="ag-email" type="email" placeholder="owner@agencyname.com">
+      </div>
+      <div class="form-field" style="flex:1; min-width:160px;">
+        <label>Website</label>
+        <input id="ag-website" type="text" placeholder="https://...">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field" style="width:120px;">
+        <label>City</label>
+        <input id="ag-city" type="text" placeholder="Austin">
+      </div>
+      <div class="form-field" style="width:60px;">
+        <label>State</label>
+        <input id="ag-state" type="text" placeholder="TX" maxlength="2" style="text-transform:uppercase;">
+      </div>
+      <div class="form-field" style="width:160px;">
+        <label>Partnership Type</label>
+        <select id="ag-type">
+          <option value="both">Both (Reseller + Referral)</option>
+          <option value="reseller">Reseller / White-label</option>
+          <option value="referral">Referral Partner</option>
+        </select>
+      </div>
+      <div class="form-field" style="flex:1; min-width:200px;">
+        <label>Notes</label>
+        <input id="ag-notes" type="text" placeholder="Found via LinkedIn, 200+ SMB clients">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field" style="flex:1; min-width:300px;">
+        <label>Email Subject</label>
+        <input id="ag-subject" type="text" placeholder="Partner opportunity — local competitor intelligence for your clients">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-field" style="flex:1;">
+        <label>Email Body</label>
+        <textarea id="ag-body" placeholder="Hi [Name],&#10;&#10;I run Pulse LCI — a monthly competitor intelligence report for local businesses..."></textarea>
+      </div>
+    </div>
+    <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
+      <button class="btn-approve" onclick="addAgency()" id="add-agency-btn">+ Add to Pipeline</button>
+      <span id="add-agency-msg" style="font-size:12px; color:#62738f;"></span>
+    </div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <label for="agency-status-filter">Show:</label>
+  <select id="agency-status-filter" onchange="loadAgencies()">
+    <option value="all">All</option>
+    <option value="draft_ready">Ready to send</option>
+    <option value="sent">Sent</option>
+    <option value="skipped">Skipped</option>
+  </select>
+</div>
+
+<div class="queue" id="agency-queue">
+  <div class="loading">Loading agencies…</div>
+</div>
+
+</div><!-- /tab-agency -->
+
 <script>
 const API = window.location.origin;
+let currentTab = 'business';
+
+// ─── Tab switching ────────────────────────────────────────────────────────────
+
+function switchTab(tab) {
+  currentTab = tab;
+  document.getElementById('tab-business').style.display = tab === 'business' ? '' : 'none';
+  document.getElementById('tab-agency').style.display = tab === 'agency' ? '' : 'none';
+  document.getElementById('tab-btn-business').classList.toggle('active', tab === 'business');
+  document.getElementById('tab-btn-agency').classList.toggle('active', tab === 'agency');
+
+  document.getElementById('clear-btn').style.display = tab === 'business' ? '' : 'none';
+
+  if (tab === 'business') {
+    loadQueue();
+  } else {
+    loadAgencies();
+    loadAgencyStats();
+  }
+}
+
+function handleRefresh() {
+  if (currentTab === 'business') { loadQueue(); loadStats(); }
+  else { loadAgencies(); loadAgencyStats(); }
+}
+
+function handleClear() {
+  clearQueue();
+}
+
+// ─── Business tab ─────────────────────────────────────────────────────────────
 
 async function loadStats() {
   try {
@@ -244,6 +396,181 @@ function renderCard(p) {
   return div;
 }
 
+// ─── Agency tab ───────────────────────────────────────────────────────────────
+
+function toggleAddForm() {
+  const fields = document.getElementById('add-agency-fields');
+  const btn = document.getElementById('form-toggle-btn');
+  const visible = fields.style.display !== 'none';
+  fields.style.display = visible ? 'none' : '';
+  btn.textContent = visible ? '▼ Expand' : '▲ Collapse';
+}
+
+async function loadAgencyStats() {
+  try {
+    const r = await fetch(`${API}/outreach/agencies?status=all&limit=500`);
+    const data = await r.json();
+    document.getElementById('agency-stat-total').textContent = data.length;
+    document.getElementById('agency-stat-draft').textContent = data.filter(a => a.status === 'draft_ready').length;
+    document.getElementById('agency-stat-sent').textContent = data.filter(a => a.status === 'sent').length;
+    document.getElementById('agency-stat-skipped').textContent = data.filter(a => a.status === 'skipped').length;
+  } catch(e) { console.warn('agency stats failed', e); }
+}
+
+async function loadAgencies() {
+  const status = document.getElementById('agency-status-filter').value;
+  const queue = document.getElementById('agency-queue');
+  queue.innerHTML = '<div class="loading">Loading…</div>';
+
+  try {
+    const r = await fetch(`${API}/outreach/agencies?status=${status}&limit=100`);
+    if (!r.ok) throw new Error(await r.text());
+    const agencies = await r.json();
+
+    if (!agencies.length) {
+      queue.innerHTML = `<div class="empty">No agencies yet.<br>Use the form above to add your first agency prospect.</div>`;
+      return;
+    }
+
+    queue.innerHTML = '';
+    agencies.forEach(a => queue.appendChild(renderAgencyCard(a)));
+  } catch(e) {
+    queue.innerHTML = `<div class="empty" style="color:#c62828">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderAgencyCard(a) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.id = `card-${a.id}`;
+
+  const statusBadge = {
+    draft_ready: '<span class="badge badge-draft">Ready</span>',
+    sent: '<span class="badge badge-sent">Sent</span>',
+    skipped: '<span class="badge badge-skipped">Skipped</span>',
+  }[a.status] || `<span class="badge badge-draft">${escHtml(a.status)}</span>`;
+
+  const partnerBadge = {
+    reseller: '<span class="badge badge-reseller">Reseller</span>',
+    referral: '<span class="badge badge-referral">Referral</span>',
+    both: '<span class="badge badge-both">Reseller + Referral</span>',
+  }[a.partnership_type] || '';
+
+  const location = [a.city, a.state].filter(Boolean).join(', ');
+  const isReadOnly = a.status === 'sent' || a.status === 'skipped';
+  const readOnly = isReadOnly ? 'readonly' : '';
+  const readOnlyStyle = isReadOnly ? 'background:#f9fafb;color:#888;' : '';
+
+  div.innerHTML = `
+    <div class="card-header">
+      <div>
+        <div class="card-title">${escHtml(a.business_name)}</div>
+        <div class="card-meta">${location ? escHtml(location) + ' &nbsp;·&nbsp; ' : ''}${a.website ? `<a href="${escHtml(a.website)}" target="_blank">website ↗</a>` : 'no website'}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${partnerBadge}
+        ${statusBadge}
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="info-block">
+        <h4>Partnership Type</h4>
+        <p>${a.partnership_type === 'reseller' ? 'White-label / Reseller — they sell reports under their brand' :
+            a.partnership_type === 'referral' ? 'Referral Partner — they refer clients, earn a cut' :
+            'Both — open to reselling or referring clients'}</p>
+      </div>
+      <div class="info-block">
+        <h4>Notes</h4>
+        <p>${escHtml(a.notes || '—')}</p>
+      </div>
+      <div class="contact-email-row">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9ab5;white-space:nowrap;">Contact Email</div>
+        <input id="email-${a.id}" type="email" value="${escHtml(a.contact_email || '')}" placeholder="Enter contact email" ${readOnly} style="${readOnlyStyle}">
+      </div>
+      <div class="email-subject">
+        <h4>Subject</h4>
+        <input id="subject-${a.id}" type="text" value="${escHtml(a.draft_subject || '')}" ${readOnly} style="${readOnlyStyle}">
+      </div>
+      <div class="email-preview">
+        <h4>Email Body</h4>
+        <textarea id="body-${a.id}" ${readOnly} style="${readOnlyStyle}">${escHtml(a.draft_body || '')}</textarea>
+      </div>
+    </div>
+    <div class="card-footer">
+      <span class="msg" id="msg-${a.id}"></span>
+      ${!isReadOnly ? `
+        <button class="btn-save" onclick="saveDraft('${a.id}')">Save edits</button>
+        <button class="btn-skip" onclick="skipAgency('${a.id}')">Skip</button>
+        <button class="btn-approve" onclick="approve('${a.id}', true)">✓ Approve &amp; Send</button>
+      ` : ''}
+    </div>
+  `;
+  return div;
+}
+
+async function addAgency() {
+  const name = document.getElementById('ag-name').value.trim();
+  if (!name) {
+    document.getElementById('add-agency-msg').textContent = 'Agency name is required.';
+    document.getElementById('add-agency-msg').style.color = '#c62828';
+    return;
+  }
+
+  const btn = document.getElementById('add-agency-btn');
+  btn.disabled = true;
+  btn.textContent = 'Adding…';
+
+  const payload = {
+    business_name: name,
+    contact_email: document.getElementById('ag-email').value.trim() || null,
+    website: document.getElementById('ag-website').value.trim() || null,
+    city: document.getElementById('ag-city').value.trim() || null,
+    state: document.getElementById('ag-state').value.trim().toUpperCase() || null,
+    partnership_type: document.getElementById('ag-type').value,
+    notes: document.getElementById('ag-notes').value.trim() || null,
+    draft_subject: document.getElementById('ag-subject').value.trim() || null,
+    draft_body: document.getElementById('ag-body').value.trim() || null,
+  };
+
+  try {
+    const r = await fetch(`${API}/outreach/agency`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error(await r.text());
+
+    // Clear form
+    ['ag-name','ag-email','ag-website','ag-city','ag-state','ag-notes','ag-subject','ag-body'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('add-agency-msg').textContent = `✓ ${name} added to pipeline.`;
+    document.getElementById('add-agency-msg').style.color = '#2e7d32';
+    loadAgencies();
+    loadAgencyStats();
+  } catch(e) {
+    document.getElementById('add-agency-msg').textContent = `Failed: ${e.message}`;
+    document.getElementById('add-agency-msg').style.color = '#c62828';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '+ Add to Pipeline';
+  }
+}
+
+async function skipAgency(id) {
+  if (!confirm('Skip this agency?')) return;
+  try {
+    const r = await fetch(`${API}/outreach/${id}/skip`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById(`card-${id}`).remove();
+    loadAgencyStats();
+  } catch(e) {
+    setMsg(id, `Failed: ${e.message}`, true);
+  }
+}
+
+// ─── Shared helpers ───────────────────────────────────────────────────────────
+
 function setMsg(id, text, isError) {
   const el = document.getElementById(`msg-${id}`);
   if (!el) return;
@@ -264,33 +591,21 @@ async function saveDraft(id) {
     });
     if (!r.ok) throw new Error(await r.text());
     setMsg(id, 'Saved.', false);
-    // Update status to draft_ready if email was just added
-    if (email) {
-      await fetch(`${API}/outreach/${id}/draft`, {
-        method: 'PATCH',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ contact_email: email }),
-      });
-    }
     loadStats();
   } catch(e) {
     setMsg(id, `Save failed: ${e.message}`, true);
   }
 }
 
-async function skip(id) {
+function skip(id) {
   if (!confirm('Skip this prospect?')) return;
-  try {
-    const r = await fetch(`${API}/outreach/${id}/skip`, { method: 'POST' });
-    if (!r.ok) throw new Error(await r.text());
-    document.getElementById(`card-${id}`).remove();
-    loadStats();
-  } catch(e) {
-    setMsg(id, `Failed: ${e.message}`, true);
-  }
+  fetch(`${API}/outreach/${id}/skip`, { method: 'POST' })
+    .then(r => { if (!r.ok) throw new Error(r.statusText); })
+    .then(() => { document.getElementById(`card-${id}`).remove(); loadStats(); })
+    .catch(e => setMsg(id, `Failed: ${e.message}`, true));
 }
 
-async function approve(id) {
+async function approve(id, isAgency = false) {
   const email = document.getElementById(`email-${id}`)?.value.trim();
   if (!email) {
     setMsg(id, 'Add a contact email first.', true);
@@ -298,7 +613,6 @@ async function approve(id) {
   }
   if (!confirm(`Send this email to ${email}?`)) return;
 
-  // Save latest edits first
   await saveDraft(id);
 
   try {
@@ -308,7 +622,8 @@ async function approve(id) {
     try { data = JSON.parse(text); } catch(_) {}
     if (!r.ok) throw new Error(data.detail || text.slice(0, 120) || r.statusText);
     setMsg(id, `✓ Sent to ${data.sent_to}`, false);
-    setTimeout(() => loadQueue(), 1200);
+    setTimeout(() => isAgency ? loadAgencies() : loadQueue(), 1200);
+    if (isAgency) loadAgencyStats(); else loadStats();
   } catch(e) {
     setMsg(id, `Send failed: ${e.message}`, true);
   }
@@ -360,7 +675,6 @@ async function startDiscovery() {
     status.textContent = data.message;
     status.style.color = '#2e7d32';
 
-    // Poll for completion
     const poll = setInterval(async () => {
       try {
         const sr = await fetch(`${API}/outreach/discover/status`);
@@ -391,6 +705,7 @@ function setCategory(value) {
 
 // Init
 loadQueue();
+loadStats();
 </script>
 </body>
 </html>

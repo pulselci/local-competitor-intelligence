@@ -85,6 +85,18 @@ class DiscoverIn(BaseModel):
     categories: str  # comma-separated
 
 
+class AgencyIn(BaseModel):
+    business_name: str
+    contact_email: Optional[str] = None
+    website: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    partnership_type: str = "both"  # reseller | referral | both
+    notes: Optional[str] = None
+    draft_subject: Optional[str] = None
+    draft_body: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -268,6 +280,71 @@ def approve_and_send(prospect_id: str) -> dict:
         conn.commit()
 
     return {"ok": True, "sent_to": to_email}
+
+
+@router.post("/agency")
+def add_agency(body: AgencyIn) -> dict:
+    """Manually add an agency to the outreach pipeline."""
+    import uuid
+    synthetic_place_id = f"agency_{uuid.uuid4().hex}"
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO outreach_prospects (
+                    place_id, business_name, website, city, state,
+                    contact_email, draft_subject, draft_body, notes,
+                    prospect_type, partnership_type, status
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 'agency', %s, 'draft_ready')
+                RETURNING id
+                """,
+                (
+                    synthetic_place_id, body.business_name, body.website,
+                    body.city, body.state, body.contact_email,
+                    body.draft_subject, body.draft_body, body.notes,
+                    body.partnership_type,
+                ),
+            )
+            row = cur.fetchone()
+        conn.commit()
+    return {"ok": True, "id": str(row["id"])}
+
+
+@router.get("/agencies")
+def list_agencies(status: str = "all", limit: int = 100) -> list[dict]:
+    """List agency prospects (prospect_type='agency')."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            if status == "all":
+                cur.execute(
+                    """
+                    SELECT id, business_name, website, city, state,
+                           contact_email, draft_subject, draft_body, notes,
+                           partnership_type, status,
+                           created_at::text, sent_at::text
+                    FROM outreach_prospects
+                    WHERE prospect_type = 'agency'
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (limit,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, business_name, website, city, state,
+                           contact_email, draft_subject, draft_body, notes,
+                           partnership_type, status,
+                           created_at::text, sent_at::text
+                    FROM outreach_prospects
+                    WHERE prospect_type = 'agency' AND status = %s
+                    ORDER BY created_at DESC
+                    LIMIT %s
+                    """,
+                    (status, limit),
+                )
+            return [dict(r) for r in cur.fetchall()]
 
 
 @router.get("/all")
