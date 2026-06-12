@@ -236,6 +236,46 @@
   </div>
 </div>
 
+<div style="background:#fff; border-bottom: 1px solid #dce6f5; padding: 16px 28px;">
+  <div style="font-size: 13px; font-weight: 700; color: #122033; margin-bottom: 10px;">Find Agencies by City</div>
+
+  <div style="display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px;">
+    <div>
+      <label style="font-size: 11px; color: #62738f; display:block; margin-bottom:3px;">City</label>
+      <input id="ag-disc-city" type="text" placeholder="Chicago" style="font-size:13px; padding:7px 10px; border:1px solid #c8d8ee; border-radius:8px; width:140px;">
+    </div>
+    <div>
+      <label style="font-size: 11px; color: #62738f; display:block; margin-bottom:3px;">State</label>
+      <input id="ag-disc-state" type="text" placeholder="IL" maxlength="2" style="font-size:13px; padding:7px 10px; border:1px solid #c8d8ee; border-radius:8px; width:60px; text-transform:uppercase;">
+    </div>
+    <div>
+      <label style="font-size: 11px; color: #62738f; display:block; margin-bottom:3px;">Partnership Type</label>
+      <select id="ag-disc-partner-type" style="font-size:13px; padding:7px 10px; border:1px solid #c8d8ee; border-radius:8px;">
+        <option value="both">Both (Reseller + Referral)</option>
+        <option value="reseller">Reseller / White-label</option>
+        <option value="referral">Referral Partner</option>
+      </select>
+    </div>
+    <div style="flex:1; min-width:200px;">
+      <label style="font-size: 11px; color: #62738f; display:block; margin-bottom:3px;">Agency Type</label>
+      <input id="ag-disc-categories" type="text" placeholder="Select a preset or type custom" style="font-size:13px; padding:7px 10px; border:1px solid #c8d8ee; border-radius:8px; width:100%;">
+    </div>
+    <button class="btn-approve" id="ag-disc-btn" onclick="startAgencyDiscovery()" style="padding:8px 20px; white-space:nowrap;">🔍 Find Agencies</button>
+  </div>
+
+  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:6px;">
+    <span style="font-size:11px; color:#8a9ab5; font-weight:700; text-transform:uppercase; letter-spacing:.06em; margin-right:4px;">Quick select:</span>
+    <button class="btn-skip" onclick="setAgencyCategory('digital marketing agency,marketing agency')" style="font-size:12px;padding:4px 12px;border-radius:20px;">📣 Digital Marketing</button>
+    <button class="btn-skip" onclick="setAgencyCategory('web design company,web development agency')" style="font-size:12px;padding:4px 12px;border-radius:20px;">🖥 Web Design</button>
+    <button class="btn-skip" onclick="setAgencyCategory('SEO agency,search engine optimization')" style="font-size:12px;padding:4px 12px;border-radius:20px;">🔍 SEO</button>
+    <button class="btn-skip" onclick="setAgencyCategory('advertising agency,marketing consultant')" style="font-size:12px;padding:4px 12px;border-radius:20px;">📊 Advertising</button>
+    <button class="btn-skip" onclick="setAgencyCategory('social media marketing agency,social media management')" style="font-size:12px;padding:4px 12px;border-radius:20px;">📱 Social Media</button>
+  </div>
+  <div style="font-size:11px; color:#8a9ab5;">
+    <span id="ag-disc-status"></span>
+  </div>
+</div>
+
 <div class="filter-bar">
   <label for="agency-status-filter">Show:</label>
   <select id="agency-status-filter" onchange="loadAgencies()">
@@ -701,6 +741,70 @@ async function startDiscovery() {
 function setCategory(value) {
   document.getElementById('disc-categories').value = value;
   document.getElementById('disc-categories').focus();
+}
+
+function setAgencyCategory(value) {
+  document.getElementById('ag-disc-categories').value = value;
+  document.getElementById('ag-disc-categories').focus();
+}
+
+async function startAgencyDiscovery() {
+  const city = document.getElementById('ag-disc-city').value.trim();
+  const state = document.getElementById('ag-disc-state').value.trim().toUpperCase();
+  const categories = document.getElementById('ag-disc-categories').value.trim();
+  const partnerType = document.getElementById('ag-disc-partner-type').value;
+  const btn = document.getElementById('ag-disc-btn');
+  const status = document.getElementById('ag-disc-status');
+
+  if (!city || !state || !categories) {
+    status.textContent = 'Fill in city, state, and at least one agency type.';
+    status.style.color = '#c62828';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+  status.style.color = '#62738f';
+  status.textContent = 'Discovery started — this takes a few minutes. Queue will update automatically.';
+
+  try {
+    const r = await fetch(`${API}/outreach/discover`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        city,
+        state,
+        categories,
+        prospect_type: 'agency',
+        partnership_type: partnerType,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    status.textContent = data.message;
+    status.style.color = '#2e7d32';
+
+    const poll = setInterval(async () => {
+      try {
+        const sr = await fetch(`${API}/outreach/discover/status`);
+        const sd = await sr.json();
+        if (!sd.running) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔍 Find Agencies';
+          status.textContent = sd.last || 'Done.';
+          loadAgencies();
+          loadAgencyStats();
+        }
+      } catch(_) { clearInterval(poll); }
+    }, 5000);
+
+  } catch(e) {
+    status.textContent = `Failed: ${e.message}`;
+    status.style.color = '#c62828';
+    btn.disabled = false;
+    btn.textContent = '🔍 Find Agencies';
+  }
 }
 
 // Init

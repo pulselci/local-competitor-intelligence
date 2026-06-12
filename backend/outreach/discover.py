@@ -442,6 +442,8 @@ def _insert_prospect(
     top_competitor_reviews: int | None,
     draft_subject: str,
     draft_body: str,
+    prospect_type: str = "local_business",
+    partnership_type: str | None = None,
 ) -> None:
     status = "draft_ready" if contact_email else "no_email"
     with get_conn() as conn:
@@ -452,8 +454,9 @@ def _insert_prospect(
                     place_id, business_name, category, address, city, state,
                     website, phone, contact_email, reviews_count, rating,
                     top_competitor_name, top_competitor_reviews,
-                    draft_subject, draft_body, status
-                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                    draft_subject, draft_body, status,
+                    prospect_type, partnership_type
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                 ON CONFLICT (place_id) DO NOTHING
                 """,
                 (
@@ -461,20 +464,67 @@ def _insert_prospect(
                     website, phone, contact_email, reviews_count, rating,
                     top_competitor_name, top_competitor_reviews,
                     draft_subject, draft_body, status,
+                    prospect_type, partnership_type,
                 ),
             )
         conn.commit()
 
 
 # ---------------------------------------------------------------------------
+# Agency email draft
+# ---------------------------------------------------------------------------
+
+def generate_agency_draft(
+    business_name: str,
+    city: str,
+    category: str | None,
+    partnership_type: str = "both",
+) -> tuple[str, str]:
+    """Generate a short cold email for an agency prospect."""
+    subject = f"Partner opportunity — local competitor intelligence for your clients"
+
+    if partnership_type == "reseller":
+        angle = "white-label our reports under your brand and offer them as an add-on service"
+    elif partnership_type == "referral":
+        angle = "earn a referral fee for every local business client you send our way"
+    else:
+        angle = "either white-label our reports under your brand or earn a referral fee per client — whatever fits your model"
+
+    body = f"""Hi there,
+
+I came across {business_name} and wanted to reach out about a potential partnership.
+
+I run Pulse LCI — a monthly local competitor intelligence report for small businesses. Each report shows owners exactly how they stack up against nearby competitors: review trends, rating changes, who's gaining ground, and where they're falling behind.
+
+We're looking to partner with agencies like yours to {angle}.
+
+It's a simple value-add for your existing clients — most agencies we talk to find it complements their SEO or reputation work well.
+
+Would you be open to a quick call to see if it's a fit?
+
+Best,
+Craig
+Pulse LCI
+"""
+    return subject, body
+
+
+# ---------------------------------------------------------------------------
 # Main discovery loop
 # ---------------------------------------------------------------------------
 
-def discover(city: str, state: str, categories: list[str]) -> None:
+def discover(
+    city: str,
+    state: str,
+    categories: list[str],
+    prospect_type: str = "local_business",
+    partnership_type: str = "both",
+) -> None:
     print(f"\n=== Pulse LCI Prospect Discovery ===")
-    print(f"City: {city}, {state}")
+    print(f"City: {city}, {state} | Type: {prospect_type}")
     print(f"Categories: {', '.join(categories)}\n")
 
+    is_agency = prospect_type == "agency"
     total_found = 0
     total_inserted = 0
 
@@ -499,39 +549,38 @@ def discover(city: str, state: str, categories: list[str]) -> None:
             if _is_chain(name):
                 print(f"  SKIP (chain): {name}")
                 continue
-            if not rating or not (MIN_RATING <= rating <= MAX_RATING):
-                continue
-            if not reviews or not (MIN_REVIEWS <= reviews <= MAX_REVIEWS):
-                continue
+            if not is_agency:
+                # Review/rating filters only apply to local business outreach
+                if not rating or not (MIN_RATING <= rating <= MAX_RATING):
+                    continue
+                if not reviews or not (MIN_REVIEWS <= reviews <= MAX_REVIEWS):
+                    continue
             if _already_exists(place_id):
                 print(f"  SKIP (exists): {name}")
                 continue
 
             total_found += 1
-            print(f"\n  Processing: {name} ({reviews} reviews, {rating}★)")
+            print(f"\n  Processing: {name}")
 
             # Get website + phone
             details = get_place_details(place_id)
             website = details.get("website")
             phone = details.get("formatted_phone_number")
 
-            # Find top competitor
-            competitor = None
-            if lat and lng:
-                competitor = find_top_competitor(lat, lng, category, place_id)
-
+            # Competitor lookup — skip for agencies
             top_competitor_name = None
             top_competitor_reviews = None
-            if competitor:
-                top_competitor_name = competitor.get("name")
-                top_competitor_reviews = competitor.get("user_ratings_total")
-                print(f"  Top competitor: {top_competitor_name} ({top_competitor_reviews} reviews)")
+            if not is_agency and lat and lng:
+                competitor = find_top_competitor(lat, lng, category, place_id)
+                if competitor:
+                    top_competitor_name = competitor.get("name")
+                    top_competitor_reviews = competitor.get("user_ratings_total")
+                    print(f"  Top competitor: {top_competitor_name} ({top_competitor_reviews} reviews)")
 
-            # Scrape email from homepage + contact/about pages
+            # Scrape email
             contact_email = scrape_email_from_website(website) if website else None
             email_source = "scrape"
 
-            # Fallback 1: Hunter.io domain lookup
             if not contact_email and website:
                 from urllib.parse import urlparse
                 domain = urlparse(website).netloc.lstrip("www.")
@@ -539,7 +588,6 @@ def discover(city: str, state: str, categories: list[str]) -> None:
                     contact_email = lookup_email_hunter(domain)
                     email_source = "hunter"
 
-            # Fallback 2: Apollo.io people search
             if not contact_email and website:
                 from urllib.parse import urlparse
                 domain = urlparse(website).netloc.lstrip("www.")
@@ -553,15 +601,23 @@ def discover(city: str, state: str, categories: list[str]) -> None:
                 print(f"  No email found (website: {website or 'none'})")
 
             # Generate draft
-            subject, body = generate_draft(
-                business_name=name,
-                city=city,
-                reviews_count=reviews,
-                rating=rating,
-                top_competitor_name=top_competitor_name,
-                top_competitor_reviews=top_competitor_reviews,
-                category=category,
-            )
+            if is_agency:
+                subject, body = generate_agency_draft(
+                    business_name=name,
+                    city=city,
+                    category=category,
+                    partnership_type=partnership_type,
+                )
+            else:
+                subject, body = generate_draft(
+                    business_name=name,
+                    city=city,
+                    reviews_count=reviews,
+                    rating=rating,
+                    top_competitor_name=top_competitor_name,
+                    top_competitor_reviews=top_competitor_reviews,
+                    category=category,
+                )
 
             # Insert
             _insert_prospect(
@@ -580,9 +636,11 @@ def discover(city: str, state: str, categories: list[str]) -> None:
                 top_competitor_reviews=top_competitor_reviews,
                 draft_subject=subject,
                 draft_body=body,
+                prospect_type=prospect_type,
+                partnership_type=partnership_type if is_agency else None,
             )
             total_inserted += 1
-            time.sleep(0.3)  # be polite to Google API
+            time.sleep(0.3)
 
     print(f"\n=== Done ===")
     print(f"Processed: {total_found} prospects")

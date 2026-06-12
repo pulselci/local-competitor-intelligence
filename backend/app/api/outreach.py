@@ -25,20 +25,31 @@ router = APIRouter(prefix="/outreach", tags=["outreach"])
 _discovery_status: dict = {"running": False, "last": None, "log": []}
 
 
-def _run_discovery(city: str, state: str, categories: List[str]) -> None:
+def _run_discovery(
+    city: str,
+    state: str,
+    categories: List[str],
+    prospect_type: str = "local_business",
+    partnership_type: str = "both",
+) -> None:
     """Run prospect discovery in a background thread."""
     global _discovery_status
     _discovery_status["running"] = True
     _discovery_status["log"] = [f"Starting discovery: {city}, {state} — {', '.join(categories)}"]
 
     try:
-        # Ensure outreach module is importable
         backend_dir = Path(__file__).resolve().parent.parent.parent
         if str(backend_dir) not in sys.path:
             sys.path.insert(0, str(backend_dir))
 
         from outreach.discover import discover
-        discover(city=city, state=state, categories=categories)
+        discover(
+            city=city,
+            state=state,
+            categories=categories,
+            prospect_type=prospect_type,
+            partnership_type=partnership_type,
+        )
         _discovery_status["last"] = f"Done — {city}, {state}: {', '.join(categories)}"
         _discovery_status["log"].append("Discovery completed successfully.")
     except Exception as e:
@@ -83,6 +94,8 @@ class DiscoverIn(BaseModel):
     city: str
     state: str
     categories: str  # comma-separated
+    prospect_type: str = "local_business"  # local_business | agency
+    partnership_type: str = "both"         # reseller | referral | both (agencies only)
 
 
 class AgencyIn(BaseModel):
@@ -134,7 +147,14 @@ def start_discovery(body: DiscoverIn, background_tasks: BackgroundTasks) -> dict
     if not categories:
         raise HTTPException(status_code=400, detail="At least one category is required.")
 
-    background_tasks.add_task(_run_discovery, city=body.city, state=body.state, categories=categories)
+    background_tasks.add_task(
+        _run_discovery,
+        city=body.city,
+        state=body.state,
+        categories=categories,
+        prospect_type=body.prospect_type,
+        partnership_type=body.partnership_type,
+    )
     return {"ok": True, "message": f"Discovery started for {body.city}, {body.state}. Check the queue in a few minutes."}
 
 
