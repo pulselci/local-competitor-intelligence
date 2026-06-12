@@ -815,4 +815,11 @@
 
     // ── Page init ──────────────────────────────────────────────────────────
     document.addEventListener("DOMContentLoaded", () => {
-      seed
+      seedDefaults();
+      loadCurrentForm();
+      attachAutosaveListeners();
+    });
+
+  </script>
+</body>
+</html>
