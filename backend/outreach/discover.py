@@ -500,7 +500,7 @@ We are looking to partner with agencies like yours to {angle}.
 
 It is a simple value-add for your existing clients, and most agencies find it complements their SEO or reputation management work well. I attached a one-pager with the details.
 
-Would you be open to a quick call to see if it is a fit?
+I would be happy to run a free report for one of your clients so you can see exactly what they would receive before committing to anything.
 
 Best,
 Craig
