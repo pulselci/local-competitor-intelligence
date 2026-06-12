@@ -281,11 +281,16 @@ def approve_and_send(prospect_id: str) -> dict:
     # Attach one-sheet for agency prospects
     attachment_path = None
     attachment_filename = None
-    if prospect.get("prospect_type") == "agency":
-        onesheet = Path(__file__).resolve().parent.parent / "static" / "pulse_lci_agency_onesheet.pdf"
+    prospect_type = prospect.get("prospect_type")
+    onesheet = Path(__file__).resolve().parent.parent / "static" / "pulse_lci_agency_onesheet.pdf"
+    print(f"[APPROVE] prospect_id={prospect_id} prospect_type={prospect_type!r} onesheet_exists={onesheet.exists()} onesheet_path={onesheet}")
+    if prospect_type == "agency":
         if onesheet.exists():
             attachment_path = str(onesheet)
             attachment_filename = "Pulse_LCI_Agency_Partner_Program.pdf"
+            print(f"[APPROVE] attaching one-sheet: {attachment_path}")
+        else:
+            print(f"[APPROVE] WARNING: one-sheet PDF not found at {onesheet}")
 
     result = send_plain_email(
         to_email=to_email,
