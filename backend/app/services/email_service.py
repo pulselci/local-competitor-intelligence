@@ -260,17 +260,20 @@ def send_plain_email(
     body: str,
     from_name: str = "Craig",
     from_address: str = "craig@pulselci.com",
+    attachment_path: str | None = None,
+    attachment_filename: str | None = None,
 ) -> "EmailSendResult":
     """
-    Send a plain-text email with no PDF attachment.
+    Send a plain-text email, optionally with a file attachment.
     Outreach emails come from Craig personally (craig@pulselci.com).
     SMTP credentials still authenticate via SMTP_USER/SMTP_PASS.
     """
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
 
-    # Use craig@pulselci.com credentials if available, otherwise fall back to main SMTP
     user = (settings.OUTREACH_SMTP_USER or settings.SMTP_USER or "").strip()
     password = (settings.OUTREACH_SMTP_PASS or settings.SMTP_PASS or "").strip()
     host = os.getenv("SMTP_HOST", "smtp.gmail.com")
@@ -278,24 +281,32 @@ def send_plain_email(
     use_tls = os.getenv("SMTP_TLS", "true").strip().lower() in ("1", "true", "yes")
     dry_run = os.getenv("EMAIL_DRY_RUN", "false").strip().lower() in ("1", "true", "yes")
 
-    # from_address should match the authenticated account for inbox placement
     resolved_from = user if user else from_address
     display_from = f"{from_name} <{resolved_from}>"
 
     if dry_run:
-        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject}")
+        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject} attachment={attachment_path}")
         return EmailSendResult(ok=True, error=None)
 
     if not user or not password:
         return EmailSendResult(ok=False, error="Missing SMTP_USER or SMTP_PASS")
 
     try:
-        msg = MIMEMultipart("alternative")
+        msg = MIMEMultipart("mixed")
         msg["Subject"] = subject
         msg["From"] = display_from
         msg["Reply-To"] = display_from
         msg["To"] = to_email
         msg.attach(MIMEText(body, "plain"))
+
+        if attachment_path and os.path.exists(attachment_path):
+            with open(attachment_path, "rb") as f:
+                part = MIMEBase("application", "octet-stream")
+                part.set_payload(f.read())
+            encoders.encode_base64(part)
+            fname = attachment_filename or os.path.basename(attachment_path)
+            part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
+            msg.attach(part)
 
         with smtplib.SMTP(host, port) as server:
             if use_tls:

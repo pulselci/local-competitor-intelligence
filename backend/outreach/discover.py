@@ -481,26 +481,26 @@ def generate_agency_draft(
     partnership_type: str = "both",
 ) -> tuple[str, str]:
     """Generate a short cold email for an agency prospect."""
-    subject = f"Partner opportunity — local competitor intelligence for your clients"
+    subject = "Partner opportunity: local competitor intelligence for your clients"
 
     if partnership_type == "reseller":
-        angle = "white-label our reports under your brand and offer them as an add-on service"
+        angle = "white-label our reports under your brand and offer them as an add-on to your current services"
     elif partnership_type == "referral":
-        angle = "earn a referral fee for every local business client you send our way"
+        angle = "earn 25% recurring revenue on every local business client you refer, for as long as they stay subscribed"
     else:
-        angle = "either white-label our reports under your brand or earn a referral fee per client — whatever fits your model"
+        angle = "either white-label our reports under your brand or refer clients and earn 25% recurring, whichever fits your model better"
 
     body = f"""Hi there,
 
 I came across {business_name} and wanted to reach out about a potential partnership.
 
-I run Pulse LCI — a monthly local competitor intelligence report for small businesses. Each report shows owners exactly how they stack up against nearby competitors: review trends, rating changes, who's gaining ground, and where they're falling behind.
+I run Pulse LCI, a monthly local competitor intelligence report for small businesses. Each report shows owners how they stack up against nearby competitors: review trends, rating changes, who is gaining ground, and where they are falling behind.
 
-We're looking to partner with agencies like yours to {angle}.
+We are looking to partner with agencies like yours to {angle}.
 
-It's a simple value-add for your existing clients — most agencies we talk to find it complements their SEO or reputation work well.
+It is a simple value-add for your existing clients, and most agencies find it complements their SEO or reputation management work well. I attached a one-pager with the details.
 
-Would you be open to a quick call to see if it's a fit?
+Would you be open to a quick call to see if it is a fit?
 
 Best,
 Craig

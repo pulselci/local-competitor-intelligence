@@ -278,10 +278,21 @@ def approve_and_send(prospect_id: str) -> dict:
     if not body:
         raise HTTPException(status_code=400, detail="No draft_body set")
 
+    # Attach one-sheet for agency prospects
+    attachment_path = None
+    attachment_filename = None
+    if prospect.get("prospect_type") == "agency":
+        onesheet = Path(__file__).resolve().parent.parent / "static" / "pulse_lci_agency_onesheet.pdf"
+        if onesheet.exists():
+            attachment_path = str(onesheet)
+            attachment_filename = "Pulse_LCI_Agency_Partner_Program.pdf"
+
     result = send_plain_email(
         to_email=to_email,
         subject=subject,
         body=body,
+        attachment_path=attachment_path,
+        attachment_filename=attachment_filename,
     )
 
     if not result.ok:
