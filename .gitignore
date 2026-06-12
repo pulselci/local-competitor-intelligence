@@ -31,3 +31,10 @@ dist/
 
 # ---- logs ----
 *.log
+
+# Large archives
+*.zip
+*.tar.gz
+
+*.zip
+*.tar.gz
