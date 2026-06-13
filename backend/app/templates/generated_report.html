@@ -1081,7 +1081,7 @@
         {% set perception_body = (sections.get("customer_perception_insights") or {}).get("body") or "" %}
         {% if perception_body %}
           {% set perception_sections = perception_body.split('\n\n') %}
-          {% set _label_prefixes = ['What Patients Are Saying', 'What Customers Are Saying', 'Your Closest Competitor', "Your Action This Month"] %}
+          {% set _label_prefixes = ['What Patients Are Saying', 'What Customers Are Saying', 'Your Next Rank Target', 'Your Closest Competitor', "Your Action This Month"] %}
           {# Weak spot label is dynamic e.g. "Blue Ash Dental Group's Weak Spot" — detect by suffix #}
           {% for raw_block in perception_sections %}
             {% set bk = raw_block.strip() %}
@@ -1144,7 +1144,7 @@
                     <td style="padding: 9px 12px; font-weight: 700; white-space: nowrap;">
                       {% if row.owner_count == 0 and row.market_total > 0 %}
                         <span style="color:#027a48; background:#ecfdf3; padding: 2px 8px; border-radius: 10px; font-size: 11px;">✓ Clean</span>
-                      {% elif row.owner_count > row.market_average %}
+                      {% elif row.owner_count >= 3 and row.owner_count > row.market_average %}
                         <span style="color:#b42318; background:#fff1f0; padding: 2px 8px; border-radius: 10px; font-size: 11px;">⚠ Risk</span>
                       {% elif row.owner_count > 0 %}
                         <span style="color:#b54708; background:#fffaeb; padding: 2px 8px; border-radius: 10px; font-size: 11px;">~ Watch</span>
@@ -1253,7 +1253,10 @@
         {% if sections.get("is_free_preview") == true %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
         <div class="summary-card">
           <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid #dce6f5;">Review Pulse</div>
-          {% set is_baseline = sections.get("is_baseline_report") or (review_pulse.get("is_baseline")) %}
+          {# Treat as baseline if: explicit flag set, pulse has no nonzero deltas, OR owner has 0 reviews gained this period (same condition as page-1 banner) #}
+          {% set _pulse_owner = sov_rows|selectattr("is_business")|list|first if sov_rows else none %}
+          {% set _owner_has_no_delta = _pulse_owner and (_pulse_owner.get("reviews_delta_30d") is none or (_pulse_owner.get("reviews_delta_30d") | int) == 0) %}
+          {% set is_baseline = sections.get("is_baseline_report") or (review_pulse.get("is_baseline")) or _owner_has_no_delta %}
           {% if is_baseline %}
           <div style="background: #f8fbff; border: 1px solid #dce6f5; border-radius: 10px; padding: 16px 18px; text-align: center; color: #53627d; font-size: 12px; line-height: 1.6;">
             <div style="font-weight: 700; color: #10233f; margin-bottom: 6px;">Review Pulse data will be available in your next report.</div>

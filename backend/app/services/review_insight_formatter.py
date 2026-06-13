@@ -306,7 +306,7 @@ def format_insights_for_report(
 
         if comp_lines:
             sections.append(
-                f"Your Closest Competitor: {top_name}\n"
+                f"Your Next Rank Target: {top_name}\n"
                 + "\n".join([s.strip() for s in comp_lines])
             )
 
