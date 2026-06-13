@@ -260,6 +260,33 @@ def onboard_prospect(
             logger.info("Created business %s for prospect %r", business_id, business_name)
 
         # ------------------------------------------------------------------
+        # 2b. Mark matching outreach prospect as report_sent so it drops off
+        #     the cold email follow-up list (they've moved to free-report flow)
+        # ------------------------------------------------------------------
+        try:
+            from app.core.db import get_conn as _get_conn
+            with _get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE outreach_prospects
+                           SET status = 'report_sent', updated_at = NOW()
+                         WHERE status = 'sent'
+                           AND (
+                               lower(trim(contact_email)) = lower(trim(%s))
+                               OR lower(trim(business_name)) = lower(trim(%s))
+                           )
+                        """,
+                        (contact_email, business_name),
+                    )
+                    updated = cur.rowcount
+                conn.commit()
+            if updated:
+                logger.info("Marked %d outreach prospect(s) as report_sent for %r", updated, business_name)
+        except Exception as exc:
+            logger.warning("Could not update outreach_prospects status: %s", exc)
+
+        # ------------------------------------------------------------------
         # 3–5. Collect snapshots, ingest reviews, create schedule record.
         #      These don't affect the Stripe redirect — run in background
         #      when background_data_collection=True so the caller can return

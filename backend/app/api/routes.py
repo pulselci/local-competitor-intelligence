@@ -2726,6 +2726,12 @@ def followup_cold_prospects():
                 FROM outreach_prospects
                 WHERE status IN ('sent', 'converted')
                   AND sent_at IS NOT NULL
+                  AND status != 'report_sent'
+                  AND lower(trim(business_name)) NOT IN (
+                      SELECT lower(trim(b.name))
+                      FROM businesses b
+                      JOIN generated_reports gr ON gr.business_id = b.id
+                  )
                 ORDER BY sent_at DESC
                 LIMIT 200
             """)
