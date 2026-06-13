@@ -474,10 +474,21 @@ def _leader_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) 
     ]
 
 
-def _challenger_fallback_recommendations() -> List[Dict[str, Any]]:
+def _challenger_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+    # Build a specific summary using actual gap + leader name when available
+    rows = sorted(_sov_rows(sections or {}), key=_reviews, reverse=True)
+    leader = rows[0] if rows else None
+    owner = next((r for r in rows if r.get("is_business")), None)
+    leader_name = _name(leader) if leader else "the market leader"
+    gap = (int(leader.get("reviews_total") or 0) - int(owner.get("reviews_total") or 0)) if (leader and owner) else 0
+    if gap > 0:
+        growth_summary = f"You are {gap} reviews behind {leader_name} — a gap that closes with consistent monthly review growth."
+    else:
+        growth_summary = "You are within striking distance of the leader — consistent review growth will close the gap."
+
     return [
         {
-            "summary": "You are within striking distance, but closing the gap requires a sustained review growth advantage.",
+            "summary": growth_summary,
             "action": "Set a monthly review target tied to the gap with the market leader.",
             "priority": "Immediate",
             "why_it_matters": "Without a clear growth target, the gap remains static or widens over time.",
@@ -559,7 +570,7 @@ def ensure_minimum_recommendations(
     fallback = (
         _leader_fallback_recommendations(sections)
         if is_leader
-        else _challenger_fallback_recommendations()
+        else _challenger_fallback_recommendations(sections)
     )
 
     existing_text = {

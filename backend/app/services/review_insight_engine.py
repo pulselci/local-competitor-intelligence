@@ -144,9 +144,19 @@ def build_review_insights_for_business(
         competitor_id = str(row.get("competitor_id"))
         competitor_name = str(row.get("competitor_name") or "Competitor")
 
-        # Skip self for competitor-facing insights
+        # For the owner: generate their own praise insight (tagged so formatter knows it's the owner),
+        # then skip all competitor-facing insights (hidden opportunities, messaging mismatches, etc.)
         if owner_competitor_id and competitor_id == owner_competitor_id:
-            logger.info("[review_insights] skipping owner competitor_id=%s name=%s", competitor_id, competitor_name)
+            logger.info("[review_insights] generating owner praise for competitor_id=%s name=%s", competitor_id, competitor_name)
+            owner_praise = build_praise_themes_insight(
+                business_id=business_id,
+                competitor_id=competitor_id,
+                competitor_name=competitor_name,
+            )
+            if owner_praise:
+                # Tag with owner_competitor_id so review_insight_formatter can identify it
+                (owner_praise.get("details") or {})["owner_competitor_id"] = competitor_id
+                insights.append(owner_praise)
             continue
 
         logger.info("[review_insights] analyzing competitor_id=%s name=%s review_count=%s",
