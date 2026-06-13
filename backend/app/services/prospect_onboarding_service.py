@@ -18,7 +18,9 @@ fully accurate from day one.
 """
 from __future__ import annotations
 
+import concurrent.futures as _cf
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Optional
 from uuid import UUID
@@ -140,6 +142,7 @@ def onboard_prospect(
     state: str,
     competitor_names: list[str],
     skip_report: bool = False,
+    background_data_collection: bool = False,
 ) -> OnboardingResult:
     """
     Full onboarding pipeline for a new prospect.
@@ -154,9 +157,22 @@ def onboard_prospect(
         )
 
         # ------------------------------------------------------------------
-        # 1. Resolve Place IDs
+        # 1. Resolve Place IDs — all in parallel to eliminate sequential wait
         # ------------------------------------------------------------------
-        business_place = resolve_place_id(business_name, city, state)
+        clean_competitor_names = [c.strip() for c in competitor_names if c.strip()]
+        all_lookup_names = [business_name] + clean_competitor_names
+
+        logger.info("Resolving %d place IDs in parallel", len(all_lookup_names))
+        with _cf.ThreadPoolExecutor(max_workers=min(len(all_lookup_names), 10)) as pool:
+            place_futures = [
+                pool.submit(resolve_place_id, name, city, state)
+                for name in all_lookup_names
+            ]
+            place_results = [f.result() for f in place_futures]
+
+        business_place = place_results[0]
+        comp_place_results = place_results[1:]
+
         if not business_place:
             logger.warning(
                 "Could not resolve Place ID for business %r — continuing without it",
@@ -183,11 +199,7 @@ def onboard_prospect(
         )
 
         # Competitors
-        for comp_name in competitor_names:
-            comp_name = comp_name.strip()
-            if not comp_name:
-                continue
-            comp_place = resolve_place_id(comp_name, city, state)
+        for comp_name, comp_place in zip(clean_competitor_names, comp_place_results):
             if not comp_place:
                 logger.warning(
                     "Could not resolve Place ID for competitor %r — adding without it",
@@ -248,41 +260,46 @@ def onboard_prospect(
             logger.info("Created business %s for prospect %r", business_id, business_name)
 
         # ------------------------------------------------------------------
-        # 3. Collect initial snapshots (current rating + review count)
+        # 3–5. Collect snapshots, ingest reviews, create schedule record.
+        #      These don't affect the Stripe redirect — run in background
+        #      when background_data_collection=True so the caller can return
+        #      the checkout URL immediately.
         # ------------------------------------------------------------------
-        try:
-            collect_snapshots_for_business(business_id)
-            logger.info("Snapshots collected for %s", business_id)
-        except Exception as exc:
-            logger.warning("Snapshot collection failed for %s: %s", business_id, exc)
+        def _collect_data(biz_id: UUID) -> None:
+            try:
+                collect_snapshots_for_business(biz_id)
+                logger.info("Snapshots collected for %s", biz_id)
+            except Exception as exc:
+                logger.warning("Snapshot collection failed for %s: %s", biz_id, exc)
 
-        # ------------------------------------------------------------------
-        # 4. Ingest reviews (customer perception text)
-        # ------------------------------------------------------------------
-        try:
-            ingest_reviews_for_business(str(business_id))
-            logger.info("Reviews ingested for %s", business_id)
-        except Exception as exc:
-            logger.warning("Review ingestion failed for %s: %s", business_id, exc)
+            try:
+                ingest_reviews_for_business(str(biz_id))
+                logger.info("Reviews ingested for %s", biz_id)
+            except Exception as exc:
+                logger.warning("Review ingestion failed for %s: %s", biz_id, exc)
 
-        # ------------------------------------------------------------------
-        # 5. Ensure a schedule record exists (required by generated_reports FK)
-        # ------------------------------------------------------------------
-        try:
-            upsert_schedule_for_business(
-                business_id,
-                frequency="monthly",
-                day_of_week=None,
-                day_of_month=1,
-                hour=8,
-                minute=0,
-                timezone="America/New_York",
-                is_enabled=False,   # disabled until they become a paying client
-                next_run_at=None,
-            )
-            logger.info("Schedule upserted for %s", business_id)
-        except Exception as exc:
-            logger.warning("Schedule upsert failed for %s: %s", business_id, exc)
+            try:
+                upsert_schedule_for_business(
+                    biz_id,
+                    frequency="monthly",
+                    day_of_week=None,
+                    day_of_month=1,
+                    hour=8,
+                    minute=0,
+                    timezone="America/New_York",
+                    is_enabled=False,   # disabled until they become a paying client
+                    next_run_at=None,
+                )
+                logger.info("Schedule upserted for %s", biz_id)
+            except Exception as exc:
+                logger.warning("Schedule upsert failed for %s: %s", biz_id, exc)
+
+        if background_data_collection:
+            t = threading.Thread(target=_collect_data, args=(business_id,), daemon=True)
+            t.start()
+            logger.info("Data collection (snapshots/reviews/schedule) backgrounded for %s", business_id)
+        else:
+            _collect_data(business_id)
 
         # ------------------------------------------------------------------
         # 6–8. Generate, mark, and email report (skipped for paid subscribers —

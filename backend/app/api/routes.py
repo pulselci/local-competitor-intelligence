@@ -541,7 +541,8 @@ def subscribe(payload: SubscribeIn):
         city=payload.city,
         state=payload.state,
         competitor_names=payload.competitor_names,
-        skip_report=True,  # Webhook generates full report after payment confirms
+        skip_report=True,                  # Webhook generates full report after payment confirms
+        background_data_collection=True,   # Snapshot/review/schedule collection runs in background
     )
 
     if not result.ok or not result.business_id:
@@ -923,15 +924,17 @@ def billing_checkout_success(session_id: str, redirect: str | None = None):
 
         if not business_id:
             print(f"[CHECKOUT-SUCCESS] ERROR: no business_id in session {session_id}", flush=True)
-            return RedirectResponse(url=welcome_url)
-
-        _activate_subscriber(business_id)
-        print(f"[CHECKOUT-SUCCESS] activation complete for {business_id}", flush=True)
+        else:
+            import threading as _threading
+            t = _threading.Thread(target=_activate_subscriber, args=(business_id,), daemon=True)
+            t.start()
+            print(f"[CHECKOUT-SUCCESS] activation started in background for {business_id}", flush=True)
 
     except Exception as exc:
         import traceback
         print(f"[CHECKOUT-SUCCESS] ERROR: {exc}\n{traceback.format_exc()}", flush=True)
 
+    # Redirect immediately — activation (report generation + email) runs in background
     return RedirectResponse(url=welcome_url)
 
 
