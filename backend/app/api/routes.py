@@ -2439,10 +2439,18 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
         else:
             theme_str = f"{theme1_label} ({theme1_count} mentions)"
         action = "Reduce your complaint volume before adding more reviews."
+        if owner_rating_val > 0 and owner_rating_val < 4.5:
+            rating_note = (
+                f"These signals are dragging your {owner_rating_val:.1f}★ rating down — "
+                f"new reviews at the current experience level will reinforce the pattern, not fix it. "
+            )
+        else:
+            rating_note = (
+                f"Keeping these in check protects your rating and prevents them from becoming a pattern. "
+            )
         detail = (
             f"Your reviews show recurring complaints about {theme_str}. "
-            f"These signals are dragging your rating down — new reviews at the current experience level "
-            f"will reinforce the pattern, not fix it. "
+            f"{rating_note}"
             f"Identify what's driving {theme1_label} complaints specifically and address it at the operational level first."
         )
     else:
