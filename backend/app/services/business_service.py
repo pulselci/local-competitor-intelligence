@@ -17,8 +17,8 @@ def create_business_and_competitors(payload: BusinessIntakeIn) -> BusinessWithCo
         with conn.cursor() as cur:
             cur.execute(
                 """
-                insert into public.businesses (name, primary_domain, city, state, country, notes)
-                values (%s, %s, %s, %s, %s, %s)
+                insert into public.businesses (name, primary_domain, city, state, country, notes, is_test)
+                values (%s, %s, %s, %s, %s, %s, false)
                 returning id, name, primary_domain, city, state, country, notes, created_at
                 """,
                 (
