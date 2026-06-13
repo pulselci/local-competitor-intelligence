@@ -2342,18 +2342,45 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                 )
         else:
             gap = leader_reviews - owner_reviews
-            months_moderate = max(1, round(gap / max(gap // 12, 1)))
-            per_month_needed = max(3, gap // 6)
             if top_mover_name and top_mover_gain > 0:
                 mover_note = f" {top_mover_name} gained {top_mover_gain} reviews last week alone — they are accelerating."
             else:
                 mover_note = ""
-            action = f"Close the {gap:,}-review gap with {leader_name}."
-            detail = (
-                f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}. "
-                f"You need roughly {per_month_needed}+ new reviews per month to close this in 6 months.{mover_note} "
-                f"Build a post-appointment review ask into your workflow today."
+
+            # Find the next competitor just above the owner — the achievable near-term target
+            next_above = min(
+                [r for r in competitors if int(r.get("reviews_total") or 0) > owner_reviews],
+                key=lambda r: int(r.get("reviews_total") or 0),
+                default=None,
             )
+
+            REALISTIC_MONTHLY = 20  # reviews/month a practice can realistically collect with a consistent ask
+
+            if gap > 300 and next_above:
+                # Gap to leader is too large for a 6-month plan — focus on next rank milestone
+                next_name = next_above.get("competitor_name") or "the next competitor"
+                next_reviews = int(next_above.get("reviews_total") or 0)
+                next_gap = next_reviews - owner_reviews + 1
+                months_to_next = max(1, round(next_gap / REALISTIC_MONTHLY))
+                action = f"Your near-term goal: move past {next_name} into the next rank."
+                detail = (
+                    f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,} — "
+                    f"closing that gap is a multi-year effort.{mover_note} "
+                    f"Your achievable milestone is overtaking {next_name} ({next_reviews:,} reviews), "
+                    f"just {next_gap} away. At {REALISTIC_MONTHLY}+ reviews per month — "
+                    f"realistic with a consistent post-visit ask — you'd pass them in about {months_to_next} months. "
+                    f"Ask every patient at checkout and follow up with a text or email the same day."
+                )
+            else:
+                # Gap is closable in a reasonable timeframe
+                per_month_needed = max(3, gap // 6)
+                action = f"Close the {gap:,}-review gap with {leader_name}."
+                detail = (
+                    f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}. "
+                    f"You need roughly {per_month_needed}+ new reviews per month above {leader_name}'s pace "
+                    f"to close this in 6 months.{mover_note} "
+                    f"Build a post-appointment review ask into your workflow today."
+                )
 
         plan.append({"type": "execution_review_gap", "action": action, "detail": detail})
 
