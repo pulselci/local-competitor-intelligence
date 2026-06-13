@@ -2400,9 +2400,9 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
             # Owner's rating is at or below the weakest competitor — focus on improvement
             action = "Improving your rating is your highest-visibility opportunity."
             detail = (
-                f"Your current {owner_rating_val:.1f}★ rating is below the market average. "
-                f"Respond to every negative review, ask happy patients to update their rating, "
-                f"and build a consistent post-visit review request into your workflow."
+                f"Your current {owner_rating_val:.1f}★ rating is below every competitor in this market. "
+                f"Respond to every negative review within 24 hours, and build a consistent post-visit review request "
+                f"into your workflow so happy customers leave new reviews and shift the average up."
             )
     else:
         action = "Highlight one clear advantage customers should associate with your business."
@@ -2411,62 +2411,93 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
     if action:
         plan.append({"type": "execution_positioning", "action": action, "detail": detail})
 
-    # ── Item 3: Exploit competitor weakness ───────────────────────────────
+    # ── Item 3: Own friction first, then competitor weakness ─────────────────
     friction_data = sections.get("customer_friction_signals") or {}
     friction_insights = friction_data.get("insights") or []
+    owner_top_themes = friction_data.get("owner_top_themes") or []
 
-    # Find the competitor with the most/highest friction
-    worst_comp = None
-    worst_theme = None
-    worst_count = 0
-    for fi in friction_insights:
-        details = fi.get("details") or {}
-        cname = details.get("competitor_name") or ""
-        theme = details.get("theme") or details.get("top_theme") or ""
-        count = int(details.get("complaint_count") or details.get("market_total") or 0)
-        if cname and count > worst_count:
-            worst_count = count
-            worst_comp = cname
-            worst_theme = theme
+    # Check whether the owner's own friction is severe enough to warrant calling it out.
+    # Threshold: top owner theme >= 5 mentions, and at least 2 themes with >= 3 mentions.
+    significant_owner_themes = [t for t in owner_top_themes if int(t.get("count") or 0) >= 3]
+    top_owner_theme = owner_top_themes[0] if owner_top_themes else None
+    owner_friction_severe = (
+        top_owner_theme
+        and int(top_owner_theme.get("count") or 0) >= 5
+        and len(significant_owner_themes) >= 2
+    )
 
-    if worst_comp and worst_theme:
-        action = f"Turn {worst_comp}'s weakness into your headline."
+    if owner_friction_severe:
+        # Owner IS the friction problem — address it directly
+        t1 = owner_top_themes[0]
+        t2 = owner_top_themes[1] if len(owner_top_themes) > 1 else None
+        theme1_label = t1.get("theme_label", "").lower()
+        theme1_count = int(t1.get("count") or 0)
+        if t2:
+            theme2_label = t2.get("theme_label", "").lower()
+            theme2_count = int(t2.get("count") or 0)
+            theme_str = f"{theme1_label} ({theme1_count} mentions) and {theme2_label} ({theme2_count} mentions)"
+        else:
+            theme_str = f"{theme1_label} ({theme1_count} mentions)"
+        action = "Reduce your complaint volume before adding more reviews."
         detail = (
-            f"Customers are complaining about {worst_theme.lower()} at {worst_comp} "
-            f"({worst_count} mentions in recent reviews). "
-            f"If that's a strength of yours, say so explicitly — on your website, in your Google profile, and when customers ask why they should choose you."
+            f"Your reviews show recurring complaints about {theme_str}. "
+            f"These signals are dragging your rating down — new reviews at the current experience level "
+            f"will reinforce the pattern, not fix it. "
+            f"Identify what's driving {theme1_label} complaints specifically and address it at the operational level first."
         )
     else:
-        # Fallback: use the messaging gap from perception narrative if available
-        perception_body = (sections.get("customer_perception_insights") or {}).get("body") or ""
-        weak_spot_comp = ""
-        weak_spot_detail = ""
-        if "Weak Spot" in perception_body:
-            try:
-                # Extract "Blue Ash Dental Group's Weak Spot\nTheir patients..."
-                before_label = perception_body.split("Weak Spot")[0]
-                # Grab the competitor name from the last line before "Weak Spot"
-                weak_spot_comp = before_label.strip().split("\n")[-1].replace("'s", "").strip()
-                raw = perception_body.split("Weak Spot")[1].split("\n\n")[0].strip()
-                # Replace anonymous "Their" with the competitor name
-                if weak_spot_comp:
-                    raw = raw.replace("Their customers", f"{weak_spot_comp}'s customers")
-                    raw = raw.replace("their website", f"{weak_spot_comp}'s website")
-                    raw = raw.replace("they're advertising", f"{weak_spot_comp} is advertising")
-                weak_spot_detail = raw
-            except Exception:
-                pass
+        # Look for a competitor weakness to exploit
+        worst_comp = None
+        worst_theme = None
+        worst_count = 0
+        for fi in friction_insights:
+            details = fi.get("details") or {}
+            cname = details.get("competitor_name") or ""
+            theme = details.get("theme") or details.get("top_theme") or ""
+            count = int(details.get("complaint_count") or details.get("market_total") or 0)
+            if cname and count > worst_count:
+                worst_count = count
+                worst_comp = cname
+                worst_theme = theme
 
-        if weak_spot_detail:
-            comp_label = f" {weak_spot_comp}'s" if weak_spot_comp else " a competitor's"
-            action = f"Exploit{comp_label} gap between what customers value and what they advertise."
-            # Truncate cleanly at sentence boundary
-            full = weak_spot_detail[:600]
-            last_period = full.rfind(".")
-            detail = full[:last_period + 1] if last_period > 100 else full
+        if worst_comp and worst_theme:
+            action = f"Turn {worst_comp}'s weakness into your headline."
+            detail = (
+                f"Customers are complaining about {worst_theme.lower()} at {worst_comp} "
+                f"({worst_count} mentions in recent reviews). "
+                f"If that's a strength of yours, say so explicitly — on your website, in your Google profile, "
+                f"and when customers ask why they should choose you."
+            )
         else:
-            action = "Improve how your reviews and credibility are presented."
-            detail = "Feature top reviews prominently, respond to every review, and highlight credentials or guarantees on your homepage."
+            # Fallback: messaging gap from perception narrative
+            perception_body = (sections.get("customer_perception_insights") or {}).get("body") or ""
+            weak_spot_comp = ""
+            weak_spot_detail = ""
+            if "Weak Spot" in perception_body:
+                try:
+                    before_label = perception_body.split("Weak Spot")[0]
+                    weak_spot_comp = before_label.strip().split("\n")[-1].replace("'s", "").strip()
+                    raw = perception_body.split("Weak Spot")[1].split("\n\n")[0].strip()
+                    if weak_spot_comp:
+                        raw = raw.replace("Their customers", f"{weak_spot_comp}'s customers")
+                        raw = raw.replace("their website", f"{weak_spot_comp}'s website")
+                        raw = raw.replace("they're advertising", f"{weak_spot_comp} is advertising")
+                    weak_spot_detail = raw
+                except Exception:
+                    pass
+
+            if weak_spot_detail:
+                comp_label = f" {weak_spot_comp}'s" if weak_spot_comp else " a competitor's"
+                action = f"Exploit{comp_label} gap between what customers value and what they advertise."
+                full = weak_spot_detail[:600]
+                last_period = full.rfind(".")
+                detail = full[:last_period + 1] if last_period > 100 else full
+            else:
+                action = "Improve how your reviews and credibility are presented."
+                detail = (
+                    "Feature your top 2–3 reviews prominently on your homepage, respond to every review within 48 hours, "
+                    "and highlight any credentials, guarantees, or awards that competitors can't claim."
+                )
 
     plan.append({"type": "execution_weakness", "action": action, "detail": detail})
 

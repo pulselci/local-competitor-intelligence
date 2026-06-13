@@ -223,9 +223,10 @@ def format_insights_for_report(
         for phrase in row.get("raw_praise_phrases") or []:
             all_raw_phrases[phrase] += 1
 
-    # Pick the most evocative actual words (avoid theme labels like "professionalism")
+    # Pick the most evocative actual words (avoid theme labels and ambiguous nouns)
+    # "patient" is filtered because it's a business noun in healthcare contexts, not a praise adjective
     _theme_label_words = {"professionalism", "quality", "speed", "trust", "pricing",
-                          "communication", "convenience"}
+                          "communication", "convenience", "patient", "patients", "staff"}
     top_raw_phrases = [
         w for w, _ in all_raw_phrases.most_common(8)
         if w.lower() not in _theme_label_words
