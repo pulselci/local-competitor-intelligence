@@ -1253,16 +1253,16 @@
         {% if sections.get("is_free_preview") == true %}<div class="premium-section-wrapper"><div class="premium-blur-content">{% endif %}
         <div class="summary-card">
           <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 14px; border-bottom: 1px solid #dce6f5;">Review Pulse</div>
-          {# is_baseline=True when fewer than 7 days of snapshot data exist — set in Python #}
+          {# is_baseline=True when fewer than 60 days of snapshot data exist — set in Python #}
           {% set is_baseline = sections.get("is_baseline_report") or (review_pulse.get("is_baseline")) %}
           {% if is_baseline %}
           <div style="background: #f8fbff; border: 1px solid #dce6f5; border-radius: 10px; padding: 16px 18px; text-align: center; color: #53627d; font-size: 12px; line-height: 1.6;">
-            <div style="font-weight: 700; color: #10233f; margin-bottom: 6px;">Review Pulse data will be available in your next report.</div>
-            This is your baseline report — 30 days of tracking data is needed to show review momentum trends. Your next report will include full velocity data for every competitor in your market.
+            <div style="font-weight: 700; color: #10233f; margin-bottom: 6px;">Review Momentum will be available after 60 days of tracking.</div>
+            60 days of data gives us enough history to show meaningful review velocity trends — whether competitors are accelerating, coasting, or slowing down. This section will appear automatically once that threshold is reached.
           </div>
           {% else %}
           <div class="detail-text" style="margin-bottom: 10px;">
-            This chart shows net review change over the last 30 days. Up means a competitor is gaining review momentum. Down means reviews are being lost or momentum has reversed.
+            This chart shows 7-day rolling review momentum over the last 60 days. A rising line means a competitor is picking up reviews faster than their recent pace. A flat line means steady, consistent activity. A dip means they've slowed down.
           </div>
           <img src="data:image/png;base64,{{ review_pulse.chart_base64 }}" alt="Review pulse chart" style="width: 100%; max-width: 620px; display: block; margin: 6px auto 4px auto;" />
           {% endif %}

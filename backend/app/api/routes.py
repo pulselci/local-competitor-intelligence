@@ -2113,7 +2113,6 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
 
     color_index = 0
     plotted_any = False
-    any_nonzero_delta = False
 
     for comp_id, payload in sorted(
         series_by_competitor.items(),
@@ -2133,43 +2132,38 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
         if not daily_counts:
             continue
 
-        baseline_count = baseline_by_competitor.get(comp_id)
-        if baseline_count is None:
-            first_day_with_data = min(daily_counts.keys())
-            baseline_count = daily_counts[first_day_with_data]
-
-        if baseline_count is None:
-            continue
+        # Pre-compute carry-forward counts so we can look back exactly 7 days
+        carried_counts: dict = {}
+        last_known = None
+        for day in all_days:
+            if day in daily_counts:
+                last_known = daily_counts[day]
+            if last_known is not None:
+                carried_counts[day] = last_known
 
         x_values = []
         y_values = []
-        running_count = baseline_count
 
         for day in all_days:
-            if day in daily_counts:
-                running_count = daily_counts[day]
+            today_count = carried_counts.get(day)
+            if today_count is None:
+                continue
 
-            if running_count is None:
+            seven_days_ago = day - timedelta(days=7)
+            count_7_ago = carried_counts.get(seven_days_ago)
+            if count_7_ago is None:
                 continue
 
             try:
-                delta = float(running_count) - float(baseline_count)
+                momentum = int(float(today_count)) - int(float(count_7_ago))
             except (TypeError, ValueError):
                 continue
 
-            if math.isnan(delta) or math.isinf(delta):
-                continue
-
-            delta = int(delta)
-
             x_values.append(day)
-            y_values.append(delta)
+            y_values.append(momentum)
 
         if not x_values or not y_values:
             continue
-
-        if any(v != 0 for v in y_values):
-            any_nonzero_delta = True
 
         ax.plot(
             x_values,
@@ -2188,8 +2182,8 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
 
     ax.axhline(0, color="#d9dee5", linewidth=1.0)
 
-    ax.set_title("Review Pulse (last 30 days)", fontsize=10, color="#243248", pad=10)
-    ax.set_ylabel("Net review change", fontsize=9, color="#5b6570")
+    ax.set_title("Review Momentum (last 60 days)", fontsize=10, color="#243248", pad=10)
+    ax.set_ylabel("Reviews gained (last 7 days)", fontsize=9, color="#5b6570")
     ax.tick_params(axis="x", labelsize=8, colors="#5b6570")
     ax.tick_params(axis="y", labelsize=8, colors="#5b6570")
 
@@ -2223,8 +2217,8 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
     buf.seek(0)
     chart_base64 = base64.b64encode(buf.read()).decode("utf-8")
 
-    # Show chart if any competitor has 7+ days of snapshot data
-    min_days_for_chart = 7
+    # Show chart once 60 days of snapshot data exist — enough for meaningful velocity context
+    min_days_for_chart = 60
     has_enough_data = max(
         (len(p["daily_counts"]) for p in series_by_competitor.values()),
         default=0,
