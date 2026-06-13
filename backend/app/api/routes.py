@@ -2301,7 +2301,8 @@ def _build_period_delta(sections: dict) -> dict:
         return {"is_baseline": True}
 
     owner_reviews = int(owner.get("reviews_total") or 0)
-    owner_gained = int(owner.get("reviews_delta_7d") or 0)
+    # Use 30d delta (full reporting period) not 7d (just last week)
+    owner_gained = int(owner.get("reviews_delta_30d") or owner.get("reviews_delta_7d") or 0)
     owner_rank = int(owner.get("rank") or 99)
     owner_rating = float(owner.get("google_rating") or 0)
 
@@ -2309,7 +2310,7 @@ def _build_period_delta(sections: dict) -> dict:
         {
             "name": c.get("competitor_name") or c.get("name") or "Unknown",
             "reviews": int(c.get("reviews_total") or 0),
-            "gained": int(c.get("reviews_delta_7d") or 0),
+            "gained": int(c.get("reviews_delta_30d") or c.get("reviews_delta_7d") or 0),
             "rank": int(c.get("rank") or 99),
             "rating": float(c.get("google_rating") or 0),
         }
@@ -2653,19 +2654,34 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                 # Always target the next rank milestone — keeps the goal achievable
                 next_name = next_above.get("competitor_name") or "the next competitor"
                 next_reviews = int(next_above.get("reviews_total") or 0)
-                next_gap = next_reviews - owner_reviews + 1
+                next_gap = next_reviews - owner_reviews  # exact gap; +1 was causing mismatch with header
                 months_to_next = max(1, round(next_gap / realistic_monthly))
                 is_large_gap = gap > 300
-                action = f"Your near-term goal: move past {next_name} into the next rank."
-                detail = (
-                    f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}"
-                    + (" — closing that gap is a multi-year effort." if is_large_gap else ".")
-                    + (f" {mover_note.strip()}" if mover_note else "")
-                    + f" Your achievable near-term milestone is passing {next_name} ({next_reviews:,} reviews), "
-                    f"just {next_gap} away. At {realistic_monthly}+ reviews per month — "
-                    f"realistic with a consistent post-job ask — you'd reach that in about {months_to_next} months. "
-                    f"Build a review request into your follow-up process after every completed job."
-                )
+                next_is_leader = (next_name == leader_name)
+
+                if is_large_gap and next_is_leader:
+                    # Business is already #2 with a big gap to the lone leader — no intermediate target
+                    quarterly_target = realistic_monthly * 3
+                    action = f"Grow your review base — you need {next_gap} more reviews to reach #1."
+                    detail = (
+                        f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,} "
+                        f"— closing that gap takes time, but every review moves you closer."
+                        + (f" {mover_note.strip()}" if mover_note else "")
+                        + f" A realistic quarterly target is +{quarterly_target} reviews. "
+                        f"At that pace you'd close the gap in about {months_to_next} months. "
+                        f"Build a review request into your follow-up process after every completed job."
+                    )
+                else:
+                    action = f"Your near-term goal: move past {next_name} into the next rank."
+                    detail = (
+                        f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}"
+                        + (" — closing that gap is a multi-year effort." if is_large_gap else ".")
+                        + (f" {mover_note.strip()}" if mover_note else "")
+                        + f" Your achievable near-term milestone is passing {next_name} ({next_reviews:,} reviews), "
+                        f"just {next_gap} away. At {realistic_monthly}+ reviews per month — "
+                        f"realistic with a consistent post-job ask — you'd reach that in about {months_to_next} months. "
+                        f"Build a review request into your follow-up process after every completed job."
+                    )
             else:
                 # No competitor above — owner may be leader or gap to leader is already small
                 months_to_close = max(2, round(gap / realistic_monthly))
