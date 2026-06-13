@@ -2281,16 +2281,300 @@ def delete_snapshot(snapshot_id: UUID):
 
 
 # ---------------------------------------------------------------------------
+# Delta layer — period-over-period change extraction
+# ---------------------------------------------------------------------------
+
+def _build_period_delta(sections: dict) -> dict:
+    """
+    Extract what changed this period from SOV rows.
+    reviews_delta_7d on each row is the full-period delta (first→last snapshot),
+    despite the field name.
+    Returns is_baseline=True when all deltas are zero (no prior snapshot data).
+    """
+    sov = sections.get("share_of_voice") or {}
+    sov_rows = sov.get("rows") or []
+
+    owner = next((r for r in sov_rows if r.get("is_business")), None)
+    competitors = [r for r in sov_rows if not r.get("is_business")]
+
+    if not owner or not competitors:
+        return {"is_baseline": True}
+
+    owner_reviews = int(owner.get("reviews_total") or 0)
+    owner_gained = int(owner.get("reviews_delta_7d") or 0)
+    owner_rank = int(owner.get("rank") or 99)
+    owner_rating = float(owner.get("google_rating") or 0)
+
+    comp_movements = [
+        {
+            "name": c.get("competitor_name") or c.get("name") or "Unknown",
+            "reviews": int(c.get("reviews_total") or 0),
+            "gained": int(c.get("reviews_delta_7d") or 0),
+            "rank": int(c.get("rank") or 99),
+            "rating": float(c.get("google_rating") or 0),
+        }
+        for c in competitors
+    ]
+
+    all_deltas = [owner_gained] + [c["gained"] for c in comp_movements]
+    if all(d == 0 for d in all_deltas):
+        return {"is_baseline": True}
+
+    leader = comp_movements[0] if comp_movements else None
+
+    above_owner = sorted(
+        [c for c in comp_movements if c["reviews"] > owner_reviews],
+        key=lambda c: c["reviews"],
+    )
+    next_target = above_owner[0] if above_owner else None
+
+    accelerating = sorted(
+        [c for c in comp_movements if c["gained"] >= 8],
+        key=lambda c: c["gained"],
+        reverse=True,
+    )
+    stalling_above = [c for c in comp_movements if c["reviews"] > owner_reviews and c["gained"] == 0]
+    active_competitors = [c for c in comp_movements if c["gained"] > 0]
+
+    return {
+        "is_baseline": False,
+        "owner_gained": owner_gained,
+        "owner_reviews": owner_reviews,
+        "owner_rank": owner_rank,
+        "owner_rating": owner_rating,
+        "leader": leader,
+        "next_target": next_target,
+        "accelerating": accelerating,
+        "stalling_above": stalling_above,
+        "active_competitors": active_competitors,
+        "comp_movements": comp_movements,
+    }
+
+
+def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
+    """
+    Generate 4 event-driven execution plan items from period delta data.
+    Only called when delta["is_baseline"] is False.
+    """
+    owner_gained = delta["owner_gained"]
+    owner_reviews = delta["owner_reviews"]
+    owner_rank = delta["owner_rank"]
+    owner_rating = delta["owner_rating"]
+    next_target = delta.get("next_target")
+    leader = delta.get("leader")
+    accelerating = delta.get("accelerating") or []
+    stalling_above = delta.get("stalling_above") or []
+    active_competitors = delta.get("active_competitors") or []
+    comp_movements = delta.get("comp_movements") or []
+
+    if owner_reviews < 50:
+        realistic_monthly = 4
+    elif owner_reviews < 150:
+        realistic_monthly = 8
+    elif owner_reviews < 300:
+        realistic_monthly = 12
+    else:
+        realistic_monthly = 18
+
+    recs: list[dict] = []
+
+    # ── Rec 1 (Immediate): Progress on next target ────────────────────────
+    if next_target:
+        target_name = next_target["name"]
+        target_reviews = next_target["reviews"]
+        target_gained = next_target["gained"]
+        gap = target_reviews - owner_reviews
+        prev_gap = gap + owner_gained - target_gained  # gap last period
+
+        if owner_gained >= realistic_monthly:
+            months_remaining = max(1, round(gap / max(owner_gained, 1)))
+            action = f"You gained {owner_gained} reviews last month — {'ahead of' if owner_gained > realistic_monthly else 'on'} pace."
+            detail = (
+                f"The gap to {target_name} is now {gap}"
+                + (f" (down from {prev_gap})" if prev_gap > gap else "")
+                + f". At this rate you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''}. "
+                f"Whatever you're doing to get reviews — make it a repeatable process."
+            )
+        elif owner_gained > 0:
+            months_remaining = max(1, round(gap / max(owner_gained, 1)))
+            action = f"You gained {owner_gained} reviews last month — keep the cadence."
+            detail = (
+                f"The gap to {target_name} is now {gap}. "
+                f"At {owner_gained}/month you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''}. "
+                f"A consistent post-job ask is what sustains this."
+            )
+        else:
+            if target_gained > 0:
+                detail = (
+                    f"No reviews gained last month while {target_name} added {target_gained}, "
+                    f"widening the gap to {gap}. "
+                    f"Without a consistent review ask built into your close-out process, this gap doesn't close."
+                )
+            else:
+                detail = (
+                    f"No reviews gained last month. The gap to {target_name} holds at {gap}. "
+                    f"Build a one-step review ask into your job close-out — "
+                    f"even {realistic_monthly} reviews a month moves the needle."
+                )
+            action = f"No reviews gained last month — the gap to {target_name} isn't closing."
+    else:
+        if owner_gained > 0:
+            action = f"You gained {owner_gained} reviews last month — extend your lead."
+            detail = (
+                f"You're ranked #{owner_rank} with {owner_reviews:,} reviews. "
+                f"Keep the ask going after every job to widen the gap on challengers below you."
+            )
+        else:
+            action = "No reviews gained last month — protect your position."
+            detail = (
+                f"You hold rank #{owner_rank} with {owner_reviews:,} reviews but gained none this period. "
+                f"A consistent post-job review request keeps your lead from shrinking."
+            )
+
+    recs.append({"action": action, "detail": detail, "priority": "Immediate"})
+
+    # ── Rec 2 (Immediate): Most notable competitor movement ───────────────
+    if accelerating:
+        top = accelerating[0]
+        top_name = top["name"]
+        top_gained = top["gained"]
+        above = top["reviews"] > owner_reviews
+        if above:
+            action = f"{top_name} gained {top_gained} reviews last month — they're accelerating above you."
+            detail = (
+                f"They're ahead of you in rank and pulling further away. "
+                f"You don't need to match their pace, but if this continues, "
+                f"the gap becomes significantly harder to close. Prioritize your ask process now."
+            )
+        else:
+            action = f"{top_name} gained {top_gained} reviews last month — they're closing from below."
+            detail = (
+                f"They're currently ranked below you but moving fast. "
+                f"At this pace they could pass you within a few months. "
+                f"Keep your review cadence up to protect your position."
+            )
+    elif stalling_above:
+        top = stalling_above[0]
+        top_name = top["name"]
+        gap = top["reviews"] - owner_reviews
+        action = f"{top_name} gained 0 reviews last month — a window is open."
+        detail = (
+            f"They're {gap} reviews ahead but stalled this month. "
+            f"If you keep your current pace and they stay flat, "
+            f"you'll close this gap faster than the original projection. "
+            f"This is how rank changes happen — don't ease up."
+        )
+    elif active_competitors:
+        count = len(active_competitors)
+        names = " and ".join(c["name"] for c in active_competitors[:2])
+        action = f"{count} competitor{'s' if count > 1 else ''} gained reviews last month — stay consistent."
+        detail = (
+            f"{names} added reviews this period. "
+            f"Review share shifts when competitors grow and you don't. "
+            f"A consistent ask process is the only way to keep pace."
+        )
+    else:
+        action = "The market was quiet last month — use it to build process."
+        detail = (
+            "No competitor made a significant move. "
+            "Quiet months are the best time to lock in a repeatable review ask "
+            "so you're compounding when competition picks up again."
+        )
+
+    recs.append({"action": action, "detail": detail, "priority": "Immediate"})
+
+    # ── Rec 3 (Next): Rating / positioning ───────────────────────────────
+    perception_text = (sections.get("customer_perception_insights") or {}).get("body") or ""
+    owner_words = ""
+    if "Your own customers highlight:" in perception_text:
+        try:
+            owner_words = perception_text.split("Your own customers highlight:")[1].split(".")[0].strip()
+        except Exception:
+            pass
+
+    rated_comps = [c for c in comp_movements if c.get("rating") and float(c.get("rating") or 0) > 0]
+    weakest_rated = min(rated_comps, key=lambda c: float(c.get("rating") or 5), default=None)
+
+    if owner_rating > 0 and weakest_rated and owner_rating > float(weakest_rated.get("rating") or 0):
+        weak_name = weakest_rated["name"]
+        weak_rating = weakest_rated["rating"]
+        if owner_words:
+            action = f"Your {owner_rating:.1f}★ rating and \"{owner_words}\" reputation — make them visible."
+            detail = (
+                f"You outrate {weak_name} ({weak_rating}★). "
+                f"Add your rating and the words your customers already use to your estimate emails, "
+                f"follow-up messages, and Google Business profile."
+            )
+        else:
+            action = f"Your {owner_rating:.1f}★ rating beats {weak_name}'s {weak_rating}★ — make that comparison visible."
+            detail = (
+                f"Customers comparison-shop before they call. "
+                f"Your rating is a decision-point advantage — highlight it on your homepage and in follow-up emails."
+            )
+    elif owner_words:
+        action = f"Reinforce \"{owner_words}\" — the words already in your reviews."
+        detail = (
+            f"These are the phrases your customers use. Make sure they appear in your Google Business profile "
+            f"description and in how you coach customers to leave reviews. "
+            f"Consistent language builds a recognizable reputation."
+        )
+    else:
+        action = "Define one clear advantage and repeat it everywhere."
+        detail = (
+            "Look at what your happiest customers say and pick one theme — speed, cleanliness, or communication. "
+            "Reinforce it in your Google profile, your website, and your review asks."
+        )
+
+    recs.append({"action": action, "detail": detail, "priority": "Next"})
+
+    # ── Rec 4 (Next): Review ask process ─────────────────────────────────
+    if owner_gained == 0:
+        action = "Set up a one-message review request sent after every job."
+        detail = (
+            "The biggest barrier to getting reviews is the ask never happening. "
+            "Draft a single follow-up text or email sent 2 days after job completion. "
+            f"Even {realistic_monthly} reviews a month moves the needle on your rank."
+        )
+    elif next_target:
+        gap = next_target["reviews"] - owner_reviews
+        months_at_pace = max(1, round(gap / max(owner_gained, realistic_monthly)))
+        action = f"Keep your review ask consistent — {gap} reviews from the next rank."
+        detail = (
+            f"You're {gap} reviews from passing {next_target['name']}. "
+            f"At your current pace, that's about {months_at_pace} month{'s' if months_at_pace != 1 else ''} away. "
+            f"Build the ask into your standard job close-out so it runs every time, not just when you remember."
+        )
+    else:
+        action = "Maintain your review cadence to protect your market position."
+        detail = (
+            "Challengers below you are watching. "
+            "A consistent post-job review request keeps your lead compounding month over month."
+        )
+
+    recs.append({"action": action, "detail": detail, "priority": "Next"})
+
+    return recs
+
+
+# ---------------------------------------------------------------------------
 # Data-driven Execution Plan
 # ---------------------------------------------------------------------------
 
 def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
     """
-    Builds 3 concrete, numbered action items using real data from the report:
-      1. Review gap / momentum item (SOV + top mover)
-      2. Competitive positioning item (praise words + rating gap)
-      3. Exploit competitor weakness item (friction themes)
+    Builds execution plan items from real report data.
+    For report #2+: uses delta-driven recs (what changed this period).
+    For baseline reports: falls back to static position-based recs.
     """
+    # ── Delta path: report #2+ ────────────────────────────────────────────
+    delta = _build_period_delta(sections)
+    if not delta.get("is_baseline"):
+        print("[EXEC_PLAN] delta data available — using event-driven recs")
+        return _build_delta_recs(delta, sections)
+
+    print("[EXEC_PLAN] baseline report — using static position-based recs")
+
+    # ── Static path: baseline report (no prior period data) ───────────────
     sov = sections.get("share_of_voice") or {}
     sov_rows = sov.get("rows") or []
 
@@ -4481,11 +4765,9 @@ def generate_business_report(
                     insights.append(ri)
                     existing_review_types.add(dedupe_key)
 
-                _owner_reviews = _competitor_review_totals.get(str(owner_competitor_id) if owner_competitor_id else "") or 0
                 customer_perception_text = format_insights_for_report(
                     review_insights,
                     owner_name=business_name,
-                    owner_review_count=_owner_reviews,
                 ) or ""
         except Exception as e:
             logger.warning("review insights skipped: %s", e)
