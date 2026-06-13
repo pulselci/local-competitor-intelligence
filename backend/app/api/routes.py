@@ -2389,7 +2389,8 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
 
         if owner_gained >= realistic_monthly:
             months_remaining = max(1, round(gap / max(owner_gained, 1)))
-            action = f"You gained {owner_gained} reviews last month — {'ahead of' if owner_gained > realistic_monthly else 'on'} pace."
+            _rw = "review" if owner_gained == 1 else "reviews"
+            action = f"You gained {owner_gained} {_rw} last month — {'ahead of' if owner_gained > realistic_monthly else 'on'} pace."
             detail = (
                 f"The gap to {target_name} is now {gap}"
                 + (f" (down from {prev_gap})" if prev_gap > gap else "")
@@ -2397,13 +2398,24 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
                 f"Whatever you're doing to get reviews — make it a repeatable process."
             )
         elif owner_gained > 0:
+            review_word = "review" if owner_gained == 1 else "reviews"
             months_remaining = max(1, round(gap / max(owner_gained, 1)))
-            action = f"You gained {owner_gained} reviews last month — keep the cadence."
-            detail = (
-                f"The gap to {target_name} is now {gap}. "
-                f"At {owner_gained}/month you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''}. "
-                f"A consistent post-job ask is what sustains this."
-            )
+            if months_remaining > 60:
+                # Pace is too slow to project — reframe as acceleration needed
+                action = f"You gained {owner_gained} {review_word} last month — you need to accelerate."
+                detail = (
+                    f"The gap to {target_name} is {gap}. "
+                    f"At {owner_gained}/month that gap won't close in any reasonable timeframe. "
+                    f"Target {realistic_monthly}+ reviews per month — ask after every completed job, "
+                    f"and send a follow-up text within 24 hours of completion."
+                )
+            else:
+                action = f"You gained {owner_gained} {review_word} last month — keep the cadence."
+                detail = (
+                    f"The gap to {target_name} is now {gap}. "
+                    f"At {owner_gained}/month you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''}. "
+                    f"A consistent post-job ask is what sustains this."
+                )
         else:
             if target_gained > 0:
                 detail = (
