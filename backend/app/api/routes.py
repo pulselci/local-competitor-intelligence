@@ -2386,13 +2386,24 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                 f"make sure that comparison is visible to anyone shopping around."
             )
     elif owner_rating_val > 0 and weakest_rated:
+        weak_rating_val = float(weakest_rated.get("google_rating") or 0)
         weak_name = weakest_rated.get("competitor_name") or "a competitor"
         weak_rating = weakest_rated.get("google_rating")
-        action = f"Your rating is a competitive edge — make it visible."
-        detail = (
-            f"At {owner_rating_val:.1f}★ you outrank {weak_name} ({weak_rating}★). "
-            f"Highlight your rating on your homepage, in follow-up emails, and on your Google profile."
-        )
+        if owner_rating_val > weak_rating_val:
+            # Owner actually beats the weakest competitor — highlight it
+            action = "Your rating is a competitive edge — make it visible."
+            detail = (
+                f"At {owner_rating_val:.1f}★ you outrank {weak_name} ({weak_rating}★). "
+                f"Highlight your rating on your homepage, in follow-up emails, and on your Google profile."
+            )
+        else:
+            # Owner's rating is at or below the weakest competitor — focus on improvement
+            action = "Improving your rating is your highest-visibility opportunity."
+            detail = (
+                f"Your current {owner_rating_val:.1f}★ rating is below the market average. "
+                f"Respond to every negative review, ask happy patients to update their rating, "
+                f"and build a consistent post-visit review request into your workflow."
+            )
     else:
         action = "Highlight one clear advantage customers should associate with your business."
         detail = "Reinforce one strength — comfort, convenience, or communication — consistently across your website and Google profile."
@@ -4392,9 +4403,11 @@ def generate_business_report(
                     insights.append(ri)
                     existing_review_types.add(dedupe_key)
 
+                _owner_reviews = _competitor_review_totals.get(str(owner_competitor_id) if owner_competitor_id else "") or 0
                 customer_perception_text = format_insights_for_report(
                     review_insights,
                     owner_name=business_name,
+                    owner_review_count=_owner_reviews,
                 ) or ""
         except Exception as e:
             logger.warning("review insights skipped: %s", e)

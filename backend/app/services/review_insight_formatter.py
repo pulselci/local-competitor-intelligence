@@ -8,6 +8,7 @@ def format_insights_for_report(
     insights: List[Dict[str, Any]],
     *,
     owner_name: Optional[str] = None,
+    owner_review_count: int = 0,
 ) -> str:
     """
     Converts review insight objects into cleaner client-facing narrative text.
@@ -267,13 +268,18 @@ def format_insights_for_report(
             + "\n".join([s.strip() for s in what_patients_say])
         )
 
-    # ── Section 2: Closest competitor = highest review count (biggest threat) ──
-    # Sort by review count descending so the most-reviewed competitor comes first
-    ranked_rows = sorted(
-        competitor_rows,
-        key=lambda r: r.get("review_count") or 0,
-        reverse=True,
-    )
+    # ── Section 2: Closest competitor = smallest positive gap above the owner ──
+    # If we know the owner's review count, pick the competitor just ahead of them.
+    # Fall back to the highest-reviewed competitor when owner count is unknown.
+    if owner_review_count > 0:
+        above_owner = [r for r in competitor_rows if (r.get("review_count") or 0) > owner_review_count]
+        if above_owner:
+            ranked_rows = sorted(above_owner, key=lambda r: r.get("review_count") or 0)
+        else:
+            # Owner is already the leader — show the strongest competitor instead
+            ranked_rows = sorted(competitor_rows, key=lambda r: r.get("review_count") or 0, reverse=True)
+    else:
+        ranked_rows = sorted(competitor_rows, key=lambda r: r.get("review_count") or 0, reverse=True)
 
     top_competitor = ranked_rows[0] if ranked_rows else None
     if top_competitor:
@@ -327,7 +333,8 @@ def format_insights_for_report(
         )
 
     # ── Section 4: What to do ─────────────────────────────────────────────
-    action_words = _human_join(top_raw_phrases[:2]) or praise_phrase
+    # Prefer the owner's own praise words; fall back to market-wide phrases
+    action_words = _human_join(top_owner_raw[:2]) or _human_join(top_owner_themes[:2]) or _human_join(top_raw_phrases[:2]) or praise_phrase
     if action_words:
         sections.append(
             "Your Action This Month\n"
