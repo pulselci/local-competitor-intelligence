@@ -371,7 +371,7 @@ def build_this_month_focus(
 
         if not action:
             return
-        if signal_type in seen_types and len(focus_items) >= 3:
+        if signal_type in seen_types and len(focus_items) >= 4:
             return
 
         action_key = action.lower()
@@ -422,7 +422,7 @@ def build_this_month_focus(
                 break
 
     # ── Fallback fill ─────────────────────────────────────────────────────
-    if len(focus_items) < 3:
+    if len(focus_items) < 4:
         existing_actions = {str(i.get("action") or "").strip().lower() for i in focus_items}
         existing_decisions = {_derive_decision({"action": i.get("action")}) for i in focus_items}
 
@@ -452,11 +452,11 @@ def build_this_month_focus(
             )
             existing_actions.add(action_key)
             existing_decisions.add(decision)
-            if len(focus_items) >= 3:
+            if len(focus_items) >= 4:
                 break
 
     # ── Leader-specific fill ──────────────────────────────────────────────
-    if owner_is_leader and len(focus_items) < 3:
+    if owner_is_leader and len(focus_items) < 4:
         existing_actions = {str(i.get("action") or "").lower() for i in focus_items}
         for leader_action in _LEADER_ACTIONS:
             cleaned = _clean(leader_action)
@@ -471,11 +471,11 @@ def build_this_month_focus(
                     }
                 )
                 existing_actions.add(cleaned.lower())
-                if len(focus_items) >= 3:
+                if len(focus_items) >= 4:
                     break
 
     # ── Generic fill (non-leader) ─────────────────────────────────────────
-    if not owner_is_leader and len(focus_items) < 3:
+    if not owner_is_leader and len(focus_items) < 4:
         generic = "Own one customer value clearly and reinforce it across all messaging."
         existing_actions = {str(i.get("action") or "").lower() for i in focus_items}
         if generic.lower() not in existing_actions:

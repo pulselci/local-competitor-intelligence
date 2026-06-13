@@ -3606,7 +3606,7 @@ def _build_report_experience_payload(
             i for i in normalized_insights
             if i.get("priority") == "Immediate"
         ]
-        this_month_focus = (immediate_items or normalized_insights)[:3]
+        this_month_focus = (immediate_items or normalized_insights)[:4]
 
     action_plan = presentation.get("action_plan") or {}
     if not isinstance(action_plan, dict):

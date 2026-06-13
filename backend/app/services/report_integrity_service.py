@@ -475,24 +475,46 @@ def _leader_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) 
 
 
 def _challenger_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
-    # Build a specific summary using actual gap + leader name when available
+    # Build a specific summary using actual gap + next-rank target when available
     rows = sorted(_sov_rows(sections or {}), key=_reviews, reverse=True)
     leader = rows[0] if rows else None
     owner = next((r for r in rows if r.get("is_business")), None)
     leader_name = _name(leader) if leader else "the market leader"
-    gap = (int(leader.get("reviews_total") or 0) - int(owner.get("reviews_total") or 0)) if (leader and owner) else 0
-    if gap > 0:
+    owner_reviews = int(owner.get("reviews_total") or 0) if owner else 0
+    gap = (int(leader.get("reviews_total") or 0) - owner_reviews) if (leader and owner) else 0
+
+    # Find the competitor just above the owner — the near-term rank target
+    above_owner = [r for r in rows if not r.get("is_business") and int(r.get("reviews_total") or 0) > owner_reviews]
+    next_above = above_owner[-1] if above_owner else None  # smallest reviews among those above = closest
+    next_name = _name(next_above) if next_above else leader_name
+    next_reviews = int(next_above.get("reviews_total") or 0) if next_above else (int(leader.get("reviews_total") or 0) if leader else 0)
+    next_gap = next_reviews - owner_reviews if next_above else gap
+
+    if next_above and _name(next_above) != leader_name:
+        growth_summary = (
+            f"You are {next_gap} reviews behind {next_name} — passing them moves you up one rank in the market."
+        )
+        growth_action = f"Set a monthly review target to pass {next_name}, your nearest competitor above you."
+        growth_how = (
+            f"You need {next_gap} more reviews to pass {next_name}. "
+            "Request reviews after every completed job and track your progress monthly."
+        )
+    elif gap > 0:
         growth_summary = f"You are {gap} reviews behind {leader_name} — a gap that closes with consistent monthly review growth."
+        growth_action = "Set a monthly review target tied to the gap with the market leader."
+        growth_how = "Set a monthly goal tied to the gap, request reviews after every job, and track weekly progress."
     else:
         growth_summary = "You are within striking distance of the leader — consistent review growth will close the gap."
+        growth_action = "Set a monthly review target tied to the gap with the market leader."
+        growth_how = "Set a monthly goal tied to the gap, request reviews after every job, and track weekly progress."
 
     return [
         {
             "summary": growth_summary,
-            "action": "Set a monthly review target tied to the gap with the market leader.",
+            "action": growth_action,
             "priority": "Immediate",
             "why_it_matters": "Without a clear growth target, the gap remains static or widens over time.",
-            "how_to_implement": "Set a monthly goal tied to the gap, request reviews after every job, and track weekly progress.",
+            "how_to_implement": growth_how,
             "is_fallback": True,
         },
         {
