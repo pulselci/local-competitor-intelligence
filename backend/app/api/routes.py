@@ -2223,9 +2223,16 @@ def _build_review_pulse_payload(business_id: UUID, days: int = 30) -> dict | Non
     buf.seek(0)
     chart_base64 = base64.b64encode(buf.read()).decode("utf-8")
 
+    # Show chart if any competitor has 7+ days of snapshot data
+    min_days_for_chart = 7
+    has_enough_data = max(
+        (len(p["daily_counts"]) for p in series_by_competitor.values()),
+        default=0,
+    ) >= min_days_for_chart
+
     return {
         "chart_base64": chart_base64,
-        "is_baseline": not any_nonzero_delta,
+        "is_baseline": not has_enough_data,
     }
 
 
