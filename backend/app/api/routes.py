@@ -938,6 +938,40 @@ def billing_checkout_success(session_id: str, redirect: str | None = None):
     return RedirectResponse(url=welcome_url)
 
 
+@router.post("/billing/activate")
+@router.get("/billing/activate")
+def billing_activate(session_id: str):
+    """
+    Called by welcome.html in the background after Stripe redirects there directly.
+    Looks up the Stripe session, then runs _activate_subscriber in a daemon thread.
+    Returns immediately so the frontend doesn't wait.
+    """
+    if not settings.stripe_secret_key:
+        return {"ok": False, "reason": "no stripe key"}
+
+    stripe.api_key = settings.stripe_secret_key
+
+    try:
+        print(f"[ACTIVATE-ENDPOINT] session_id={session_id}", flush=True)
+        session = _stripe_obj_to_dict(stripe.checkout.Session.retrieve(session_id))
+        business_id = session.get("client_reference_id")
+
+        if not business_id:
+            print(f"[ACTIVATE-ENDPOINT] no business_id in session {session_id}", flush=True)
+            return {"ok": False, "reason": "no business_id"}
+
+        import threading as _threading
+        t = _threading.Thread(target=_activate_subscriber, args=(business_id,), daemon=True)
+        t.start()
+        print(f"[ACTIVATE-ENDPOINT] activation started for {business_id}", flush=True)
+        return {"ok": True, "business_id": business_id}
+
+    except Exception as exc:
+        import traceback
+        print(f"[ACTIVATE-ENDPOINT] ERROR: {exc}\n{traceback.format_exc()}", flush=True)
+        return {"ok": False, "reason": str(exc)}
+
+
 def _activate_subscriber(business_id: str):
     """Enable schedule, generate full report, email it."""
     import re as _re
