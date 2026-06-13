@@ -3952,7 +3952,7 @@ def _build_report_experience_payload(
 
     action_plan["immediate"] = [
         _normalize_item(i)
-        for i in (action_plan.get("immediate") or this_month_focus[:3])
+        for i in (action_plan.get("immediate") or this_month_focus[:4])
         if isinstance(i, dict)
     ]
 
@@ -5224,8 +5224,8 @@ def generate_business_report(
                     if isinstance(_saved_sections, dict):
                         if "report_experience" not in _saved_sections:
                             _saved_sections["report_experience"] = {}
-                        _saved_sections["report_experience"]["this_month_focus"] = final_focus[:3]
-                        _saved_sections["report_experience"]["immediate_priorities"] = len(final_focus[:3]) or 1
+                        _saved_sections["report_experience"]["this_month_focus"] = final_focus[:4]
+                        _saved_sections["report_experience"]["immediate_priorities"] = len(final_focus[:4]) or 1
                         with get_conn() as _conn2:
                             with _conn2.cursor() as _cur2:
                                 _cur2.execute(
