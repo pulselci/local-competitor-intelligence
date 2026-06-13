@@ -2832,6 +2832,32 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
 
     plan.append({"type": "execution_weakness", "action": action, "detail": detail})
 
+    # ── Item 4: Review ask process ────────────────────────────────────────
+    owner_reviews_val = int(owner.get("reviews_total") or 0) if owner else 0
+    if owner_reviews_val < 50:
+        ask_action = "Set up your review request workflow before your next report."
+        ask_detail = (
+            "With fewer than 50 reviews, a simple ask after every completed job is your highest-leverage move. "
+            "Draft a 2-sentence text template — thank the customer, include a direct link to your Google review page. "
+            "Send it within 24 hours of job completion. Even 3-5 new reviews per month compounds quickly at your stage."
+        )
+    elif owner_reviews_val < 150:
+        ask_action = "Make your review ask a non-negotiable part of every completed job."
+        ask_detail = (
+            "You need consistent monthly volume to close the gap ahead. "
+            "Build a short text or email template that goes out automatically 24-48 hours after job completion. "
+            "If you're already asking, check your open rate and simplify the link — one tap to review is better than any paragraph."
+        )
+    else:
+        ask_action = "Protect your review volume — don't let the cadence slip."
+        ask_detail = (
+            "You've built a meaningful review base. The risk now is inconsistency. "
+            "Audit your review ask process: are all team members sending it after every job? "
+            "Add a monthly check on new review count to your reporting routine."
+        )
+
+    plan.append({"type": "execution_review_ask", "action": ask_action, "detail": ask_detail})
+
     return plan
 
 
