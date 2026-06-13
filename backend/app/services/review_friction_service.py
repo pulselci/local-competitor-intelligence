@@ -441,15 +441,28 @@ def build_customer_friction_summary(friction_counts: dict, insights: list[dict])
     if total_negative == 0:
         return "No meaningful customer friction signals were detected in recent reviews."
 
-    # Find dominant theme
-    top = max(themes, key=lambda x: x.get("market_total", 0))
-    label = top.get("theme_label")
-    total = top.get("market_total", 0)
+    # Find the owner's worst friction theme (highest owner_count); fall back to
+    # market-wide dominant theme only if owner has no friction counts at all.
+    owner_themes = [t for t in themes if t.get("owner_count", 0) > 0]
+    if owner_themes:
+        top = max(owner_themes, key=lambda x: x.get("owner_count", 0))
+        label = top.get("theme_label")
+        total = top.get("owner_count", 0)
+    else:
+        top = max(themes, key=lambda x: x.get("market_total", 0))
+        label = top.get("theme_label")
+        total = top.get("market_total", 0)
 
     if total <= 2:
         return (
             f"Customer complaints are limited in volume. The only emerging signal appears in "
             f"{label.lower()}, but it is not yet a consistent pattern."
+        )
+
+    if owner_themes:
+        return (
+            f"{label} is the most consistent source of friction in your own recent reviews. "
+            f"Addressing this directly is your highest-leverage move for improving customer perception."
         )
 
     return (

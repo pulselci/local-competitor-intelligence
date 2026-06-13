@@ -452,7 +452,7 @@ def _leader_fallback_recommendations(sections: Optional[Dict[str, Any]] = None) 
             "action": "Define and reinforce a clear positioning advantage before competitors do.",
             "priority": "Immediate",
             "why_it_matters": why_position,
-            "how_to_implement": "Highlight one strength — trust, comfort, convenience, or communication — across your messaging and review responses.",
+            "how_to_implement": "Pick the one thing your reviews say you do best — painless experience, attentive staff, clear communication, or fast turnaround — and make it the lead message on your Google profile and website. Repeat it until it becomes your reputation.",
             "is_fallback": True,
         },
         {
@@ -489,7 +489,7 @@ def _challenger_fallback_recommendations() -> List[Dict[str, Any]]:
             "action": "Define and consistently communicate one clear advantage customers should associate with your business.",
             "priority": "Immediate",
             "why_it_matters": "When no competitor owns a position, the first to claim one gains a decision-making advantage.",
-            "how_to_implement": "Choose one value such as faster turnaround, clearer communication, or more transparent pricing and reinforce it across your website, Google profile, and review responses.",
+            "how_to_implement": "Look at what your happiest customers say in reviews and pick one theme — painless experience, attentive staff, clear communication, or fast turnaround — then reinforce it consistently across your Google profile, website, and review responses.",
             "is_fallback": True,
         },
         {

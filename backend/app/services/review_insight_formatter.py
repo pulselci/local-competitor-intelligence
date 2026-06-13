@@ -20,6 +20,7 @@ def format_insights_for_report(
 
     grouped: dict[str, List[Dict[str, Any]]] = {}
     owner_name_norm = (owner_name or "").strip().lower()
+    owner_insights: List[Dict[str, Any]] = []  # praise insights for the owner's own business
 
     for insight in insights:
         details = insight.get("details") or {}
@@ -29,13 +30,14 @@ def format_insights_for_report(
         owner_competitor_id = details.get("owner_competitor_id")
         competitor_id = details.get("competitor_id")
 
-        if owner_competitor_id and competitor_id and str(owner_competitor_id) == str(competitor_id):
-            continue
+        is_owner = (
+            (owner_competitor_id and competitor_id and str(owner_competitor_id) == str(competitor_id))
+            or (owner_name_norm and name_norm == owner_name_norm)
+            or name_norm.endswith(" self")
+        )
 
-        if owner_name_norm and name_norm == owner_name_norm:
-            continue
-
-        if name_norm.endswith(" self"):
+        if is_owner:
+            owner_insights.append(insight)
             continue
 
         grouped.setdefault(name, []).append(insight)
@@ -198,6 +200,22 @@ def format_insights_for_report(
 
     sections: list[str] = []
 
+    # ── Extract owner's own praise phrases ───────────────────────────────
+    owner_raw_phrases: Counter[str] = Counter()
+    owner_praise_themes: Counter[str] = Counter()
+    for item in owner_insights:
+        t = str(item.get("type") or "").strip()
+        if t == "praise_themes":
+            details = item.get("details") or {}
+            raw_phrases = details.get("praise_phrases") or []
+            for p in raw_phrases:
+                if p:
+                    owner_raw_phrases[str(p).strip()] += 1
+            summary = _clean(item.get("summary") or "")
+            theme_text = summary.split(" for ", 1)[-1] if " for " in summary else summary
+            for theme in _split_themes(theme_text):
+                owner_praise_themes[theme] += 1
+
     # Collect all raw praise phrases across all competitors for the market summary
     all_raw_phrases: Counter[str] = Counter()
     for row in competitor_rows:
@@ -216,13 +234,29 @@ def format_insights_for_report(
     # Fallback to theme phrase if no concrete words
     display_praise = raw_phrase_str or praise_phrase
 
+    # Owner's top praise words/themes
+    top_owner_raw = [
+        w for w, _ in owner_raw_phrases.most_common(6)
+        if w.lower() not in _theme_label_words
+    ][:3]
+    top_owner_themes = [t for t, _ in owner_praise_themes.most_common(3)]
+    owner_praise_display = _human_join(top_owner_raw) or _human_join(top_owner_themes)
+
     # ── Section 1: What customers are saying ──────────────────────────────
     what_patients_say: list[str] = []
+
+    if owner_praise_display:
+        what_patients_say.append(
+            _ensure_period(
+                f"Your own customers highlight: {owner_praise_display}. "
+                f"These are the words appearing in your reviews — the reputation you've already built"
+            )
+        )
 
     if display_praise:
         what_patients_say.append(
             _ensure_period(
-                f"When customers in your market leave positive reviews, the words that come up most are: {display_praise}. "
+                f"Across the market, the words that come up most in positive reviews are: {display_praise}. "
                 f"These are the signals that build trust before someone even picks up the phone"
             )
         )

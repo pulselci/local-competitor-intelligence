@@ -945,7 +945,7 @@ def build_executive_headline(sections: Dict[str, Any]) -> str:
 
     if gap > 0:
         return (
-            f"You are within striking distance of {leader_name}, but your advantage is not clearly positioned to win decisions."
+            f"You are {gap} reviews behind {leader_name}. Consistent review growth is your fastest path to closing that gap."
         )
 
     return "You have positioning advantages, but they are not yet being fully leveraged to drive growth."
