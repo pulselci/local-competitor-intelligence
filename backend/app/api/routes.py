@@ -2718,15 +2718,27 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                     )
                 else:
                     action = f"Your near-term goal: move past {next_name} into the next rank."
-                    detail = (
-                        f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}"
-                        + (" — closing that gap is a multi-year effort." if is_large_gap else ".")
-                        + (f" {mover_note.strip()}" if mover_note else "")
-                        + f" Your achievable near-term milestone is passing {next_name} ({next_reviews:,} reviews), "
-                        f"just {next_gap} away. At {realistic_monthly}+ reviews per month — "
-                        f"realistic with a consistent post-job ask — you'd reach that in about {months_to_next} months. "
-                        f"Build a review request into your follow-up process after every completed job."
-                    )
+                    if months_to_next > 24:
+                        # Gap is large — skip demoralizing total timeline; frame as quarterly progress
+                        quarterly_gain = realistic_monthly * 3
+                        detail = (
+                            f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}"
+                            + (" — closing that gap is a multi-year effort." if is_large_gap else ".")
+                            + (f" {mover_note.strip()}" if mover_note else "")
+                            + f" Your milestone: pass {next_name} ({next_reviews:,} reviews), {next_gap} away. "
+                            f"A realistic quarterly target is +{quarterly_gain} reviews. "
+                            f"Build a review request into your follow-up process after every completed job."
+                        )
+                    else:
+                        detail = (
+                            f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}"
+                            + (" — closing that gap is a multi-year effort." if is_large_gap else ".")
+                            + (f" {mover_note.strip()}" if mover_note else "")
+                            + f" Your achievable near-term milestone is passing {next_name} ({next_reviews:,} reviews), "
+                            f"just {next_gap} away. At {realistic_monthly}+ reviews per month — "
+                            f"realistic with a consistent post-job ask — you'd reach that in about {months_to_next} months. "
+                            f"Build a review request into your follow-up process after every completed job."
+                        )
             else:
                 # No competitor above — owner may be leader or gap to leader is already small
                 months_to_close = max(2, round(gap / realistic_monthly))
@@ -4852,9 +4864,12 @@ def generate_business_report(
                     insights.append(ri)
                     existing_review_types.add(dedupe_key)
 
+                _owner_sov = next((r for r in _sov_rows if r.get("is_business")), None)
+                _owner_rc = int(_owner_sov.get("reviews_total") or 0) if _owner_sov else 0
                 customer_perception_text = format_insights_for_report(
                     review_insights,
                     owner_name=business_name,
+                    owner_review_count=_owner_rc,
                 ) or ""
         except Exception as e:
             logger.warning("review insights skipped: %s", e)
