@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import sys
 import os
 import tempfile
@@ -119,37 +120,39 @@ def render_report_pdf(report: Any) -> bytes:
         if sys.platform.startswith("win"):
             asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-        with sync_playwright() as p:
-            browser = p.chromium.launch(
-                headless=True,
-                args=[
-                    "--disable-dev-shm-usage",
-                    "--no-sandbox",
-                ],
-            )
-
-            try:
-                page = browser.new_page()
-                page.set_content(html, wait_until="load")
-
-                pdf_bytes = page.pdf(
-                    format="Letter",
-                    print_background=True,
-                    margin={
-                        "top": "0.55in",
-                        "right": "0.55in",
-                        "bottom": "0.65in",
-                        "left": "0.55in",
-                    },
+        def _pw_render(html_content: str) -> bytes:
+            """Run Playwright in a fresh thread — sync_playwright can't run inside asyncio loop."""
+            with sync_playwright() as p:
+                browser = p.chromium.launch(
+                    headless=True,
+                    args=[
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                    ],
                 )
+                try:
+                    page = browser.new_page()
+                    page.set_content(html_content, wait_until="load")
+                    return page.pdf(
+                        format="Letter",
+                        print_background=True,
+                        margin={
+                            "top": "0.55in",
+                            "right": "0.55in",
+                            "bottom": "0.65in",
+                            "left": "0.55in",
+                        },
+                    )
+                finally:
+                    browser.close()
 
-                pdf_debug_path = debug_dir / "last_rendered_report.pdf"
-                pdf_debug_path.write_bytes(pdf_bytes)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            pdf_bytes = executor.submit(_pw_render, html).result(timeout=60)
 
-                return pdf_bytes
+        pdf_debug_path = debug_dir / "last_rendered_report.pdf"
+        pdf_debug_path.write_bytes(pdf_bytes)
 
-            finally:
-                browser.close()
+        return pdf_bytes
 
     except NotImplementedError as e:
         tb = traceback.format_exc()
