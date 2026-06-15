@@ -2407,11 +2407,18 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
             if months_remaining > 60:
                 if net_gain <= 0 and target_gained > owner_gained:
                     # They're gaining faster — gap is widening
+                    # Target 25% above competitor pace (min +2), capped at what's realistic for this business size
+                    beat_pace = max(target_gained + 2, math.ceil(target_gained * 1.25))
+                    if beat_pace <= realistic_monthly:
+                        pace_note = f"Target {beat_pace}+ reviews per month to outpace them"
+                    else:
+                        beat_pace = realistic_monthly
+                        pace_note = f"Target {beat_pace}+ reviews per month — that's the pace needed to start closing this gap"
                     action = f"You gained {owner_gained} {review_word} last month — but {target_name} is pulling away."
                     detail = (
                         f"The gap to {target_name} grew to {gap}. "
                         f"They added {target_gained} reviews vs your {owner_gained} this period. "
-                        f"Target {realistic_monthly}+ reviews per month to reverse this — ask after every completed job."
+                        f"{pace_note} — ask after every completed job."
                     )
                 elif net_gain == 0:
                     action = f"You gained {owner_gained} {review_word} last month — matching {target_name}'s pace."
