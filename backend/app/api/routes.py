@@ -2352,11 +2352,12 @@ def _build_period_delta(sections: dict) -> dict:
     }
 
 
-def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
+def _build_delta_recs(delta: dict, sections: dict, business_name: str = "") -> list[dict]:
     """
     Generate 4 event-driven execution plan items from period delta data.
     Only called when delta["is_baseline"] is False.
     """
+    service_word = _detect_service_word(business_name)
     owner_gained = delta["owner_gained"]
     owner_reviews = delta["owner_reviews"]
     owner_rank = delta["owner_rank"]
@@ -2418,13 +2419,13 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
                     detail = (
                         f"The gap to {target_name} grew to {gap}. "
                         f"They added {target_gained} reviews vs your {owner_gained} this period. "
-                        f"{pace_note} — ask after every completed job."
+                        f"{pace_note} — ask after every completed {service_word}."
                     )
                 elif net_gain == 0:
                     action = f"You gained {owner_gained} {review_word} last month — matching {target_name}'s pace."
                     detail = (
                         f"The gap to {target_name} holds at {gap} — you both gained the same this period. "
-                        f"Target {realistic_monthly}+ reviews per month to start closing it — ask after every completed job."
+                        f"Target {realistic_monthly}+ reviews per month to start closing it — ask after every completed {service_word}."
                     )
                 else:
                     # net_gain > 0 but months too far out — acceleration needed
@@ -2441,14 +2442,14 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
                     detail = (
                         f"The gap to {target_name} is now {gap}. They went flat last month — "
                         f"at your pace you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''} if that holds. "
-                        f"A consistent post-job ask keeps the pressure on."
+                        f"A consistent post-{service_word} ask keeps the pressure on."
                     )
                 else:
                     detail = (
                         f"The gap to {target_name} is now {gap}. "
                         f"You gained {owner_gained}, they gained {target_gained} — net {net_gain}/month. "
                         f"At that rate you'd pass them in about {months_remaining} month{'s' if months_remaining != 1 else ''}. "
-                        f"A consistent post-job ask is what sustains this."
+                        f"A consistent post-{service_word} ask is what sustains this."
                     )
         else:
             if target_gained > 0:
@@ -2469,7 +2470,7 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
             action = f"You gained {owner_gained} reviews last month — extend your lead."
             detail = (
                 f"You're ranked #{owner_rank} with {owner_reviews:,} reviews. "
-                f"Keep the ask going after every job to widen the gap on challengers below you."
+                f"Keep the ask going after every {service_word} to widen the gap on challengers below you."
             )
         else:
             action = "No reviews gained last month — protect your position."
@@ -2576,7 +2577,7 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
 
     # ── Rec 4 (Next): Review ask process ─────────────────────────────────
     if owner_gained == 0:
-        action = "Set up a one-message review request sent after every job."
+        action = f"Set up a one-message review request sent after every {service_word}."
         detail = (
             "The biggest barrier to getting reviews is the ask never happening. "
             "Draft a single follow-up text or email sent 2 days after job completion. "
@@ -2606,7 +2607,7 @@ def _build_delta_recs(delta: dict, sections: dict) -> list[dict]:
 # Data-driven Execution Plan
 # ---------------------------------------------------------------------------
 
-def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
+def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -> list[dict]:
     """
     Builds execution plan items from real report data.
     For report #2+: uses delta-driven recs (what changed this period).
@@ -2614,9 +2615,10 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
     """
     # ── Delta path: report #2+ ────────────────────────────────────────────
     delta = _build_period_delta(sections)
+    service_word = _detect_service_word(business_name or sections.get("business_name", ""))
     if not delta.get("is_baseline"):
         print("[EXEC_PLAN] delta data available — using event-driven recs")
-        return _build_delta_recs(delta, sections)
+        return _build_delta_recs(delta, sections, business_name=business_name or sections.get("business_name", ""))
 
     print("[EXEC_PLAN] baseline report — using static position-based recs")
 
@@ -2714,7 +2716,7 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                         + (f" {mover_note.strip()}" if mover_note else "")
                         + f" A realistic quarterly target is +{quarterly_target} reviews. "
                         f"At that pace you'd close the gap in about {months_to_next} months. "
-                        f"Build a review request into your follow-up process after every completed job."
+                        f"Build a review request into your follow-up process after every completed {service_word}."
                     )
                 else:
                     action = f"Your near-term goal: move past {next_name} into the next rank."
@@ -2727,7 +2729,7 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                             + (f" {mover_note.strip()}" if mover_note else "")
                             + f" Your milestone: pass {next_name} ({next_reviews:,} reviews), {next_gap} away. "
                             f"A realistic quarterly target is +{quarterly_gain} reviews. "
-                            f"Build a review request into your follow-up process after every completed job."
+                            f"Build a review request into your follow-up process after every completed {service_word}."
                         )
                     else:
                         detail = (
@@ -2736,8 +2738,8 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                             + (f" {mover_note.strip()}" if mover_note else "")
                             + f" Your achievable near-term milestone is passing {next_name} ({next_reviews:,} reviews), "
                             f"just {next_gap} away. At {realistic_monthly}+ reviews per month — "
-                            f"realistic with a consistent post-job ask — you'd reach that in about {months_to_next} months. "
-                            f"Build a review request into your follow-up process after every completed job."
+                            f"realistic with a consistent post-{service_word} ask — you'd reach that in about {months_to_next} months. "
+                            f"Build a review request into your follow-up process after every completed {service_word}."
                         )
             else:
                 # No competitor above — owner may be leader or gap to leader is already small
@@ -2745,10 +2747,10 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
                 action = f"Close the {gap:,}-review gap with {leader_name}."
                 detail = (
                     f"You have {owner_reviews:,} reviews vs. {leader_name}'s {leader_reviews:,}. "
-                    f"At {realistic_monthly}+ new reviews per month — achievable with a consistent post-job ask — "
+                    f"At {realistic_monthly}+ new reviews per month — achievable with a consistent post-{service_word} ask — "
                     f"you'd close this gap in about {months_to_close} months."
                     + (f" {mover_note.strip()}" if mover_note else "")
-                    + " Build a review request into your follow-up process after every completed job."
+                    + f" Build a review request into your follow-up process after every completed {service_word}."
                 )
 
         plan.append({"type": "execution_review_gap", "action": action, "detail": detail})
@@ -2910,12 +2912,12 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
     if owner_reviews_val < 50:
         ask_action = "Set up your review request workflow before your next report."
         ask_detail = (
-            "With fewer than 50 reviews, a simple ask after every completed job is your highest-leverage move. "
+            f"With fewer than 50 reviews, a simple ask after every completed {service_word} is your highest-leverage move. "
             "Draft a 2-sentence text template — thank the customer, include a direct link to your Google review page. "
             "Send it within 24 hours of job completion. Even 3-5 new reviews per month compounds quickly at your stage."
         )
     elif owner_reviews_val < 150:
-        ask_action = "Make your review ask a non-negotiable part of every completed job."
+        ask_action = f"Make your review ask a non-negotiable part of every completed {service_word}."
         ask_detail = (
             "You need consistent monthly volume to close the gap ahead. "
             "Build a short text or email template that goes out automatically 24-48 hours after job completion. "
@@ -2925,7 +2927,7 @@ def _build_data_driven_execution_plan(sections: dict) -> list[dict]:
         ask_action = "Protect your review volume — don't let the cadence slip."
         ask_detail = (
             "You've built a meaningful review base. The risk now is inconsistency. "
-            "Audit your review ask process: are all team members sending it after every job? "
+            f"Audit your review ask process: are all team members sending it after every {service_word}? "
             "Add a monthly check on new review count to your reporting routine."
         )
 
@@ -4354,6 +4356,22 @@ def _detect_customer_label(business_name: str) -> str:
     return "customers"
 
 
+def _detect_service_word(business_name: str) -> str:
+    """Return 'appointment' for medical/dental businesses, 'job' for everything else."""
+    name = (business_name or "").lower()
+    appointment_keywords = [
+        "dental", "dentist", "dentistry", "orthodont", "oral", "smile", "teeth",
+        "medical", "clinic", "health", "chiropractic", "optometry", "vision",
+        "eye care", "pediatric", "therapy", "physical therapy", "urgent care",
+        "hospital", "physician", "doctor", "dermatology", "cardiology",
+        "veterina", "vet ", "animal hospital",
+    ]
+    for kw in appointment_keywords:
+        if kw in name:
+            return "appointment"
+    return "job"
+
+
 @router.post("/business/{business_id}/reports/generate", response_model=GeneratedReportOut)
 def generate_business_report(
     business_id: UUID,
@@ -4996,7 +5014,7 @@ def generate_business_report(
         # ── Data-driven Execution Plan ─────────────────────────────────────
         # Build 3 concrete action items from real numbers rather than
         # relying on the generic presentation-layer output.
-        focus = _build_data_driven_execution_plan(sections)
+        focus = _build_data_driven_execution_plan(sections, business_name=business_name or "")
         print("[EXEC_PLAN] generated", len(focus), "items:", [f.get("action", "")[:60] for f in focus])
 
         if not focus:
@@ -5225,7 +5243,7 @@ def generate_business_report(
             sections["report_experience"] = {}
 
         # ── Re-apply data-driven execution plan after Step 5/6 rebuilds report_experience ──
-        final_focus = _build_data_driven_execution_plan(sections)
+        final_focus = _build_data_driven_execution_plan(sections, business_name=sections.get("business_name", ""))
         if not final_focus:
             final_focus = sections["report_experience"].get("this_month_focus") or []
         if not final_focus:
