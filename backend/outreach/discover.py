@@ -435,7 +435,6 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
         payload = {
             "q_organization_domain_name": domain,
             "per_page": 10,
-            "page": 1,
         }
         r = requests.post(
             APOLLO_PEOPLE_SEARCH,
@@ -608,4 +607,138 @@ def discover(
             address = place.get("formatted_address", "")
             geometry = place.get("geometry", {}).get("location", {})
             lat = geometry.get("lat")
-        
+            lng = geometry.get("lng")
+
+            # Filter
+            if not place_id or not name:
+                continue
+            if _is_chain(name):
+                print(f"  SKIP (chain): {name}")
+                continue
+            if not is_agency:
+                # Review/rating filters only apply to local business outreach
+                if not rating or not (MIN_RATING <= rating <= MAX_RATING):
+                    continue
+                if not reviews or not (MIN_REVIEWS <= reviews <= MAX_REVIEWS):
+                    continue
+            if _already_exists(place_id):
+                print(f"  SKIP (exists): {name}")
+                continue
+
+            total_found += 1
+            print(f"\n  Processing: {name}")
+
+            # Get website + phone
+            details = get_place_details(place_id)
+            website = details.get("website")
+            phone = details.get("formatted_phone_number")
+
+            # Competitor lookup — skip for agencies
+            top_competitor_name = None
+            top_competitor_reviews = None
+            if not is_agency and lat and lng:
+                competitor = find_top_competitor(lat, lng, category, place_id)
+                if competitor:
+                    top_competitor_name = competitor.get("name")
+                    top_competitor_reviews = competitor.get("user_ratings_total")
+                    print(f"  Top competitor: {top_competitor_name} ({top_competitor_reviews} reviews)")
+
+            # Scrape email
+            contact_email = scrape_email_from_website(website) if website else None
+            email_source = "scrape"
+
+            if not contact_email and website:
+                from urllib.parse import urlparse
+                domain = urlparse(website).netloc.lstrip("www.")
+                if domain:
+                    contact_email = lookup_email_hunter(domain)
+                    email_source = "hunter"
+
+            if not contact_email and website:
+                from urllib.parse import urlparse
+                domain = urlparse(website).netloc.lstrip("www.")
+                if domain:
+                    contact_email = lookup_email_apollo(domain, business_name=name)
+                    email_source = "apollo"
+
+            # Outscraper contacts scraper — uses the Google Place ID directly,
+            # so it works even when there's no website or the website is
+            # a booking-platform URL with no scrapeable email.
+            if not contact_email:
+                contact_email = lookup_email_outscraper(place_id)
+                if contact_email:
+                    email_source = "outscraper"
+
+            if contact_email:
+                print(f"  Email found ({email_source}): {contact_email}")
+            else:
+                print(f"  No email found (website: {website or 'none'})")
+
+            # Generate draft
+            if is_agency:
+                subject, body = generate_agency_draft(
+                    business_name=name,
+                    city=city,
+                    category=category,
+                    partnership_type=partnership_type,
+                )
+            else:
+                subject, body = generate_draft(
+                    business_name=name,
+                    city=city,
+                    reviews_count=reviews,
+                    rating=rating,
+                    top_competitor_name=top_competitor_name,
+                    top_competitor_reviews=top_competitor_reviews,
+                    category=category,
+                )
+
+            # Insert
+            _insert_prospect(
+                place_id=place_id,
+                business_name=name,
+                category=category,
+                address=address,
+                city=city,
+                state=state,
+                website=website,
+                phone=phone,
+                contact_email=contact_email,
+                reviews_count=reviews,
+                rating=rating,
+                top_competitor_name=top_competitor_name,
+                top_competitor_reviews=top_competitor_reviews,
+                draft_subject=subject,
+                draft_body=body,
+                prospect_type=prospect_type,
+                partnership_type=partnership_type if is_agency else None,
+            )
+            total_inserted += 1
+            time.sleep(0.3)
+
+    print(f"\n=== Done ===")
+    print(f"Processed: {total_found} prospects")
+    print(f"Inserted:  {total_inserted} new records")
+    print(f"Run 'python -m outreach.queue' or open the approval UI to review drafts.\n")
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Discover cold outreach prospects via Google Places")
+    parser.add_argument("--city", required=True, help="City to search (e.g. 'Dallas')")
+    parser.add_argument("--state", required=True, help="State abbreviation (e.g. 'TX')")
+    parser.add_argument(
+        "--categories",
+        default=",".join(DEFAULT_CATEGORIES),
+        help="Comma-separated list of business categories to search",
+    )
+    args = parser.parse_args()
+    categories = [c.strip() for c in args.categories.split(",") if c.strip()]
+    discover(city=args.city, state=args.state, categories=categories)
+
+
+if __name__ == "__main__":
+    main()
