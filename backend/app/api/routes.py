@@ -3360,6 +3360,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                 SELECT stripe_price_id, COUNT(*) AS cnt
                 FROM businesses
                 WHERE is_active = true AND stripe_subscription_id IS NOT NULL
+                  AND COALESCE(is_test, false) = false
                 GROUP BY stripe_price_id
             """)
             plan_rows = cur.fetchall()
@@ -3387,6 +3388,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM businesses
                 WHERE is_active = false AND stripe_subscription_id IS NOT NULL
+                  AND COALESCE(is_test, false) = false
             """)
             churned_count = (cur.fetchone() or {}).get("cnt", 0)
             total_ever = active_subscribers + churned_count
@@ -3420,7 +3422,9 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                 SELECT COUNT(DISTINCT gr.business_id) AS cnt
                 FROM generated_reports gr
                 JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
+                JOIN businesses b ON b.id = gr.business_id
                 WHERE rdl.status = 'sent'
+                  AND COALESCE(b.is_test, false) = false
             """)
             reports_sent_to_businesses = (cur.fetchone() or {}).get("cnt", 0)
 
@@ -3428,6 +3432,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                 SELECT COUNT(DISTINCT b.id) AS cnt
                 FROM businesses b
                 WHERE b.is_active = true AND b.stripe_subscription_id IS NOT NULL
+                  AND COALESCE(b.is_test, false) = false
                   AND EXISTS (
                       SELECT 1 FROM generated_reports gr
                       JOIN report_delivery_logs rdl ON rdl.report_id = gr.id
@@ -3438,7 +3443,14 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             report_to_sub_pct = round((report_to_sub_converted / reports_sent_to_businesses * 100), 1) if reports_sent_to_businesses > 0 else 0.0
 
             # -- Reports delivered
-            cur.execute("SELECT COUNT(*) AS cnt FROM report_delivery_logs WHERE status = 'sent'")
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM report_delivery_logs rdl
+                JOIN generated_reports gr ON gr.id = rdl.report_id
+                JOIN businesses b ON b.id = gr.business_id
+                WHERE rdl.status = 'sent'
+                  AND COALESCE(b.is_test, false) = false
+            """)
             total_reports_delivered = (cur.fetchone() or {}).get("cnt", 0)
 
             # -- Follow-up stats
@@ -3457,15 +3469,21 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             # -- Pipeline totals
             cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects")
             total_prospects_discovered = (cur.fetchone() or {}).get("cnt", 0)
-            cur.execute("SELECT COUNT(*) AS cnt FROM businesses")
+            cur.execute("SELECT COUNT(*) AS cnt FROM businesses WHERE COALESCE(is_test, false) = false")
             total_businesses = (cur.fetchone() or {}).get("cnt", 0)
-            cur.execute("SELECT COUNT(*) AS cnt FROM generated_reports")
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM generated_reports gr
+                JOIN businesses b ON b.id = gr.business_id
+                WHERE COALESCE(b.is_test, false) = false
+            """)
             total_reports_generated = (cur.fetchone() or {}).get("cnt", 0)
 
             # -- New subs last 30 days
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM businesses
                 WHERE is_active = true AND stripe_subscription_id IS NOT NULL
+                  AND COALESCE(is_test, false) = false
                   AND created_at >= NOW() - INTERVAL '30 days'
             """)
             new_subs_30d = (cur.fetchone() or {}).get("cnt", 0)
@@ -3474,6 +3492,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             cur.execute("""
                 SELECT stripe_price_id, created_at FROM businesses
                 WHERE is_active = true AND stripe_subscription_id IS NOT NULL
+                  AND COALESCE(is_test, false) = false
                   AND created_at >= DATE_TRUNC('year', NOW())
             """)
             ytd_rows = cur.fetchall()
@@ -3494,6 +3513,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
             cur.execute("""
                 SELECT stripe_price_id, created_at FROM businesses
                 WHERE stripe_subscription_id IS NOT NULL
+                  AND COALESCE(is_test, false) = false
             """)
             alltime_rows = cur.fetchall()
 
