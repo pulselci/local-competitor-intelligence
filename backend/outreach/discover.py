@@ -434,7 +434,7 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
     try:
         payload = {
             "api_key": api_key,
-            "q_organization_domains": domain,
+            "q_organization_domain_name": domain,
             "per_page": 10,
         }
         r = requests.post(APOLLO_PEOPLE_SEARCH, json=payload, timeout=(4, 15))

@@ -168,7 +168,7 @@ def fetch_google_place_reviews(
     return reviews
 
 OUTSCRAPER_REVIEWS_URL = "https://api.app.outscraper.com/maps/reviews-v3"
-OUTSCRAPER_DEFAULT_LIMIT = 100  # reviews per place — well above Google's 5-review cap
+OUTSCRAPER_DEFAULT_LIMIT = 25  # reviews per place — enough for trend analysis, keeps Outscraper costs down
 
 
 def fetch_outscraper_reviews(
