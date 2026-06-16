@@ -55,6 +55,14 @@ def outreach_queue_ui():
     return FileResponse(html_path)
 
 
+@app.get("/hub", include_in_schema=False)
+@app.get("/admin/hub", include_in_schema=False)
+def command_hub():
+    """Unified navigation hub — access all internal tools from one URL."""
+    hub_path = Path(__file__).resolve().parent / "static" / "hub.html"
+    return FileResponse(hub_path)
+
+
 @app.get("/logo.png", include_in_schema=False)
 def serve_logo():
     logo_path = Path(__file__).resolve().parent / "static" / "pulse-lci-logo.png"

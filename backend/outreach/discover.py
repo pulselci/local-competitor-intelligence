@@ -352,10 +352,73 @@ def lookup_email_hunter(domain: str) -> str | None:
     return None
 
 
+OUTSCRAPER_CONTACTS_API = "https://api.app.outscraper.com/maps/emails-and-contacts"
+
 APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/mixed_people/search"
 
 # Job titles likely to be the decision-maker at a small local business
 APOLLO_TARGET_TITLES = ["owner", "founder", "president", "ceo", "manager", "general manager", "director"]
+
+
+def lookup_email_outscraper(place_id: str) -> str | None:
+    """
+    Use Outscraper's Emails & Contacts Scraper to find a contact email for a
+    Google Place ID.  Uses the same OUTSCRAPER_API_KEY already configured for
+    review ingestion.  Silently skips if the key is not set.
+
+    Outscraper scrapes the business website + Google Maps profile to surface
+    contact emails — complementary to our own scraper and Hunter/Apollo because
+    it has broader coverage of non-indexed pages and GMB data.
+
+    Pricing: counts against the Outscraper contacts-scraper quota (separate
+    from the reviews quota).  Check your plan at app.outscraper.com.
+    """
+    api_key = getattr(settings, "OUTSCRAPER_API_KEY", None) or ""
+    if not api_key:
+        return None
+
+    try:
+        r = requests.get(
+            OUTSCRAPER_CONTACTS_API,
+            params={"query": place_id, "async": "false"},
+            headers={"X-API-KEY": api_key},
+            timeout=(5, 45),
+        )
+        r.raise_for_status()
+        payload = r.json()
+
+        # Outscraper wraps results in data[0] (list of tasks) or data directly
+        data = payload.get("data", [])
+        if not data:
+            return None
+        # data is typically [[{result}, ...]] or [{result}, ...]
+        inner = data[0] if isinstance(data[0], list) else data
+        if not inner:
+            return None
+        result = inner[0] if isinstance(inner[0], dict) else {}
+
+        # Primary: emails array (list of dicts with "value" key, or plain strings)
+        for raw_email in result.get("emails", []):
+            email = (raw_email.get("value") if isinstance(raw_email, dict) else raw_email) or ""
+            email = email.strip().lower()
+            if email and not _is_junk_email(email):
+                return email
+
+        # Fallback: site_email field (sometimes populated separately)
+        site_email = (result.get("site_email") or "").strip().lower()
+        if site_email and not _is_junk_email(site_email):
+            return site_email
+
+        # Last resort: email_1 / email_2 flat fields
+        for field in ("email_1", "email_2", "email"):
+            flat = (result.get(field) or "").strip().lower()
+            if flat and not _is_junk_email(flat):
+                return flat
+
+    except Exception as e:
+        print(f"  [WARN] Outscraper contacts lookup failed for {place_id}: {e}")
+
+    return None
 
 
 def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | None:
@@ -594,6 +657,14 @@ def discover(
                 if domain:
                     contact_email = lookup_email_apollo(domain, business_name=name)
                     email_source = "apollo"
+
+            # Outscraper contacts scraper — uses the Google Place ID directly,
+            # so it works even when there's no website or the website is
+            # a booking-platform URL with no scrapeable email.
+            if not contact_email:
+                contact_email = lookup_email_outscraper(place_id)
+                if contact_email:
+                    email_source = "outscraper"
 
             if contact_email:
                 print(f"  Email found ({email_source}): {contact_email}")

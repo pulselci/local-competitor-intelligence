@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pulse LCI — Command Hub</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+         background: #0f172a; color: #e2e8f0; min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    padding: 0 20px;
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    height: 52px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding-right: 24px;
+    border-right: 1px solid #1e293b;
+    margin-right: 12px;
+  }
+  .brand img { height: 22px; }
+  .brand-name { font-size: 13px; font-weight: 800; color: #f1f5f9; letter-spacing: 0.04em; }
+  .brand-tag { font-size: 10px; color: #64748b; font-weight: 500; }
+
+  /* ── Nav tabs ── */
+  .tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    flex: 1;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 16px;
+    cursor: pointer;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    border-bottom: 2px solid transparent;
+    transition: color .15s, border-color .15s, background .15s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .tab:hover { color: #e2e8f0; background: #1e293b; }
+  .tab.active { color: #38bdf8; border-bottom-color: #38bdf8; }
+  .tab .icon { font-size: 14px; }
+
+  /* ── Key bar ── */
+  .keybar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px 0 0;
+    border-left: 1px solid #1e293b;
+    margin-left: 12px;
+  }
+  .keybar label { font-size: 11px; color: #64748b; white-space: nowrap; padding-left: 12px; }
+  .keybar input {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 12px;
+    padding: 5px 10px;
+    width: 140px;
+    outline: none;
+  }
+  .keybar input:focus { border-color: #38bdf8; }
+  .keybar button {
+    background: #1d4ed8;
+    border: none;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  .keybar button:hover { background: #2563eb; }
+
+  /* ── Action bar below tabs ── */
+  .actionbar {
+    background: #0f172a;
+    border-bottom: 1px solid #1e293b;
+    padding: 8px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .url-display {
+    font-size: 11px;
+    color: #64748b;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color .15s, border-color .15s;
+  }
+  .open-btn:hover { color: #e2e8f0; border-color: #64748b; }
+  .refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    cursor: pointer;
+    transition: color .15s, border-color .15s;
+  }
+  .refresh-btn:hover { color: #e2e8f0; border-color: #64748b; }
+
+  /* ── Iframe area ── */
+  .frame-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  .frame-wrap iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+  }
+
+  /* ── Playbook panel (no iframe) ── */
+  .playbook-panel {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    background: #f8fafc;
+    color: #1e293b;
+  }
+  .playbook-panel h1 { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+  .playbook-panel .subtitle { font-size: 14px; color: #64748b; margin-bottom: 32px; }
+  .play-section { margin-bottom: 28px; }
+  .play-section h2 { font-size: 15px; font-weight: 700; color: #0f172a; margin-bottom: 10px; border-left: 3px solid #38bdf8; padding-left: 10px; }
+  .play-step { background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; font-size: 13px; display: flex; gap: 12px; align-items: flex-start; }
+  .step-num { background: #0f172a; color: #38bdf8; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 4px; flex-shrink: 0; margin-top: 1px; }
+  .step-body { flex: 1; }
+  .step-body strong { color: #0f172a; }
+  .step-body p { color: #475569; font-size: 12px; margin-top: 3px; }
+  .play-link { color: #2563eb; text-decoration: none; }
+  .play-link:hover { text-decoration: underline; }
+  .play-tag { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; margin-left: 6px; vertical-align: middle; }
+  .tag-tool { background: #e0f2fe; color: #0369a1; }
+  .tag-action { background: #dcfce7; color: #15803d; }
+  .tag-check { background: #fef9c3; color: #92400e; }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topbar">
+  <div class="brand">
+    <img src="/logo.png" alt="Pulse LCI" onerror="this.style.display='none'">
+    <div>
+      <div class="brand-name">PULSE LCI</div>
+      <div class="brand-tag">Command Hub</div>
+    </div>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tool="onboarding">
+      <span class="icon">🚀</span> Onboarding
+    </div>
+    <div class="tab" data-tool="outreach">
+      <span class="icon">📬</span> Outreach
+    </div>
+    <div class="tab" data-tool="dashboard">
+      <span class="icon">👥</span> Clients
+    </div>
+    <div class="tab" data-tool="followups">
+      <span class="icon">🔔</span> Follow-ups
+    </div>
+    <div class="tab" data-tool="playbook">
+      <span class="icon">📋</span> Playbook
+    </div>
+    <div class="tab" data-tool="admin">
+      <span class="icon">📊</span> Admin Stats
+    </div>
+  </div>
+
+  <div class="keybar">
+    <label>Admin key:</label>
+    <input type="password" id="adminKey" placeholder="paste key…" />
+    <button onclick="saveKey()">Save</button>
+  </div>
+</div>
+
+<!-- ACTION BAR -->
+<div class="actionbar">
+  <span class="url-display" id="urlDisplay">—</span>
+  <a class="open-btn" id="openBtn" href="#" target="_blank">↗ Open in tab</a>
+  <button class="refresh-btn" onclick="reloadFrame()">↺ Reload</button>
+</div>
+
+<!-- IFRAME (all tools except playbook) -->
+<div class="frame-wrap" id="frameWrap">
+  <iframe id="mainFrame" src="" title="Tool"></iframe>
+</div>
+
+<!-- PLAYBOOK PANEL -->
+<div class="playbook-panel" id="playbookPanel">
+  <h1>📋 Pulse LCI Playbook</h1>
+  <p class="subtitle">Standard operating procedures for running cold outreach and onboarding new clients.</p>
+
+  <div class="play-section">
+    <h2>Phase 1 — Prospect Discovery</h2>
+
+    <div class="play-step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <strong>Run prospect discovery</strong>
+        <span class="play-tag tag-tool">Outreach tool</span>
+        <p>In the Outreach tab → Discovery section. Enter city + state, pick categories.
+        Discovery runs in the background (~2–5 min). Results land in the queue as <em>draft_ready</em> or <em>no_email</em>.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <strong>Review the queue</strong>
+        <span class="play-tag tag-check">Quality check</span>
+        <p>Open the queue tab in Outreach. Skim business names — skip chains, low-quality prospects, or businesses you already know.
+        Edit the draft email if the auto-generated copy needs tweaking.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <strong>Approve &amp; send</strong>
+        <span class="play-tag tag-action">Sends email</span>
+        <p>Click Approve for prospects with a good email. The system sends the cold email immediately from craig@pulselci.com with the one-sheet PDF attached.
+        Status changes to <em>sent</em>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="play-section">
+    <h2>Phase 2 — Follow-up Cadence</h2>
+
+    <div class="play-step">
+      <span class="step-num">4</span>
+      <div class="step-body">
+        <strong>Day-5 follow-up (auto)</strong>
+        <span class="play-tag tag-action">Cron job</span>
+        <p>The cron at <code>/cron/send-followups</code> auto-sends a Day-5 nudge to any cold prospect who hasn't replied.
+        Check the Follow-ups tab to see what's pending.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">5</span>
+      <div class="step-body">
+        <strong>Day-12 follow-up (auto)</strong>
+        <span class="play-tag tag-action">Cron job</span>
+        <p>A final short bump is sent 12 days after the initial send. After this, no further automated contact.
+        Prospects who reply should be moved to the onboarding flow manually.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">6</span>
+      <div class="step-body">
+        <strong>Mark converted</strong>
+        <span class="play-tag tag-tool">Follow-ups tool</span>
+        <p>If someone replies and agrees to a free report, click "Convert" in the cold prospects section.
+        This flags them for manual onboarding — proceed to Phase 3.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="play-section">
+    <h2>Phase 3 — Onboarding</h2>
+
+    <div class="play-step">
+      <span class="step-num">7</span>
+      <div class="step-body">
+        <strong>Fill out the onboarding form</strong>
+        <span class="play-tag tag-tool">Onboarding tool</span>
+        <p>In the Onboarding tab, enter the business name, city, state, Google Place ID, and contact email.
+        The system creates the business record, ingests competitors, and sets up the report schedule.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">8</span>
+      <div class="step-body">
+        <strong>Generate the first report</strong>
+        <span class="play-tag tag-action">Generates PDF</span>
+        <p>Once onboarded, trigger a manual report from the Admin Stats or Clients dashboard.
+        The PDF is generated and emailed to the contact address automatically.
+        Confirm delivery via the Clients tab.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">9</span>
+      <div class="step-body">
+        <strong>Send the Stripe payment link (if converting to paid)</strong>
+        <span class="play-tag tag-action">Billing</span>
+        <p>In Admin → Billing, generate a Stripe checkout link for the business.
+        Send it manually by email. Once paid, the schedule flips to <em>enabled</em> and appears in the Active Subscribers section of the Clients dashboard.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="play-section">
+    <h2>Ongoing Operations</h2>
+
+    <div class="play-step">
+      <span class="step-num">10</span>
+      <div class="step-body">
+        <strong>Monthly reports run automatically</strong>
+        <span class="play-tag tag-action">Cron job</span>
+        <p>The <code>/cron/run-scheduled-reports</code> cron fires monthly and generates + emails reports for all active subscribers.
+        Check Admin Stats for last-run timestamps and any failures.</p>
+      </div>
+    </div>
+
+    <div class="play-step">
+      <span class="step-num">11</span>
+      <div class="step-body">
+        <strong>Monitor growth alerts</strong>
+        <span class="play-tag tag-tool">Follow-ups tool</span>
+        <p>Growth alert emails go out when a business's competitors make a notable gain.
+        These are separate from monthly reports — check the Growth Alerts section of Follow-ups.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Tool URL map ──
+const TOOLS = {
+  onboarding: () => '/admin/onboarding',
+  outreach:   () => '/outreach/ui',
+  dashboard:  () => {
+    const key = getKey();
+    return key ? `/admin/clients?key=${encodeURIComponent(key)}` : '/admin/clients';
+  },
+  followups:  () => '/followups/ui',
+  playbook:   () => null,   // rendered inline
+  admin:      () => '/admin/dashboard',
+};
+
+const LABELS = {
+  onboarding: '🚀 Onboarding',
+  outreach:   '📬 Outreach Queue',
+  dashboard:  '👥 Client Dashboard',
+  followups:  '🔔 Follow-up Dashboard',
+  playbook:   '📋 Playbook',
+  admin:      '📊 Admin Stats',
+};
+
+// ── State ──
+let currentTool = 'onboarding';
+
+function getKey() {
+  return sessionStorage.getItem('adminKey') || localStorage.getItem('adminKey') || '';
+}
+
+function saveKey() {
+  const val = document.getElementById('adminKey').value.trim();
+  if (val) {
+    sessionStorage.setItem('adminKey', val);
+    localStorage.setItem('adminKey', val);
+    // Re-load current tool with the new key
+    loadTool(currentTool, true);
+    document.getElementById('adminKey').value = '';
+    document.getElementById('adminKey').placeholder = '✓ saved';
+    setTimeout(() => { document.getElementById('adminKey').placeholder = 'paste key…'; }, 2000);
+  }
+}
+
+function loadTool(name, force = false) {
+  if (name === currentTool && !force) return;
+  currentTool = name;
+
+  // Update tab highlights
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tool === name);
+  });
+
+  const url = TOOLS[name]();
+  const frameWrap = document.getElementById('frameWrap');
+  const playbook = document.getElementById('playbookPanel');
+  const frame = document.getElementById('mainFrame');
+  const urlDisplay = document.getElementById('urlDisplay');
+  const openBtn = document.getElementById('openBtn');
+
+  if (name === 'playbook') {
+    frameWrap.style.display = 'none';
+    playbook.style.display = 'block';
+    urlDisplay.textContent = 'Playbook — rendered inline';
+    openBtn.href = '#';
+    openBtn.removeAttribute('href');
+  } else {
+    frameWrap.style.display = 'block';
+    playbook.style.display = 'none';
+    frame.src = url;
+    urlDisplay.textContent = window.location.origin + url;
+    openBtn.href = url;
+  }
+}
+
+function reloadFrame() {
+  if (currentTool === 'playbook') return;
+  const frame = document.getElementById('mainFrame');
+  frame.src = TOOLS[currentTool]();
+}
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+  // Restore saved key display
+  const savedKey = getKey();
+  if (savedKey) {
+    document.getElementById('adminKey').placeholder = '✓ key saved';
+  }
+
+  // Wire tab clicks
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => loadTool(tab.dataset.tool));
+  });
+
+  // Load default tab
+  loadTool('onboarding');
+});
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@ sys.path.insert(0, ".")
 
 from psycopg import connect
 
-DATABASE_URL = "postgresql://postgres:32GpboBFaHabEl4w@db.tjjrrehgcbkqagbmfjif.supabase.co:5432/postgres"
+DATABASE_URL = "postgresql://postgres.tjjrrehgcbkqagbmfjif:32GpboBFaHabEl4w@aws-0-us-west-2.pooler.supabase.com:6543/postgres"
 
 with connect(DATABASE_URL, options="-c statement_timeout=0") as conn:
     with conn.cursor() as cur:

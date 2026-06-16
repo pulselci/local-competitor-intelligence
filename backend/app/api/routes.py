@@ -1170,6 +1170,7 @@ def admin_clients_dashboard(key: str = ""):
                     b.notes,
                     b.created_at,
                     b.stripe_price_id,
+                    COALESCE(b.is_test, false) AS is_test,
                     rs.is_enabled,
                     rs.next_run_at,
                     rs.last_run_at,
@@ -1248,6 +1249,7 @@ def admin_clients_dashboard(key: str = ""):
             "report_count": int(row.get("report_count") or 0),
             "plan": plan_name,
             "last_report_id": str(row.get("last_report_id") or ""),
+            "is_test": bool(row.get("is_test")),
         }
 
         if is_enabled:
@@ -1270,9 +1272,10 @@ def admin_clients_dashboard(key: str = ""):
                 f'style="color:#2563eb;font-size:12px;">View PDF</a>'
                 if report_id else "—"
             )
+            sandbox_badge = ('<span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;vertical-align:middle;">SANDBOX</span>' if e.get('is_test') else '')
             html += (
                 "<tr>"
-                f'<td>{e["name"]}</td>'
+                f'<td>{e["name"]}{sandbox_badge}</td>'
                 f'<td>{e["city"]}, {e["state"]}</td>'
                 f'<td>{e["contact_name"]}</td>'
                 f'<td><a href="mailto:{e["contact_email"]}" style="color:#2563eb;">{e["contact_email"]}</a></td>'
@@ -1324,7 +1327,7 @@ def admin_clients_dashboard(key: str = ""):
   <div class="stats">
     <div class="stat"><div class="stat-val">{len(subscribers)}</div><div class="stat-label">Active Subscribers</div></div>
     <div class="stat"><div class="stat-val">{len(prospects)}</div><div class="stat-label">Free Report Prospects</div></div>
-    <div class="stat"><div class="stat-val">{len(subscribers) + len(prospects)}</div><div class="stat-label">Total in System</div></div>
+    <div class="stat"><div class="stat-val">{len([e for e in subscribers+prospects if e.get('is_test')])}</div><div class="stat-label" style="color:#92400e">Sandbox (Test) Businesses</div></div>
   </div>
 
   <div class="section">
