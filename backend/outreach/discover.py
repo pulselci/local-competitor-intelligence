@@ -380,7 +380,7 @@ def lookup_email_outscraper(place_id: str) -> str | None:
     try:
         r = requests.get(
             OUTSCRAPER_CONTACTS_API,
-            params={"query": place_id, "async": "false"},
+            params={"query": f"place_id:{place_id}", "async": "false"},
             headers={"X-API-KEY": api_key},
             timeout=(5, 45),
         )
@@ -436,9 +436,8 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
             "api_key": api_key,
             "q_organization_domains": domain,
             "per_page": 10,
-            "contact_email_status[]": ["verified", "likely to engage"],
         }
-        r = requests.post(APOLLO_PEOPLE_SEARCH, json=payload, timeout=(4, 10))
+        r = requests.post(APOLLO_PEOPLE_SEARCH, json=payload, timeout=(4, 15))
         r.raise_for_status()
         people = r.json().get("people", [])
 
