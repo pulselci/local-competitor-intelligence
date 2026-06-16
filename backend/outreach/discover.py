@@ -354,7 +354,7 @@ def lookup_email_hunter(domain: str) -> str | None:
 
 OUTSCRAPER_CONTACTS_API = "https://api.app.outscraper.com/maps/emails-and-contacts"
 
-APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/mixed_people/search"
+APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/people/search"
 
 # Job titles likely to be the decision-maker at a small local business
 APOLLO_TARGET_TITLES = ["owner", "founder", "president", "ceo", "manager", "general manager", "director"]
@@ -433,11 +433,16 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
 
     try:
         payload = {
-            "api_key": api_key,
             "q_organization_domain_name": domain,
             "per_page": 10,
+            "page": 1,
         }
-        r = requests.post(APOLLO_PEOPLE_SEARCH, json=payload, timeout=(4, 15))
+        r = requests.post(
+            APOLLO_PEOPLE_SEARCH,
+            json=payload,
+            headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+            timeout=(4, 15),
+        )
         r.raise_for_status()
         people = r.json().get("people", [])
 
