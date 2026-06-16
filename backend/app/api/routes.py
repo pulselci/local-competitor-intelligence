@@ -1219,6 +1219,7 @@ def admin_clients_dashboard(key: str = ""):
 
     prospects = []
     subscribers = []
+    sandbox = []
 
     for row in rows:
         is_enabled = row.get("is_enabled")
@@ -1252,10 +1253,40 @@ def admin_clients_dashboard(key: str = ""):
             "is_test": bool(row.get("is_test")),
         }
 
-        if is_enabled:
+        if entry["is_test"]:
+            sandbox.append(entry)
+        elif is_enabled:
             subscribers.append(entry)
         else:
             prospects.append(entry)
+
+    def table_rows_sandbox(entries):
+        if not entries:
+            return '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:20px;">No sandbox businesses</td></tr>'
+        html = ""
+        for e in entries:
+            next_run = e.get("next_run_at", "—")
+            plan = e.get("plan", "—")
+            plan_color = "#166534" if plan == "Growth" else "#1e40af" if plan == "Starter" else "#64748b"
+            plan_badge = f'<span style="background:#f0f9ff;color:{plan_color};font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;">{plan}</span>'
+            report_id = e.get("last_report_id", "")
+            report_link = (
+                f'<a href="/generated-reports/{report_id}/pdf" target="_blank" style="color:#2563eb;font-size:12px;">View PDF</a>'
+                if report_id else "—"
+            )
+            html += (
+                "<tr>"
+                f'<td>{e["name"]}</td>'
+                f'<td>{e["city"]}, {e["state"]}</td>'
+                f'<td><a href="mailto:{e["contact_email"]}" style="color:#2563eb;">{e["contact_email"]}</a></td>'
+                f'<td>{plan_badge}</td>'
+                f'<td>{e["last_report_at"]}</td>'
+                f'<td>{e["report_count"]} sent</td>'
+                f'<td>{report_link}</td>'
+                f'<td>{next_run}</td>'
+                "</tr>"
+            )
+        return html
 
     def table_rows(entries, show_next=False):
         if not entries:
@@ -1316,6 +1347,13 @@ def admin_clients_dashboard(key: str = ""):
   .stat {{ background: white; border-radius: 10px; padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }}
   .stat-val {{ font-size: 28px; font-weight: 900; color: #10233f; }}
   .stat-label {{ font-size: 12px; color: #64748b; margin-top: 4px; }}
+  .tabs {{ display: flex; gap: 4px; margin-bottom: 20px; }}
+  .tab-btn {{ padding: 8px 18px; border-radius: 8px 8px 0 0; font-size: 13px; font-weight: 700;
+             cursor: pointer; border: none; background: #e2e8f0; color: #64748b; }}
+  .tab-btn.active {{ background: white; color: #10233f; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }}
+  .tab-panel {{ display: none; }}
+  .tab-panel.active {{ display: block; }}
+  .badge-sandbox {{ background: #fef3c7; color: #92400e; }}
 </style>
 </head>
 <body>
@@ -1325,39 +1363,74 @@ def admin_clients_dashboard(key: str = ""):
 </div>
 <div class="body">
   <div class="stats">
-    <div class="stat"><div class="stat-val">{len(subscribers)}</div><div class="stat-label">Active Subscribers</div></div>
-    <div class="stat"><div class="stat-val">{len(prospects)}</div><div class="stat-label">Free Report Prospects</div></div>
-    <div class="stat"><div class="stat-val">{len([e for e in subscribers+prospects if e.get('is_test')])}</div><div class="stat-label" style="color:#92400e">Sandbox (Test) Businesses</div></div>
+    <div class="stat"><div class="stat-val">{len(subscribers)}</div><div class="stat-label">Active Subscribers (Live)</div></div>
+    <div class="stat"><div class="stat-val">{len(prospects)}</div><div class="stat-label">Free Report Prospects (Live)</div></div>
+    <div class="stat"><div class="stat-val">{len(sandbox)}</div><div class="stat-label" style="color:#92400e">Sandbox Businesses</div></div>
   </div>
 
-  <div class="section">
-    <div class="section-header">
-      <h2>Active Subscribers</h2>
-      <span class="badge badge-sub">{len(subscribers)} paying</span>
-    </div>
-    <table>
-      <thead><tr>
-        <th>Business</th><th>Location</th><th>Contact</th><th>Email</th><th>Plan</th>
-        <th>Signed Up</th><th>Last Report</th><th>Reports Sent</th><th>Last Report</th><th>Next Report</th>
-      </tr></thead>
-      <tbody>{table_rows(subscribers, show_next=True)}</tbody>
-    </table>
+  <!-- Tab buttons -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="showTab('live', this)">Live Clients</button>
+    <button class="tab-btn" onclick="showTab('sandbox', this)">🧪 Sandbox ({len(sandbox)})</button>
   </div>
 
-  <div class="section">
-    <div class="section-header">
-      <h2>Free Report Prospects</h2>
-      <span class="badge badge-prospect">{len(prospects)} prospects</span>
+  <!-- Live tab -->
+  <div class="tab-panel active" id="tab-live">
+    <div class="section">
+      <div class="section-header">
+        <h2>Active Subscribers</h2>
+        <span class="badge badge-sub">{len(subscribers)} paying</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Location</th><th>Contact</th><th>Email</th><th>Plan</th>
+          <th>Signed Up</th><th>Last Report</th><th>Reports Sent</th><th>Last Report</th><th>Next Report</th>
+        </tr></thead>
+        <tbody>{table_rows(subscribers, show_next=True)}</tbody>
+      </table>
     </div>
-    <table>
-      <thead><tr>
-        <th>Business</th><th>Location</th><th>Contact</th><th>Email</th><th>Plan</th>
-        <th>Requested</th><th>Last Report</th><th>Reports Sent</th><th>Last Report</th><th></th>
-      </tr></thead>
-      <tbody>{table_rows(prospects, show_next=False)}</tbody>
-    </table>
+    <div class="section">
+      <div class="section-header">
+        <h2>Free Report Prospects</h2>
+        <span class="badge badge-prospect">{len(prospects)} prospects</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Location</th><th>Contact</th><th>Email</th><th>Plan</th>
+          <th>Requested</th><th>Last Report</th><th>Reports Sent</th><th>Last Report</th><th></th>
+        </tr></thead>
+        <tbody>{table_rows(prospects, show_next=False)}</tbody>
+      </table>
+    </div>
   </div>
+
+  <!-- Sandbox tab -->
+  <div class="tab-panel" id="tab-sandbox">
+    <div class="section">
+      <div class="section-header">
+        <h2>🧪 Sandbox Businesses</h2>
+        <span class="badge badge-sandbox">{len(sandbox)} test accounts</span>
+        <span style="font-size:12px;color:#64748b;margin-left:auto;">Snapshots &amp; reports run normally · not counted in live stats</span>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Business</th><th>Location</th><th>Email</th><th>Plan</th>
+          <th>Last Report</th><th>Reports Sent</th><th>Last Report</th><th>Next Report</th>
+        </tr></thead>
+        <tbody>{table_rows_sandbox(sandbox)}</tbody>
+      </table>
+    </div>
+  </div>
+
 </div>
+<script>
+function showTab(name, btn) {{
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}}
+</script>
 </body>
 </html>"""
 
