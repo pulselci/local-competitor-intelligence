@@ -216,6 +216,7 @@ function esc(str) {
 }
 let reportData = [], coldData = [], alertData = [];
 let liveReportData = [], sandboxReportData = [];
+let liveColdData = [], sandboxColdData = [];
 let reportFilter = 'all', coldFilter = 'all';
 
 function daysBetween(dateStr) {
@@ -262,13 +263,16 @@ function rowUrgency(row, type) {
 function renderSandbox() {
   const tbody = document.getElementById('sandbox-tbody');
   const sec = document.getElementById('sandbox-section');
-  document.getElementById('sandbox-count').textContent = sandboxReportData.length;
-  if (!sandboxReportData.length) { sec.style.display = 'none'; return; }
+  const total = sandboxReportData.length + sandboxColdData.length;
+  document.getElementById('sandbox-count').textContent = total;
+  if (!total) { sec.style.display = 'none'; return; }
   sec.style.display = 'block';
-  tbody.innerHTML = sandboxReportData.map(r => {
+
+  const reportRows = sandboxReportData.map(r => {
     const days = daysBetween(r.report_sent_at);
     return `<tr>
-      <td><div class="business-name">${esc(r.business_name)}</div></td>
+      <td><div class="business-name">${esc(r.business_name)}</div>
+          <span style="font-size:10px;color:#94a3b8">Free report</span></td>
       <td><div class="email-text">${esc(r.contact_email || '—')}</div></td>
       <td>${r.report_sent_at ? new Date(r.report_sent_at).toLocaleDateString() : '—'}</td>
       <td>${pillFor(5, r.fu5_sent, days)}</td>
@@ -277,6 +281,22 @@ function renderSandbox() {
       <td>${statusPill(r)}</td>
     </tr>`;
   }).join('');
+
+  const coldRows = sandboxColdData.map(r => {
+    const days = daysBetween(r.sent_at);
+    return `<tr>
+      <td><div class="business-name">${esc(r.business_name)}</div>
+          <span style="font-size:10px;color:#94a3b8">Cold email</span></td>
+      <td><div class="email-text">${esc(r.contact_email || '—')}</div></td>
+      <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
+      <td>${pillFor(5, r.followup1_sent_at, days)}</td>
+      <td>${pillFor(12, r.followup2_sent_at, days)}</td>
+      <td><span class="pill pill-na">—</span></td>
+      <td>${coldStatusPill(r)}</td>
+    </tr>`;
+  }).join('');
+
+  tbody.innerHTML = reportRows + coldRows;
 }
 
 function toggleSandbox() {
@@ -393,7 +413,7 @@ function updateStats() {
     else awaiting++;
   });
 
-  coldData.forEach(r => {
+  liveColdData.forEach(r => {
     if (r.status === 'converted') return;
     const u = rowUrgency(r, 'cold');
     if (u === 2) overdue++;
@@ -481,9 +501,11 @@ async function loadAll() {
     coldData   = await coldRes.json();
     liveReportData    = reportData.filter(r => !r.is_test);
     sandboxReportData = reportData.filter(r => r.is_test);
+    liveColdData      = coldData.filter(r => !r.is_test);
+    sandboxColdData   = coldData.filter(r => r.is_test);
     renderStats(reportData, coldData);
     renderReports(liveReportData);
-    renderCold(coldData);
+    renderCold(liveColdData);
     renderSandbox();
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {

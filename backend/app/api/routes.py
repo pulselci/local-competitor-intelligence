@@ -3308,7 +3308,8 @@ def followup_cold_prospects():
                 SELECT
                     id::text, business_name, contact_email,
                     city, state, sent_at,
-                    followup1_sent_at, followup2_sent_at, status
+                    followup1_sent_at, followup2_sent_at, status,
+                    COALESCE(is_test, false) AS is_test
                 FROM outreach_prospects
                 WHERE status IN ('sent', 'converted')
                   AND sent_at IS NOT NULL
@@ -3333,6 +3334,7 @@ def followup_cold_prospects():
                     "followup1_sent_at":  r["followup1_sent_at"].isoformat() if r["followup1_sent_at"] else None,
                     "followup2_sent_at":  r["followup2_sent_at"].isoformat() if r["followup2_sent_at"] else None,
                     "status":             r["status"],
+                    "is_test":            bool(r["is_test"]),
                 }
                 for r in rows
             ]
@@ -3398,7 +3400,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
 
             # -- Cold outreach conversion
             # cold_total = emails actually sent
-            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped')")
+            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE status IN ('sent','converted','bounced','skipped') AND COALESCE(is_test, false) = false")
             cold_total = (cur.fetchone() or {}).get("cnt", 0)
             # cold_converted = prospects manually marked converted OR whose email
             # appears in report_delivery_logs (clicked link and got report)
@@ -3406,6 +3408,7 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                 SELECT COUNT(DISTINCT op.id) AS cnt
                 FROM outreach_prospects op
                 WHERE op.contact_email IS NOT NULL
+                  AND COALESCE(op.is_test, false) = false
                   AND op.status IN ('sent','converted','bounced','skipped')
                   AND (
                       op.status = 'converted'
@@ -3465,11 +3468,12 @@ def admin_stats(key: str = "", expenses: float = 250.0):
                     COUNT(*) FILTER (WHERE followup1_sent_at IS NOT NULL) AS fu1,
                     COUNT(*) FILTER (WHERE followup2_sent_at IS NOT NULL) AS fu2
                 FROM outreach_prospects WHERE status IN ('sent','converted')
+                  AND COALESCE(is_test, false) = false
             """)
             cold_fu = cur.fetchone() or {}
 
             # -- Pipeline totals
-            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects")
+            cur.execute("SELECT COUNT(*) AS cnt FROM outreach_prospects WHERE COALESCE(is_test, false) = false")
             total_prospects_discovered = (cur.fetchone() or {}).get("cnt", 0)
             cur.execute("SELECT COUNT(*) AS cnt FROM businesses WHERE COALESCE(is_test, false) = false")
             total_businesses = (cur.fetchone() or {}).get("cnt", 0)
@@ -5196,215 +5200,4 @@ def generate_business_report(
         print("\n=== REPORT DEBUG ===")
         print("business_name:", business_name)
         print("customer_label:", customer_label)
-        perception_body = (sections.get("customer_perception_insights") or {}).get("body") or ""
-        print("perception_body_preview:", perception_body[:120])
-        print("competitor_deltas:", len(competitor_deltas))
-        print("insights:", len(sections.get("insights", [])))
-        print("money_insights:", len([i for i in sections.get("insights", []) if i.get("type") == "money"]))
-        print("review_insights:", len([i for i in sections.get("insights", []) if i.get("type") == "review"]))
-        print("customer_friction:", len((sections.get("customer_friction_signals") or {}).get("insights", [])))
-        print("this_month_focus:", len((sections.get("report_experience") or {}).get("this_month_focus", [])))
-        print("review_pulse:", bool(sections.get("review_pulse")))
-        print("====================\n")
-
-        created_any = insert_generated_report(
-            business_id=business_id,
-            schedule_id=schedule_id,
-            period_start=period_start,
-            period_end=period_end,
-            status="generated",
-            title=title,
-            summary_text=summary_text,
-            sections=sections,
-            inputs={
-                "source": "compute_snapshot_deltas",
-                "days": days,
-                "as_of": as_of,
-                "count": len(competitor_deltas),
-                "schedule": schedule_meta,
-            },
-            error=None,
-        )
-
-        created = _as_dict(created_any)
-        created_id_val = created.get("id")
-
-        try:
-            created_id = UUID(str(created_id_val)) if created_id_val else None
-        except Exception:
-            created_id = None
-
-        # ✅ Step 5/6: compare PREVIOUS (pre-insert) vs THIS new report
-        if prev_sections and isinstance(prev_sections, dict) and isinstance(sections, dict) and created_id:
-            pc = build_position_change_insight(prev_sections, sections)
-
-            mm = build_market_movers_insight(
-                prev_sections,
-                sections,
-                min_share_delta_pp=0.1,
-                min_review_delta=1,
-            )
-
-            if not pc and not mm:
-                owner_name_for_flat = business_name
-                owner_rank = None
-
-                try:
-                    sov = sections.get("share_of_voice") or {}
-                    rows = sov.get("rows") or []
-
-                    for i, r in enumerate(rows):
-                        name = r.get("name") or r.get("competitor_name")
-                        if (
-                            name
-                            and owner_name_for_flat
-                            and str(name).strip().lower() == str(owner_name_for_flat).strip().lower()
-                        ):
-                            owner_rank = i + 1
-                            break
-                except Exception:
-                    owner_rank = None
-
-                if owner_rank:
-                    summary = f"Market was mostly flat versus the prior report. {owner_name_for_flat} held position #{owner_rank}."
-                else:
-                    summary = "Market was mostly flat versus the prior report."
-
-                mm = {
-                    "type": "market_movers",
-                    "summary": summary,
-                    "details": {
-                        "flat_comparison": True,
-                        "owner_rank": owner_rank,
-                    },
-                    "severity": "info",
-                }
-
-            previous_insights = []
-            if isinstance(prev_sections, dict):
-                previous_insights = prev_sections.get("insights") or []
-
-            def _apply_label_to_experience(exp: dict) -> dict:
-                """Apply customer label replacement to a report_experience dict."""
-                if not customer_label or not isinstance(exp, dict):
-                    return exp
-                _lpl = customer_label
-                _lsg = customer_label.rstrip("s") if customer_label.endswith("s") else customer_label
-                def _rt(text):
-                    if not isinstance(text, str):
-                        return text
-                    text = text.replace("patients", _lpl).replace("Patients", _lpl.capitalize())
-                    text = text.replace("patient", _lsg).replace("Patient", _lsg.capitalize())
-                    text = text.replace("customers", _lpl).replace("Customers", _lpl.capitalize())
-                    text = text.replace("customer", _lsg).replace("Customer", _lsg.capitalize())
-                    return text
-                def _walk(obj):
-                    if isinstance(obj, str): return _rt(obj)
-                    if isinstance(obj, dict): return {k: _walk(v) for k, v in obj.items()}
-                    if isinstance(obj, list): return [_walk(i) for i in obj]
-                    return obj
-                return _walk(exp)
-
-            if pc:
-                created.setdefault("sections", {}).setdefault("insights", []).append(pc)
-                created["sections"]["report_experience"] = _apply_label_to_experience(
-                    _build_report_experience_payload(
-                        created["sections"].get("insights"),
-                        previous_insights=previous_insights,
-                        sections=created.get("sections") or {},
-                    )
-                )
-                _append_insight_to_report_in_db(
-                    created_id,
-                    pc,
-                    previous_insights=previous_insights,
-                )
-
-            if mm:
-                created.setdefault("sections", {}).setdefault("insights", []).append(mm)
-                created["sections"]["report_experience"] = _apply_label_to_experience(
-                    _build_report_experience_payload(
-                        created["sections"].get("insights"),
-                        previous_insights=previous_insights,
-                        sections=created.get("sections") or {},
-                    )
-                )
-                _append_insight_to_report_in_db(
-                    created_id,
-                    mm,
-                    previous_insights=previous_insights,
-                )
-
-        sections = created.get("sections") or {}
-
-        if not sections.get("report_experience"):
-            sections["report_experience"] = {}
-
-        # ── Re-apply data-driven execution plan after Step 5/6 rebuilds report_experience ──
-        final_focus = _build_data_driven_execution_plan(sections, business_name=sections.get("business_name", ""))
-        if not final_focus:
-            final_focus = sections["report_experience"].get("this_month_focus") or []
-        if not final_focus:
-            final_focus = [{
-                "type": "fallback_focus",
-                "summary": "Set a clear monthly review-growth target, improve your positioning against top competitors, and track whether you are closing the gap.",
-                "priority": "Immediate"
-            }]
-
-        # Apply customer label normalization to the execution plan before saving to DB
-        _cl = sections.get("customer_label") or "customers"
-        _cl_sg = _cl.rstrip("s") if _cl.endswith("s") else _cl
-        def _fix_term(text: str) -> str:
-            if not text:
-                return text
-            text = text.replace("patients", _cl).replace("Patients", _cl.capitalize())
-            text = text.replace("patient", _cl_sg).replace("Patient", _cl_sg.capitalize())
-            text = text.replace("customers", _cl).replace("Customers", _cl.capitalize())
-            text = text.replace("customer", _cl_sg).replace("Customer", _cl_sg.capitalize())
-            return text
-        def _fix_item(item):
-            if not isinstance(item, dict):
-                return item
-            return {k: _fix_term(v) if isinstance(v, str) else v for k, v in item.items()}
-        final_focus = [_fix_item(f) for f in final_focus]
-
-        # Patch just this_month_focus in the DB — read current saved sections,
-        # update only the execution plan, write back. Avoids overwriting the
-        # good report_experience cards built by _append_insight_to_report_in_db.
-        try:
-            import json as _json
-            with get_conn() as _conn:
-                with _conn.cursor() as _cur:
-                    _cur.execute(
-                        "SELECT sections FROM generated_reports WHERE id = %s",
-                        (str(created_id),),
-                    )
-                    _saved = _cur.fetchone()
-
-                if _saved:
-                    _saved_sections = _saved["sections"]
-                    if isinstance(_saved_sections, str):
-                        _saved_sections = _json.loads(_saved_sections)
-                    if isinstance(_saved_sections, dict):
-                        if "report_experience" not in _saved_sections:
-                            _saved_sections["report_experience"] = {}
-                        _saved_sections["report_experience"]["this_month_focus"] = final_focus[:4]
-                        _saved_sections["report_experience"]["immediate_priorities"] = len(final_focus[:4]) or 1
-                        with get_conn() as _conn2:
-                            with _conn2.cursor() as _cur2:
-                                _cur2.execute(
-                                    "UPDATE generated_reports SET sections = %s WHERE id = %s",
-                                    (_json.dumps(_saved_sections), str(created_id)),
-                                )
-                            _conn2.commit()
-                        created["sections"] = _saved_sections
-                        sections = _saved_sections
-        except Exception as _e:
-            logger.warning("failed to persist final execution plan to DB: %s", _e)
-
-        return created
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate report: {str(e)}")
+        perception_body = (sec
