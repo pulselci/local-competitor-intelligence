@@ -3260,6 +3260,7 @@ def followup_report_prospects():
                     b.id::text            AS business_id,
                     b.name                AS business_name,
                     b.notes,
+                    COALESCE(b.is_test, false) AS is_test,
                     rdl.recipient_email   AS contact_email,
                     MIN(rdl.sent_at)      AS report_sent_at,
                     MAX(CASE WHEN pfl.day = 5  THEN pfl.sent_at END) AS fu5_sent,
@@ -3289,6 +3290,7 @@ def followup_report_prospects():
                     "fu12_sent":      r["fu12_sent"].isoformat() if r["fu12_sent"] else None,
                     "fu21_sent":      r["fu21_sent"].isoformat() if r["fu21_sent"] else None,
                     "subscribed":     bool(r["subscribed"]),
+                    "is_test":        bool(r["is_test"]),
                 }
                 for r in rows
             ]

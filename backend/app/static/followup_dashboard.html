@@ -75,6 +75,13 @@
   .convert-btn { font-size: 11px; font-weight: 600; padding: 4px 10px; border: 1px solid #2563eb; border-radius: 6px; background: #fff; color: #2563eb; cursor: pointer; white-space: nowrap; }
   .convert-btn:hover { background: #2563eb; color: #fff; }
   .convert-btn:disabled { opacity: .5; cursor: default; }
+
+  .sandbox-section { margin: 0 28px 28px; border: 1px solid #fde68a; border-radius: 10px; overflow: hidden; }
+  .sandbox-toggle { display: flex; align-items: center; gap: 10px; padding: 10px 16px; background: #fffbeb; cursor: pointer; font-size: 12px; font-weight: 700; color: #92400e; user-select: none; }
+  .sandbox-toggle:hover { background: #fef3c7; }
+  .sandbox-body { display: none; }
+  .sandbox-body.open { display: block; }
+  .sandbox-note { font-size: 11px; color: #b45309; padding: 8px 16px; background: #fffbeb; border-bottom: 1px solid #fde68a; }
 </style>
 </head>
 <body>
@@ -167,6 +174,24 @@
   </table>
 </div>
 
+<!-- ── SANDBOX BUSINESSES ── -->
+<div class="sandbox-section" id="sandbox-section" style="display:none">
+  <div class="sandbox-toggle" onclick="toggleSandbox()">
+    🧪 Sandbox businesses — <span id="sandbox-count">0</span> test accounts
+    <span id="sandbox-arrow" style="margin-left:auto">▶</span>
+  </div>
+  <div class="sandbox-body" id="sandbox-body">
+    <div class="sandbox-note">These are test accounts. Follow-ups and reports run normally but are excluded from live stats above.</div>
+    <table>
+      <thead><tr>
+        <th>Business</th><th>Contact email</th><th>Report sent</th>
+        <th>Day 5</th><th>Day 12</th><th>Day 21</th><th>Status</th>
+      </tr></thead>
+      <tbody id="sandbox-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
 </div><!-- /tab-followups -->
 
 <div id="tab-alerts" class="tab-panel">
@@ -190,6 +215,7 @@ function esc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 let reportData = [], coldData = [], alertData = [];
+let liveReportData = [], sandboxReportData = [];
 let reportFilter = 'all', coldFilter = 'all';
 
 function daysBetween(dateStr) {
@@ -231,6 +257,33 @@ function rowUrgency(row, type) {
     const due     = (!row.followup1_sent_at && days >= 5) || (!row.followup2_sent_at && days >= 12);
     return overdue ? 2 : due ? 1 : 0;
   }
+}
+
+function renderSandbox() {
+  const tbody = document.getElementById('sandbox-tbody');
+  const sec = document.getElementById('sandbox-section');
+  document.getElementById('sandbox-count').textContent = sandboxReportData.length;
+  if (!sandboxReportData.length) { sec.style.display = 'none'; return; }
+  sec.style.display = 'block';
+  tbody.innerHTML = sandboxReportData.map(r => {
+    const days = daysBetween(r.report_sent_at);
+    return `<tr>
+      <td><div class="business-name">${esc(r.business_name)}</div></td>
+      <td><div class="email-text">${esc(r.contact_email || '—')}</div></td>
+      <td>${r.report_sent_at ? new Date(r.report_sent_at).toLocaleDateString() : '—'}</td>
+      <td>${pillFor(5, r.fu5_sent, days)}</td>
+      <td>${pillFor(12, r.fu12_sent, days)}</td>
+      <td>${pillFor(21, r.fu21_sent, days)}</td>
+      <td>${statusPill(r)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function toggleSandbox() {
+  const body = document.getElementById('sandbox-body');
+  const arrow = document.getElementById('sandbox-arrow');
+  const open = body.classList.toggle('open');
+  arrow.textContent = open ? '▼' : '▶';
 }
 
 function renderReports(data) {
@@ -331,7 +384,8 @@ function renderStats() { updateStats(); }
 function updateStats() {
   let overdue = 0, due = 0, awaiting = 0, subscribed = 0;
 
-  reportData.forEach(r => {
+  // Only count live (non-sandbox) businesses in stats
+  liveReportData.forEach(r => {
     if (r.subscribed) { subscribed++; return; }
     const u = rowUrgency(r, 'report');
     if (u === 2) overdue++;
@@ -350,7 +404,7 @@ function updateStats() {
   document.getElementById('s-due').textContent = due;
   document.getElementById('s-awaiting').textContent = awaiting;
   document.getElementById('s-subscribed').textContent = subscribed;
-  document.getElementById('s-reports').textContent = reportData.length;
+  document.getElementById('s-reports').textContent = liveReportData.length;
 }
 
 function setFilter(type, val, btn) {
@@ -360,7 +414,7 @@ function setFilter(type, val, btn) {
       b.closest('.section') && b.closest('.section').querySelector('#report-table') && b.classList.remove('active');
     });
     btn.classList.add('active');
-    renderReports(reportData);
+    renderReports(liveReportData);
   } else {
     coldFilter = val;
     btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -417,7 +471,7 @@ async function loadAlerts() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', async function() {
+async function loadAll() {
   try {
     const [reportRes, coldRes] = await Promise.all([
       fetch(`${API}/followups/report-prospects`),
@@ -425,15 +479,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     ]);
     reportData = await reportRes.json();
     coldData   = await coldRes.json();
+    liveReportData    = reportData.filter(r => !r.is_test);
+    sandboxReportData = reportData.filter(r => r.is_test);
     renderStats(reportData, coldData);
-    renderReports(reportData);
+    renderReports(liveReportData);
     renderCold(coldData);
+    renderSandbox();
+    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {
     console.error('Dashboard load failed:', e);
     document.getElementById('report-body').innerHTML = '<tr><td colspan="8" class="empty">Error loading data.</td></tr>';
     document.getElementById('cold-body').innerHTML   = '<tr><td colspan="9" class="empty">Error loading data.</td></tr>';
   }
-});
+}
+
+document.addEventListener('DOMContentLoaded', loadAll);
 </script>
 </body>
 </html>
