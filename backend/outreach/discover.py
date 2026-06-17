@@ -661,13 +661,13 @@ def discover(
                     contact_email = lookup_email_apollo(domain, business_name=name)
                     email_source = "apollo"
 
-            # Outscraper contacts scraper — uses the Google Place ID directly,
-            # so it works even when there's no website or the website is
-            # a booking-platform URL with no scrapeable email.
-            if not contact_email:
-                contact_email = lookup_email_outscraper(place_id)
-                if contact_email:
-                    email_source = "outscraper"
+            # Outscraper contacts scraper disabled — maps/emails-and-contacts
+            # endpoint returns 404 (URL not found on server); revisit if they
+            # publish a working contacts API endpoint.
+            # if not contact_email:
+            #     contact_email = lookup_email_outscraper(place_id)
+            #     if contact_email:
+            #         email_source = "outscraper"
 
             if contact_email:
                 print(f"  Email found ({email_source}): {contact_email}")
