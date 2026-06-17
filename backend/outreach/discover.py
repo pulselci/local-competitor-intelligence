@@ -428,6 +428,7 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
     Targets owner/founder/manager titles first, then any verified email.
     """
     api_key = getattr(settings, "APOLLO_API_KEY", None) or ""
+    print(f"  [DEBUG] Apollo key present: {bool(api_key)} len={len(api_key)}")
     if not api_key:
         return None
 
@@ -737,8 +738,4 @@ def main() -> None:
     )
     args = parser.parse_args()
     categories = [c.strip() for c in args.categories.split(",") if c.strip()]
-    discover(city=args.city, state=args.state, categories=categories)
-
-
-if __name__ == "__main__":
-    main()
+    discover(city=args.city, st
