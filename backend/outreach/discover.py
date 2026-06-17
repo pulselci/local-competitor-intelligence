@@ -423,18 +423,28 @@ def lookup_email_outscraper(place_id: str) -> str | None:
 
 def _pick_best_apollo_email(people: list) -> str | None:
     """Return the best contact email from an Apollo people list."""
+    def get_emails(person: dict) -> list[str]:
+        """Collect all available emails for a person."""
+        candidates = []
+        primary = (person.get("email") or "").lower().strip()
+        if primary:
+            candidates.append(primary)
+        for e in person.get("personal_emails") or []:
+            e = (e or "").lower().strip()
+            if e and e not in candidates:
+                candidates.append(e)
+        return [e for e in candidates if not _is_junk_email(e)]
+
     # Prefer decision-maker titles
     for person in people:
         title = (person.get("title") or "").lower()
-        email = (person.get("email") or "").lower()
-        if not email or _is_junk_email(email):
+        if not any(t in title for t in APOLLO_TARGET_TITLES):
             continue
-        if any(t in title for t in APOLLO_TARGET_TITLES):
+        for email in get_emails(person):
             return email
-    # Fall back to first person with a valid email
+    # Fall back to first person with any valid email
     for person in people:
-        email = (person.get("email") or "").lower()
-        if email and not _is_junk_email(email):
+        for email in get_emails(person):
             return email
     return None
 
@@ -451,17 +461,20 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
 
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
 
-    # --- Pass 1: domain search ---
-    try:
+    def _search(payload: dict) -> list:
+        payload["reveal_personal_emails"] = True
         r = requests.post(
             APOLLO_PEOPLE_SEARCH,
-            json={"q_organization_domain_name": domain, "per_page": 10},
+            json=payload,
             headers=headers,
             timeout=(4, 15),
         )
         r.raise_for_status()
-        people = r.json().get("people", [])
-        print(f"  [Apollo] domain={domain} results={len(people)}")
+        return r.json().get("people", [])
+
+    # --- Pass 1: domain search ---
+    try:
+        people = _search({"q_organization_domain_name": domain, "per_page": 5})
         email = _pick_best_apollo_email(people)
         if email:
             return email
@@ -472,15 +485,7 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
     if not business_name:
         return None
     try:
-        r = requests.post(
-            APOLLO_PEOPLE_SEARCH,
-            json={"q_organization_name": business_name, "per_page": 10},
-            headers=headers,
-            timeout=(4, 15),
-        )
-        r.raise_for_status()
-        people = r.json().get("people", [])
-        print(f"  [Apollo] name='{business_name}' results={len(people)}")
+        people = _search({"q_organization_name": business_name, "per_page": 5})
         email = _pick_best_apollo_email(people)
         if email:
             return email
