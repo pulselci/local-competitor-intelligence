@@ -354,7 +354,7 @@ def lookup_email_hunter(domain: str) -> str | None:
 
 OUTSCRAPER_CONTACTS_API = "https://api.app.outscraper.com/maps/emails-and-contacts"
 
-APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/people/search"
+APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/api/v1/mixed_people/api_search"
 
 # Job titles likely to be the decision-maker at a small local business
 APOLLO_TARGET_TITLES = ["owner", "founder", "president", "ceo", "manager", "general manager", "director"]
@@ -740,5 +740,4 @@ def main() -> None:
     discover(city=args.city, state=args.state, categories=categories)
 
 
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__
