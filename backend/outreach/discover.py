@@ -738,4 +738,8 @@ def main() -> None:
     )
     args = parser.parse_args()
     categories = [c.strip() for c in args.categories.split(",") if c.strip()]
-    discover(city=args.city, st
+    discover(city=args.city, state=args.state, categories=categories)
+
+
+if __name__ == "__main__":
+    main()
