@@ -421,51 +421,71 @@ def lookup_email_outscraper(place_id: str) -> str | None:
     return None
 
 
+def _pick_best_apollo_email(people: list) -> str | None:
+    """Return the best contact email from an Apollo people list."""
+    # Prefer decision-maker titles
+    for person in people:
+        title = (person.get("title") or "").lower()
+        email = (person.get("email") or "").lower()
+        if not email or _is_junk_email(email):
+            continue
+        if any(t in title for t in APOLLO_TARGET_TITLES):
+            return email
+    # Fall back to first person with a valid email
+    for person in people:
+        email = (person.get("email") or "").lower()
+        if email and not _is_junk_email(email):
+            return email
+    return None
+
+
 def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | None:
     """
     Use Apollo.io People Search to find a contact email for a domain.
     Only runs if APOLLO_API_KEY is set in .env — silently skips otherwise.
-    Targets owner/founder/manager titles first, then any verified email.
+    Tries domain search first, then company-name search as a fallback.
     """
     api_key = getattr(settings, "APOLLO_API_KEY", None) or ""
-    print(f"  [DEBUG] Apollo key present: {bool(api_key)} len={len(api_key)}")
     if not api_key:
         return None
 
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+
+    # --- Pass 1: domain search ---
     try:
-        payload = {
-            "q_organization_domain_name": domain,
-            "per_page": 10,
-        }
         r = requests.post(
             APOLLO_PEOPLE_SEARCH,
-            json=payload,
-            headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+            json={"q_organization_domain_name": domain, "per_page": 10},
+            headers=headers,
             timeout=(4, 15),
         )
         r.raise_for_status()
         people = r.json().get("people", [])
-
-        if not people:
-            return None
-
-        # Prefer decision-maker titles
-        for person in people:
-            title = (person.get("title") or "").lower()
-            email = (person.get("email") or "").lower()
-            if not email or _is_junk_email(email):
-                continue
-            if any(t in title for t in APOLLO_TARGET_TITLES):
-                return email
-
-        # Fall back to first person with a valid email
-        for person in people:
-            email = (person.get("email") or "").lower()
-            if email and not _is_junk_email(email):
-                return email
-
+        print(f"  [Apollo] domain={domain} results={len(people)}")
+        email = _pick_best_apollo_email(people)
+        if email:
+            return email
     except Exception as e:
-        print(f"  [WARN] Apollo lookup failed for {domain}: {e}")
+        print(f"  [WARN] Apollo domain search failed for {domain}: {e}")
+
+    # --- Pass 2: company-name search ---
+    if not business_name:
+        return None
+    try:
+        r = requests.post(
+            APOLLO_PEOPLE_SEARCH,
+            json={"q_organization_name": business_name, "per_page": 10},
+            headers=headers,
+            timeout=(4, 15),
+        )
+        r.raise_for_status()
+        people = r.json().get("people", [])
+        print(f"  [Apollo] name='{business_name}' results={len(people)}")
+        email = _pick_best_apollo_email(people)
+        if email:
+            return email
+    except Exception as e:
+        print(f"  [WARN] Apollo name search failed for {business_name}: {e}")
 
     return None
 
