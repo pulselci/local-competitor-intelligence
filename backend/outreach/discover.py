@@ -740,4 +740,5 @@ def main() -> None:
     discover(city=args.city, state=args.state, categories=categories)
 
 
-if __name__ == "__main__
+if __name__ == "__main__":
+    main()
