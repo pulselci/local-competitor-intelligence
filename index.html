@@ -1272,4 +1272,13 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Something went wrong. Please try again.');
-        if (data.checkout
+        if (data.checkout_url) {
+          window.location.href = data.checkout_url;
+        } else {
+          throw new Error('No checkout URL returned. Please contact support.');
+        }
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Continue to Payment �

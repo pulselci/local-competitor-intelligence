@@ -354,7 +354,7 @@ def lookup_email_hunter(domain: str) -> str | None:
 
 OUTSCRAPER_CONTACTS_API = "https://api.app.outscraper.com/maps/emails-and-contacts"
 
-APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/api/v1/mixed_people/api_search"
+APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/people/search"
 
 # Job titles likely to be the decision-maker at a small local business
 APOLLO_TARGET_TITLES = ["owner", "founder", "president", "ceo", "manager", "general manager", "director"]
@@ -421,76 +421,50 @@ def lookup_email_outscraper(place_id: str) -> str | None:
     return None
 
 
-def _pick_best_apollo_email(people: list) -> str | None:
-    """Return the best contact email from an Apollo people list."""
-    def get_emails(person: dict) -> list[str]:
-        """Collect all available emails for a person."""
-        candidates = []
-        primary = (person.get("email") or "").lower().strip()
-        if primary:
-            candidates.append(primary)
-        for e in person.get("personal_emails") or []:
-            e = (e or "").lower().strip()
-            if e and e not in candidates:
-                candidates.append(e)
-        return [e for e in candidates if not _is_junk_email(e)]
-
-    # Prefer decision-maker titles
-    for person in people:
-        title = (person.get("title") or "").lower()
-        if not any(t in title for t in APOLLO_TARGET_TITLES):
-            continue
-        for email in get_emails(person):
-            return email
-    # Fall back to first person with any valid email
-    for person in people:
-        for email in get_emails(person):
-            return email
-    return None
-
-
 def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | None:
     """
     Use Apollo.io People Search to find a contact email for a domain.
     Only runs if APOLLO_API_KEY is set in .env — silently skips otherwise.
-    Tries domain search first, then company-name search as a fallback.
+    Targets owner/founder/manager titles first, then any verified email.
     """
     api_key = getattr(settings, "APOLLO_API_KEY", None) or ""
     if not api_key:
         return None
 
-    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
-
-    def _search(payload: dict) -> list:
-        payload["reveal_personal_emails"] = True
+    try:
+        payload = {
+            "q_organization_domain_name": domain,
+            "per_page": 10,
+        }
         r = requests.post(
             APOLLO_PEOPLE_SEARCH,
             json=payload,
-            headers=headers,
+            headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
             timeout=(4, 15),
         )
         r.raise_for_status()
-        return r.json().get("people", [])
+        people = r.json().get("people", [])
 
-    # --- Pass 1: domain search ---
-    try:
-        people = _search({"q_organization_domain_name": domain, "per_page": 5})
-        email = _pick_best_apollo_email(people)
-        if email:
-            return email
-    except Exception as e:
-        print(f"  [WARN] Apollo domain search failed for {domain}: {e}")
+        if not people:
+            return None
 
-    # --- Pass 2: company-name search ---
-    if not business_name:
-        return None
-    try:
-        people = _search({"q_organization_name": business_name, "per_page": 5})
-        email = _pick_best_apollo_email(people)
-        if email:
-            return email
+        # Prefer decision-maker titles
+        for person in people:
+            title = (person.get("title") or "").lower()
+            email = (person.get("email") or "").lower()
+            if not email or _is_junk_email(email):
+                continue
+            if any(t in title for t in APOLLO_TARGET_TITLES):
+                return email
+
+        # Fall back to first person with a valid email
+        for person in people:
+            email = (person.get("email") or "").lower()
+            if email and not _is_junk_email(email):
+                return email
+
     except Exception as e:
-        print(f"  [WARN] Apollo name search failed for {business_name}: {e}")
+        print(f"  [WARN] Apollo lookup failed for {domain}: {e}")
 
     return None
 

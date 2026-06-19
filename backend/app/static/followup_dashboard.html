@@ -163,6 +163,7 @@
         <th>Contact email</th>
         <th>City / State</th>
         <th>Email sent</th>
+        <th>Opened</th>
         <th>Days ago</th>
         <th>Day 5</th>
         <th>Day 12</th>
@@ -170,7 +171,7 @@
         <th></th>
       </tr>
     </thead>
-    <tbody id="cold-body"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+    <tbody id="cold-body"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
   </table>
 </div>
 
@@ -342,6 +343,13 @@ function renderReports(data) {
   }).join('');
 }
 
+function openedPill(r) {
+  if (!r.email_opened_at) return '<span class="pill pill-na">Not opened</span>';
+  const count = r.email_open_count > 1 ? ` ×${r.email_open_count}` : '';
+  const date = new Date(r.email_opened_at).toLocaleDateString();
+  return `<span class="pill pill-done" title="First opened ${date}">Opened${count}</span>`;
+}
+
 function renderCold(data) {
   const tbody = document.getElementById('cold-body');
   const filtered = data.filter(r => {
@@ -356,7 +364,7 @@ function renderCold(data) {
   document.getElementById('cold-count').textContent = filtered.length;
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="empty">No records match this filter.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="empty">No records match this filter.</td></tr>';
     return;
   }
 
@@ -370,6 +378,7 @@ function renderCold(data) {
       <td><div class="email-text">${esc(r.contact_email || '—')}</div></td>
       <td>${esc((r.city || '') + (r.city && r.state ? ', ' : '') + (r.state || ''))}</td>
       <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
+      <td>${openedPill(r)}</td>
       <td><span class="days-text${dClass}">${days !== null ? days + 'd ago' : '—'}</span></td>
       <td>${pillFor(5, r.followup1_sent_at, days)}</td>
       <td>${pillFor(12, r.followup2_sent_at, days)}</td>
@@ -511,7 +520,7 @@ async function loadAll() {
   } catch(e) {
     console.error('Dashboard load failed:', e);
     document.getElementById('report-body').innerHTML = '<tr><td colspan="8" class="empty">Error loading data.</td></tr>';
-    document.getElementById('cold-body').innerHTML   = '<tr><td colspan="9" class="empty">Error loading data.</td></tr>';
+    document.getElementById('cold-body').innerHTML   = '<tr><td colspan="10" class="empty">Error loading data.</td></tr>';
   }
 }
 
