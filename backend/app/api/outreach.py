@@ -395,4 +395,74 @@ def list_agencies(status: str = "all", limit: int = 100) -> list[dict]:
 @router.get("/all")
 def list_all(limit: int = 200) -> list[dict]:
     """List all prospects across all statuses (for the full pipeline view)."""
-    with g
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, business_name, category, city, state, contact_email,
+                       reviews_count, rating, status, created_at::text, sent_at::text,
+                       email_opened_at::text, email_open_count, link_clicked_at::text
+                FROM outreach_prospects
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            return [dict(r) for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# Email tracking — open pixel and click redirect
+# ---------------------------------------------------------------------------
+
+_TRACKING_PIXEL = (
+    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+    b"!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
+)
+
+
+@router.get("/track/open/{prospect_id}")
+def track_open(prospect_id: str):
+    """Open tracking pixel — returns transparent GIF and logs the open."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE outreach_prospects
+                    SET
+                        email_open_count = email_open_count + 1,
+                        email_opened_at  = COALESCE(email_opened_at, NOW()),
+                        updated_at       = NOW()
+                    WHERE id = %s
+                    """,
+                    (prospect_id,),
+                )
+            conn.commit()
+    except Exception as e:
+        print(f"[TRACK OPEN] error for {prospect_id}: {e}")
+
+    return Response(content=_TRACKING_PIXEL, media_type="image/gif")
+
+
+@router.get("/track/click/{prospect_id}")
+def track_click(prospect_id: str, url: str = "https://pulselci.com"):
+    """Click tracking redirect — logs first click then redirects to url."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE outreach_prospects
+                    SET
+                        link_clicked_at = COALESCE(link_clicked_at, NOW()),
+                        updated_at      = NOW()
+                    WHERE id = %s
+                    """,
+                    (prospect_id,),
+                )
+            conn.commit()
+    except Exception as e:
+        print(f"[TRACK CLICK] error for {prospect_id}: {e}")
+
+    return RedirectResponse(url=url, status_code=302)
