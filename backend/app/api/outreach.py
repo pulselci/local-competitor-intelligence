@@ -89,6 +89,8 @@ class DraftUpdateIn(BaseModel):
     draft_subject: Optional[str] = None
     draft_body: Optional[str] = None
     notes: Optional[str] = None
+    ab_group: Optional[str] = None          # 'A' or 'B'
+    ab_subject_label: Optional[str] = None  # e.g. 'A-S1', 'B-S4'
 
 
 class DiscoverIn(BaseModel):
@@ -393,82 +395,4 @@ def list_agencies(status: str = "all", limit: int = 100) -> list[dict]:
 @router.get("/all")
 def list_all(limit: int = 200) -> list[dict]:
     """List all prospects across all statuses (for the full pipeline view)."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, business_name, category, city, state, contact_email,
-                       reviews_count, rating, status, created_at::text, sent_at::text,
-                       email_opened_at::text, email_open_count, link_clicked_at::text
-                FROM outreach_prospects
-                ORDER BY created_at DESC
-                LIMIT %s
-                """,
-                (limit,),
-            )
-            return [dict(r) for r in cur.fetchall()]
-
-
-# ---------------------------------------------------------------------------
-# Email tracking — open pixel and click redirect
-# ---------------------------------------------------------------------------
-
-# 1x1 transparent GIF (35 bytes)
-_TRACKING_PIXEL = (
-    b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
-    b"!\xf9\x04\x00\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;"
-)
-
-
-@router.get("/track/open/{prospect_id}")
-def track_open(prospect_id: str):
-    """
-    Email open tracking pixel.
-    Embedded as a 1x1 img in outreach emails — logs first open and open count.
-    Returns a transparent GIF so email clients don't show a broken image.
-    """
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE outreach_prospects
-                    SET
-                        email_open_count = email_open_count + 1,
-                        email_opened_at  = COALESCE(email_opened_at, NOW()),
-                        updated_at       = NOW()
-                    WHERE id = %s
-                    """,
-                    (prospect_id,),
-                )
-            conn.commit()
-    except Exception as e:
-        print(f"[TRACK OPEN] error for {prospect_id}: {e}")
-
-    return Response(content=_TRACKING_PIXEL, media_type="image/gif")
-
-
-@router.get("/track/click/{prospect_id}")
-def track_click(prospect_id: str, url: str = "https://pulselci.com"):
-    """
-    Email click tracking redirect.
-    Links in outreach emails point here — logs first click then redirects to url.
-    """
-    try:
-        with get_conn() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    UPDATE outreach_prospects
-                    SET
-                        link_clicked_at = COALESCE(link_clicked_at, NOW()),
-                        updated_at      = NOW()
-                    WHERE id = %s
-                    """,
-                    (prospect_id,),
-                )
-            conn.commit()
-    except Exception as e:
-        print(f"[TRACK CLICK] error for {prospect_id}: {e}")
-
-    return RedirectResponse(url=url, status_code=302)
+    with g

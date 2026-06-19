@@ -82,6 +82,27 @@
   .sandbox-body { display: none; }
   .sandbox-body.open { display: block; }
   .sandbox-note { font-size: 11px; color: #b45309; padding: 8px 16px; background: #fffbeb; border-bottom: 1px solid #fde68a; }
+
+  /* A/B test stats */
+  .ab-comparison { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .ab-group-card { flex: 1; min-width: 220px; border-radius: 10px; padding: 14px 16px; border: 2px solid; }
+  .ab-group-card.group-a { background: #eff6ff; border-color: #bfdbfe; }
+  .ab-group-card.group-b { background: #f5f3ff; border-color: #ddd6fe; }
+  .ab-group-card .gc-title { font-size: 12px; font-weight: 700; margin-bottom: 10px; }
+  .ab-group-card.group-a .gc-title { color: #1e40af; }
+  .ab-group-card.group-b .gc-title { color: #5b21b6; }
+  .ab-group-card .gc-stats { display: flex; gap: 20px; }
+  .ab-group-card .gc-stat { font-size: 11px; color: #64748b; }
+  .ab-group-card .gc-stat strong { display: block; font-size: 22px; color: #0f172a; font-weight: 800; line-height: 1.1; margin-bottom: 2px; }
+  .ab-subline-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .ab-subline-chip { font-size: 11px; padding: 5px 10px; border-radius: 7px; background: #f8fafc; border: 1px solid #e2e8f0; color: #334155; }
+  .ab-subline-chip .sc-label { font-weight: 700; }
+  .ab-subline-chip .sc-rate { color: #64748b; margin-left: 4px; }
+  .ab-group-section { margin-bottom: 20px; }
+  .ab-group-header { font-size: 12px; font-weight: 700; padding: 7px 12px; border-radius: 7px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .ab-group-header.group-a { background: #dbeafe; color: #1e40af; }
+  .ab-group-header.group-b { background: #ede9fe; color: #5b21b6; }
+  .ab-group-header.group-none { background: #f1f5f9; color: #475569; }
 </style>
 </head>
 <body>
@@ -149,6 +170,10 @@
     Cold email follow-ups
     <span class="count-badge" id="cold-count">0</span>
   </div>
+
+  <!-- A/B comparison summary -->
+  <div class="ab-comparison" id="ab-comparison" style="display:none;"></div>
+
   <div class="filter-row">
     <button class="filter-btn active" onclick="setFilter('cold','all',this)">All</button>
     <button class="filter-btn" onclick="setFilter('cold','overdue',this)">Overdue</button>
@@ -156,23 +181,45 @@
     <button class="filter-btn" onclick="setFilter('cold','pending',this)">Pending</button>
     <button class="filter-btn" onclick="setFilter('cold','converted',this)">Converted</button>
   </div>
-  <table id="cold-table">
-    <thead>
-      <tr>
-        <th>Business</th>
-        <th>Contact email</th>
-        <th>City / State</th>
-        <th>Email sent</th>
-        <th>Opened</th>
-        <th>Days ago</th>
-        <th>Day 5</th>
-        <th>Day 12</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody id="cold-body"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
-  </table>
+
+  <!-- Group A -->
+  <div class="ab-group-section" id="cold-section-a" style="display:none;">
+    <div class="ab-group-header group-a">Group A — Drive to website</div>
+    <div class="ab-subline-bar" id="ab-a-sublines"></div>
+    <table>
+      <thead><tr>
+        <th>Business</th><th>Subject line</th><th>Email sent</th>
+        <th>Opened</th><th>Days ago</th><th>Day 5</th><th>Day 12</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="cold-body-a"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Group B -->
+  <div class="ab-group-section" id="cold-section-b" style="display:none;">
+    <div class="ab-group-header group-b">Group B — Reply only</div>
+    <div class="ab-subline-bar" id="ab-b-sublines"></div>
+    <table>
+      <thead><tr>
+        <th>Business</th><th>Subject line</th><th>Email sent</th>
+        <th>Opened</th><th>Days ago</th><th>Day 5</th><th>Day 12</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="cold-body-b"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Ungrouped -->
+  <div class="ab-group-section" id="cold-section-none">
+    <div class="ab-group-header group-none" id="cold-none-header" style="display:none;">Ungrouped — sent before A/B test</div>
+    <table id="cold-table">
+      <thead><tr>
+        <th>Business</th><th>Contact email</th><th>City / State</th>
+        <th>Email sent</th><th>Opened</th><th>Days ago</th>
+        <th>Day 5</th><th>Day 12</th><th>Status</th><th></th>
+      </tr></thead>
+      <tbody id="cold-body"><tr><td colspan="10" class="loading">Loading…</td></tr></tbody>
+    </table>
+  </div>
 </div>
 
 <!-- ── SANDBOX BUSINESSES ── -->
@@ -350,27 +397,80 @@ function openedPill(r) {
   return `<span class="pill pill-done" title="First opened ${date}">Opened${count}</span>`;
 }
 
-function renderCold(data) {
-  const tbody = document.getElementById('cold-body');
-  const filtered = data.filter(r => {
-    if (coldFilter === 'all') return true;
-    if (coldFilter === 'converted') return r.status === 'converted';
-    if (coldFilter === 'pending') return r.status !== 'converted' && rowUrgency(r, 'cold') === 0;
-    if (coldFilter === 'due') return r.status !== 'converted' && rowUrgency(r, 'cold') === 1;
-    if (coldFilter === 'overdue') return r.status !== 'converted' && rowUrgency(r, 'cold') === 2;
-    return true;
-  });
+const AB_SUBJECT_TEXTS = {
+  'A-S1': 'Your competitors are pulling ahead on reviews',
+  'A-S2': 'Something I noticed about [business type] in [city]',
+  'A-S3': 'How you stack up against other [business type] in [city]',
+  'A-S4': 'The review gap between you and [Competitor] is wider than you think',
+  'A-S5': "One number that's costing local [business type] owners clients",
+  'B-S1': 'Quick question about your competitors',
+  'B-S2': 'Curious — do you track your local competition?',
+  'B-S3': 'I made something you might find useful',
+  'B-S4': 'Who are your top 2-3 competitors?',
+  'B-S5': 'Free competitive report — no link to click',
+};
 
-  document.getElementById('cold-count').textContent = filtered.length;
+function renderAbComparisonCard(group, rows) {
+  const total = rows.length;
+  const opened = rows.filter(r => r.email_opened_at).length;
+  const fuSent = rows.filter(r => r.followup1_sent_at).length;
+  const openRate = total ? Math.round(opened / total * 100) : 0;
+  const fuRate   = total ? Math.round(fuSent  / total * 100) : 0;
+  const label = group === 'A' ? 'Group A — Drive to website' : 'Group B — Reply only';
+  return `<div class="ab-group-card group-${group.toLowerCase()}">
+    <div class="gc-title">${label}</div>
+    <div class="gc-stats">
+      <div class="gc-stat"><strong>${total}</strong>Sent</div>
+      <div class="gc-stat"><strong>${openRate}%</strong>Open rate</div>
+      <div class="gc-stat"><strong>${fuRate}%</strong>Follow-up rate</div>
+    </div>
+  </div>`;
+}
 
-  if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="empty">No records match this filter.</td></tr>';
-    return;
-  }
+function renderSublineChips(group, rows) {
+  const labels = group === 'A'
+    ? ['A-S1','A-S2','A-S3','A-S4','A-S5']
+    : ['B-S1','B-S2','B-S3','B-S4','B-S5'];
+  return labels.map(lbl => {
+    const subset = rows.filter(r => r.ab_subject_label === lbl);
+    if (!subset.length) return '';
+    const opened = subset.filter(r => r.email_opened_at).length;
+    const fuSent = subset.filter(r => r.followup1_sent_at).length;
+    const openPct = Math.round(opened / subset.length * 100);
+    const fuPct   = Math.round(fuSent  / subset.length * 100);
+    return `<div class="ab-subline-chip">
+      <span class="sc-label">${lbl}</span>
+      <span class="sc-rate">${subset.length} sent &nbsp;·&nbsp; ${openPct}% open &nbsp;·&nbsp; ${fuPct}% follow-up</span>
+    </div>`;
+  }).join('');
+}
 
-  filtered.sort((a, b) => rowUrgency(b, 'cold') - rowUrgency(a, 'cold'));
+function renderColdRowsAb(rows) {
+  if (!rows.length) return '';
+  rows.sort((a, b) => rowUrgency(b, 'cold') - rowUrgency(a, 'cold'));
+  return rows.map(r => {
+    const days = daysBetween(r.sent_at);
+    const dClass = days >= 12 ? ' urgent' : '';
+    const subjectText = AB_SUBJECT_TEXTS[r.ab_subject_label] || r.ab_subject_label || '—';
+    return `<tr>
+      <td><div class="business-name">${esc(r.business_name)}</div>
+          <div class="email-text">${esc(r.contact_email || '—')}</div></td>
+      <td style="font-size:11px;color:#475569;max-width:180px;">${esc(subjectText)}</td>
+      <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
+      <td>${openedPill(r)}</td>
+      <td><span class="days-text${dClass}">${days !== null ? days + 'd ago' : '—'}</span></td>
+      <td>${pillFor(5, r.followup1_sent_at, days)}</td>
+      <td>${pillFor(12, r.followup2_sent_at, days)}</td>
+      <td>${coldStatusPill(r)}</td>
+      <td>${r.status !== 'converted' ? `<button class="convert-btn" onclick="convertProspect('${r.id}',this)">Mark Converted</button>` : ''}</td>
+    </tr>`;
+  }).join('');
+}
 
-  tbody.innerHTML = filtered.map(r => {
+function renderColdRowsFull(rows) {
+  if (!rows.length) return '';
+  rows.sort((a, b) => rowUrgency(b, 'cold') - rowUrgency(a, 'cold'));
+  return rows.map(r => {
     const days = daysBetween(r.sent_at);
     const dClass = days >= 12 ? ' urgent' : '';
     return `<tr>
@@ -386,6 +486,58 @@ function renderCold(data) {
       <td>${r.status !== 'converted' ? `<button class="convert-btn" onclick="convertProspect('${r.id}',this)">Mark Converted</button>` : ''}</td>
     </tr>`;
   }).join('');
+}
+
+function renderCold(data) {
+  const applyFilter = rows => rows.filter(r => {
+    if (coldFilter === 'all') return true;
+    if (coldFilter === 'converted') return r.status === 'converted';
+    if (coldFilter === 'pending')   return r.status !== 'converted' && rowUrgency(r, 'cold') === 0;
+    if (coldFilter === 'due')       return r.status !== 'converted' && rowUrgency(r, 'cold') === 1;
+    if (coldFilter === 'overdue')   return r.status !== 'converted' && rowUrgency(r, 'cold') === 2;
+    return true;
+  });
+
+  const groupA    = data.filter(r => r.ab_group === 'A');
+  const groupB    = data.filter(r => r.ab_group === 'B');
+  const ungrouped = data.filter(r => !r.ab_group);
+  const fA        = applyFilter(groupA);
+  const fB        = applyFilter(groupB);
+  const fNone     = applyFilter(ungrouped);
+  const hasGrouped = groupA.length > 0 || groupB.length > 0;
+
+  document.getElementById('cold-count').textContent = fA.length + fB.length + fNone.length;
+
+  const compEl = document.getElementById('ab-comparison');
+  if (hasGrouped) {
+    compEl.style.display = 'flex';
+    compEl.innerHTML = renderAbComparisonCard('A', groupA) + renderAbComparisonCard('B', groupB);
+  } else {
+    compEl.style.display = 'none';
+  }
+
+  const secA = document.getElementById('cold-section-a');
+  if (groupA.length > 0) {
+    secA.style.display = '';
+    document.getElementById('ab-a-sublines').innerHTML = renderSublineChips('A', groupA);
+    document.getElementById('cold-body-a').innerHTML =
+      renderColdRowsAb(fA) || '<tr><td colspan="9" class="empty">No records match this filter.</td></tr>';
+  } else { secA.style.display = 'none'; }
+
+  const secB = document.getElementById('cold-section-b');
+  if (groupB.length > 0) {
+    secB.style.display = '';
+    document.getElementById('ab-b-sublines').innerHTML = renderSublineChips('B', groupB);
+    document.getElementById('cold-body-b').innerHTML =
+      renderColdRowsAb(fB) || '<tr><td colspan="9" class="empty">No records match this filter.</td></tr>';
+  } else { secB.style.display = 'none'; }
+
+  document.getElementById('cold-none-header').style.display = (hasGrouped && ungrouped.length > 0) ? '' : 'none';
+  document.getElementById('cold-body').innerHTML =
+    renderColdRowsFull(fNone) ||
+    (ungrouped.length
+      ? '<tr><td colspan="10" class="empty">No records match this filter.</td></tr>'
+      : '<tr><td colspan="10" class="empty">All prospects are in A/B groups.</td></tr>');
 }
 
 async function convertProspect(id, btn) {
@@ -448,7 +600,7 @@ function setFilter(type, val, btn) {
     coldFilter = val;
     btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    renderCold(coldData);
+    renderCold(liveColdData);
   }
 }
 
@@ -506,25 +658,4 @@ async function loadAll() {
       fetch(`${API}/followups/report-prospects`),
       fetch(`${API}/followups/cold-prospects`)
     ]);
-    reportData = await reportRes.json();
-    coldData   = await coldRes.json();
-    liveReportData    = reportData.filter(r => !r.is_test);
-    sandboxReportData = reportData.filter(r => r.is_test);
-    liveColdData      = coldData.filter(r => !r.is_test);
-    sandboxColdData   = coldData.filter(r => r.is_test);
-    renderStats(reportData, coldData);
-    renderReports(liveReportData);
-    renderCold(liveColdData);
-    renderSandbox();
-    document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
-  } catch(e) {
-    console.error('Dashboard load failed:', e);
-    document.getElementById('report-body').innerHTML = '<tr><td colspan="8" class="empty">Error loading data.</td></tr>';
-    document.getElementById('cold-body').innerHTML   = '<tr><td colspan="10" class="empty">Error loading data.</td></tr>';
-  }
-}
-
-document.addEventListener('DOMContentLoaded', loadAll);
-</script>
-</body>
-</html>
+    reportData = await reportRes.
