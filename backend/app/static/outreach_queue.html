@@ -51,6 +51,21 @@
   .email-preview textarea { width: 100%; height: 180px; font-size: 13px; font-family: inherit; line-height: 1.6; color: #172033; border: 1px solid #c8d8ee; border-radius: 8px; padding: 12px; resize: vertical; }
   .email-subject input { width: 100%; font-size: 13px; font-family: inherit; color: #172033; border: 1px solid #c8d8ee; border-radius: 8px; padding: 8px 12px; }
 
+  /* A/B test selector */
+  .ab-selector { grid-column: 1 / -1; background: #f8fbff; border: 1px solid #dce6f5; border-radius: 10px; padding: 12px 14px; }
+  .ab-selector-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #8a9ab5; margin-bottom: 8px; }
+  .ab-group-btns { display: flex; gap: 6px; margin-bottom: 10px; }
+  .ab-group-btn { font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 20px; border: 2px solid #c8d8ee; background: #fff; color: #62738f; cursor: pointer; transition: all 0.15s; }
+  .ab-group-btn.active-a { background: #4a80e8; border-color: #4a80e8; color: #fff; }
+  .ab-group-btn.active-b { background: #7c3aed; border-color: #7c3aed; color: #fff; }
+  .ab-subject-picker { display: flex; flex-direction: column; gap: 5px; }
+  .ab-subject-option { font-size: 12px; padding: 6px 10px; border-radius: 7px; border: 1px solid #dce6f5; background: #fff; color: #30415f; cursor: pointer; text-align: left; transition: all 0.12s; }
+  .ab-subject-option:hover { border-color: #4a80e8; background: #f0f4ff; }
+  .ab-subject-option.selected { border-color: #4a80e8; background: #eaf0ff; font-weight: 600; color: #122033; }
+  .ab-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 10px; margin-right: 5px; }
+  .ab-badge-a { background: #dbeafe; color: #1e40af; }
+  .ab-badge-b { background: #ede9fe; color: #5b21b6; }
+
   .contact-email-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
   .contact-email-row input { flex: 1; font-size: 13px; padding: 8px 12px; border: 1px solid #c8d8ee; border-radius: 8px; }
 
@@ -415,6 +430,20 @@ function renderCard(p) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9ab5;white-space:nowrap;">Contact Email</div>
         <input id="email-${p.id}" type="email" value="${escHtml(p.contact_email || '')}" placeholder="Enter email if not found automatically" ${readOnly} style="${readOnlyStyle}">
       </div>
+      ${!isReadOnly ? `
+      <div class="ab-selector" id="ab-${p.id}" data-group="${escHtml(p.ab_group || '')}" data-label="${escHtml(p.ab_subject_label || '')}">
+        <div class="ab-selector-label">A/B Test Group</div>
+        <div class="ab-group-btns">
+          <button class="ab-group-btn ${p.ab_group === 'A' ? 'active-a' : ''}" onclick="selectAbGroup('${p.id}','A')">Group A — Drive to website</button>
+          <button class="ab-group-btn ${p.ab_group === 'B' ? 'active-b' : ''}" onclick="selectAbGroup('${p.id}','B')">Group B — Reply only</button>
+          ${p.ab_group ? `<button class="ab-group-btn" style="color:#c62828;border-color:#f5c6c6;" onclick="clearAbGroup('${p.id}')">✕ Clear</button>` : ''}
+        </div>
+        <div class="ab-subject-picker" id="ab-picker-${p.id}" style="${p.ab_group ? '' : 'display:none;'}">
+          ${p.ab_group ? renderSubjectOptions(p.id, p.ab_group, p.ab_subject_label) : ''}
+        </div>
+      </div>` : `
+      ${p.ab_group ? `<div style="grid-column:1/-1;"><span class="ab-badge ${p.ab_group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">Group ${p.ab_group}</span><span style="font-size:12px;color:#62738f;">${escHtml(p.ab_subject_label || '')}</span></div>` : ''}
+      `}
       <div class="email-subject">
         <h4>Subject</h4>
         <input id="subject-${p.id}" type="text" value="${escHtml(p.draft_subject || '')}" ${readOnly} style="${readOnlyStyle}">
@@ -609,6 +638,77 @@ async function skipAgency(id) {
   }
 }
 
+// ─── A/B test helpers ─────────────────────────────────────────────────────────
+
+const AB_SUBJECTS = {
+  A: [
+    { label: 'A-S1', text: 'Your competitors are pulling ahead on reviews' },
+    { label: 'A-S2', text: 'Something I noticed about [business type] in [city]' },
+    { label: 'A-S3', text: 'How you stack up against other [business type] in [city]' },
+    { label: 'A-S4', text: 'The review gap between you and [Competitor] is wider than you think' },
+    { label: 'A-S5', text: 'One number that\'s costing local [business type] owners clients' },
+  ],
+  B: [
+    { label: 'B-S1', text: 'Quick question about your competitors' },
+    { label: 'B-S2', text: 'Curious — do you track your local competition?' },
+    { label: 'B-S3', text: 'I made something you might find useful' },
+    { label: 'B-S4', text: 'Who are your top 2-3 competitors?' },
+    { label: 'B-S5', text: 'Free competitive report — no link to click' },
+  ],
+};
+
+function renderSubjectOptions(pid, group, selectedLabel) {
+  if (!group || !AB_SUBJECTS[group]) return '';
+  return AB_SUBJECTS[group].map(s => {
+    const sel = s.label === selectedLabel ? ' selected' : '';
+    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)})">`
+      + `<span class="ab-badge ${group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">${s.label}</span>${escHtml(s.text)}</button>`;
+  }).join('');
+}
+
+function selectAbGroup(id, group) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.group = group;
+  el.dataset.label = '';
+
+  // Update toggle buttons
+  const btns = el.querySelectorAll('.ab-group-btn');
+  btns.forEach(b => { b.className = 'ab-group-btn'; });
+  btns[group === 'A' ? 0 : 1].className = `ab-group-btn active-${group.toLowerCase()}`;
+
+  // Show subject picker
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.style.display = '';
+  picker.innerHTML = renderSubjectOptions(id, group, '');
+}
+
+function selectAbSubject(id, label, text) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.label = label;
+
+  // Highlight selected option
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.querySelectorAll('.ab-subject-option').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+
+  // Auto-fill subject line
+  const subjectInput = document.getElementById(`subject-${id}`);
+  if (subjectInput && !subjectInput.readOnly) subjectInput.value = text;
+}
+
+function clearAbGroup(id) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.group = '';
+  el.dataset.label = '';
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.style.display = 'none';
+  picker.innerHTML = '';
+  el.querySelectorAll('.ab-group-btn').forEach(b => { b.className = 'ab-group-btn'; });
+}
+
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 function setMsg(id, text, isError) {
@@ -619,15 +719,28 @@ function setMsg(id, text, isError) {
 }
 
 async function saveDraft(id) {
-  const email = document.getElementById(`email-${id}`).value.trim();
-  const subject = document.getElementById(`subject-${id}`).value.trim();
-  const body = document.getElementById(`body-${id}`).value.trim();
+  const email = document.getElementById(`email-${id}`)?.value.trim();
+  const subject = document.getElementById(`subject-${id}`)?.value.trim();
+  const body = document.getElementById(`body-${id}`)?.value.trim();
+
+  // Collect A/B test selection
+  const abEl = document.getElementById(`ab-${id}`);
+  const abGroup = abEl?.dataset.group || null;
+  const abLabel = abEl?.dataset.label || null;
+
+  const payload = {
+    contact_email: email || null,
+    draft_subject: subject || null,
+    draft_body: body || null,
+  };
+  if (abGroup) payload.ab_group = abGroup;
+  if (abLabel) payload.ab_subject_label = abLabel;
 
   try {
     const r = await fetch(`${API}/outreach/${id}/draft`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ contact_email: email || null, draft_subject: subject || null, draft_body: body || null }),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) throw new Error(await r.text());
     setMsg(id, 'Saved.', false);

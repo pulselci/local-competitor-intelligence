@@ -89,6 +89,8 @@ class DraftUpdateIn(BaseModel):
     draft_subject: Optional[str] = None
     draft_body: Optional[str] = None
     notes: Optional[str] = None
+    ab_group: Optional[str] = None          # 'A' or 'B'
+    ab_subject_label: Optional[str] = None  # e.g. 'A-S1', 'B-S4'
 
 
 class DiscoverIn(BaseModel):

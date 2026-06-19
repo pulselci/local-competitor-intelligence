@@ -354,7 +354,7 @@ def lookup_email_hunter(domain: str) -> str | None:
 
 OUTSCRAPER_CONTACTS_API = "https://api.app.outscraper.com/maps/emails-and-contacts"
 
-APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/v1/people/search"
+APOLLO_PEOPLE_SEARCH = "https://api.apollo.io/api/v1/mixed_people/api_search"
 
 # Job titles likely to be the decision-maker at a small local business
 APOLLO_TARGET_TITLES = ["owner", "founder", "president", "ceo", "manager", "general manager", "director"]
@@ -428,6 +428,7 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
     Targets owner/founder/manager titles first, then any verified email.
     """
     api_key = getattr(settings, "APOLLO_API_KEY", None) or ""
+    print(f"  [DEBUG] Apollo key present: {bool(api_key)} len={len(api_key)}")
     if not api_key:
         return None
 
