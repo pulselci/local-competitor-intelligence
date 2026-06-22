@@ -465,4 +465,4 @@ def track_click(prospect_id: str, url: str = "https://pulselci.com"):
                 )
             conn.commit()
     except Exception as e:
-        print(f"[TRACK CLICK] error 
+        print(f"[TRACK CLICK] error:
