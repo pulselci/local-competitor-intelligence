@@ -661,7 +661,7 @@ function renderSubjectOptions(pid, group, selectedLabel) {
   if (!group || !AB_SUBJECTS[group]) return '';
   return AB_SUBJECTS[group].map(s => {
     const sel = s.label === selectedLabel ? ' selected' : '';
-    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)})">`
+    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)},this)">`
       + `<span class="ab-badge ${group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">${s.label}</span>${escHtml(s.text)}</button>`;
   }).join('');
 }
@@ -683,7 +683,7 @@ function selectAbGroup(id, group) {
   picker.innerHTML = renderSubjectOptions(id, group, '');
 }
 
-function selectAbSubject(id, label, text) {
+function selectAbSubject(id, label, text, btn) {
   const el = document.getElementById(`ab-${id}`);
   if (!el) return;
   el.dataset.label = label;
@@ -691,7 +691,7 @@ function selectAbSubject(id, label, text) {
   // Highlight selected option
   const picker = document.getElementById(`ab-picker-${id}`);
   picker.querySelectorAll('.ab-subject-option').forEach(b => b.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  if (btn) btn.classList.add('selected');
 
   // Auto-fill subject line
   const subjectInput = document.getElementById(`subject-${id}`);
