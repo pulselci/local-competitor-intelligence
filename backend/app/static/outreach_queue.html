@@ -430,19 +430,19 @@ function renderCard(p) {
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8a9ab5;white-space:nowrap;">Contact Email</div>
         <input id="email-${p.id}" type="email" value="${escHtml(p.contact_email || '')}" placeholder="Enter email if not found automatically" ${readOnly} style="${readOnlyStyle}">
       </div>
-      \${!isReadOnly ? `
-      <div class="ab-selector" id="ab-\${p.id}" data-group="\${p.ab_group || ''}" data-label="\${p.ab_subject_label || ''}">
+      ${!isReadOnly ? `
+      <div class="ab-selector" id="ab-${p.id}" data-group="${escHtml(p.ab_group || '')}" data-label="${escHtml(p.ab_subject_label || '')}">
         <div class="ab-selector-label">A/B Test Group</div>
         <div class="ab-group-btns">
-          <button class="ab-group-btn \${p.ab_group === 'A' ? 'active-a' : ''}" onclick="selectAbGroup('\${p.id}','A')">Group A — Drive to website</button>
-          <button class="ab-group-btn \${p.ab_group === 'B' ? 'active-b' : ''}" onclick="selectAbGroup('\${p.id}','B')">Group B — Reply only</button>
-          \${p.ab_group ? `<button class="ab-group-btn" style="color:#c62828;border-color:#f5c6c6;" onclick="clearAbGroup('\${p.id}')">✕ Clear</button>` : ''}
+          <button class="ab-group-btn ${p.ab_group === 'A' ? 'active-a' : ''}" onclick="selectAbGroup('${p.id}','A')">Group A — Drive to website</button>
+          <button class="ab-group-btn ${p.ab_group === 'B' ? 'active-b' : ''}" onclick="selectAbGroup('${p.id}','B')">Group B — Reply only</button>
+          ${p.ab_group ? `<button class="ab-group-btn" style="color:#c62828;border-color:#f5c6c6;" onclick="clearAbGroup('${p.id}')">✕ Clear</button>` : ''}
         </div>
-        <div class="ab-subject-picker" id="ab-picker-\${p.id}" style="\${p.ab_group ? '' : 'display:none;'}">
-          \${p.ab_group ? renderSubjectOptions(p.id, p.ab_group, p.ab_subject_label) : ''}
+        <div class="ab-subject-picker" id="ab-picker-${p.id}" style="${p.ab_group ? '' : 'display:none;'}">
+          ${p.ab_group ? renderSubjectOptions(p.id, p.ab_group, p.ab_subject_label) : ''}
         </div>
       </div>` : `
-      \${p.ab_group ? `<div style="grid-column:1/-1;"><span class="ab-badge \${p.ab_group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">Group \${p.ab_group}</span><span style="font-size:12px;color:#62738f;">\${escHtml(p.ab_subject_label || '')}</span></div>` : ''}
+      ${p.ab_group ? `<div style="grid-column:1/-1;"><span class="ab-badge ${p.ab_group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">Group ${p.ab_group}</span><span style="font-size:12px;color:#62738f;">${escHtml(p.ab_subject_label || '')}</span></div>` : ''}
       `}
       <div class="email-subject">
         <h4>Subject</h4>
@@ -463,69 +463,6 @@ function renderCard(p) {
     </div>
   `;
   return div;
-}
-
-// ─── A/B test helpers ─────────────────────────────────────────────────────────
-
-const AB_SUBJECTS = {
-  A: [
-    { label: 'A-S1', text: 'Your competitors are pulling ahead on reviews' },
-    { label: 'A-S2', text: 'Something I noticed about [business type] in [city]' },
-    { label: 'A-S3', text: 'How you stack up against other [business type] in [city]' },
-    { label: 'A-S4', text: 'The review gap between you and [Competitor] is wider than you think' },
-    { label: 'A-S5', text: "One number that's costing local [business type] owners clients" },
-  ],
-  B: [
-    { label: 'B-S1', text: 'Quick question about your competitors' },
-    { label: 'B-S2', text: 'Curious — do you track your local competition?' },
-    { label: 'B-S3', text: 'I made something you might find useful' },
-    { label: 'B-S4', text: 'Who are your top 2-3 competitors?' },
-    { label: 'B-S5', text: 'Free competitive report — no link to click' },
-  ],
-};
-
-function renderSubjectOptions(pid, group, selectedLabel) {
-  if (!group || !AB_SUBJECTS[group]) return '';
-  return AB_SUBJECTS[group].map(s => {
-    const sel = s.label === selectedLabel ? ' selected' : '';
-    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)})">`
-      + `<span class="ab-badge ${group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">${s.label}</span>${escHtml(s.text)}</button>`;
-  }).join('');
-}
-
-function selectAbGroup(id, group) {
-  const el = document.getElementById(`ab-${id}`);
-  if (!el) return;
-  el.dataset.group = group;
-  el.dataset.label = '';
-  const btns = el.querySelectorAll('.ab-group-btn');
-  btns.forEach(b => { b.className = 'ab-group-btn'; });
-  btns[group === 'A' ? 0 : 1].className = `ab-group-btn active-${group.toLowerCase()}`;
-  const picker = document.getElementById(`ab-picker-${id}`);
-  picker.style.display = '';
-  picker.innerHTML = renderSubjectOptions(id, group, '');
-}
-
-function selectAbSubject(id, label, text) {
-  const el = document.getElementById(`ab-${id}`);
-  if (!el) return;
-  el.dataset.label = label;
-  const picker = document.getElementById(`ab-picker-${id}`);
-  picker.querySelectorAll('.ab-subject-option').forEach(b => b.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
-  const subjectInput = document.getElementById(`subject-${id}`);
-  if (subjectInput && !subjectInput.readOnly) subjectInput.value = text;
-}
-
-function clearAbGroup(id) {
-  const el = document.getElementById(`ab-${id}`);
-  if (!el) return;
-  el.dataset.group = '';
-  el.dataset.label = '';
-  const picker = document.getElementById(`ab-picker-${id}`);
-  picker.style.display = 'none';
-  picker.innerHTML = '';
-  el.querySelectorAll('.ab-group-btn').forEach(b => { b.className = 'ab-group-btn'; });
 }
 
 // ─── Agency tab ───────────────────────────────────────────────────────────────
@@ -701,6 +638,77 @@ async function skipAgency(id) {
   }
 }
 
+// ─── A/B test helpers ─────────────────────────────────────────────────────────
+
+const AB_SUBJECTS = {
+  A: [
+    { label: 'A-S1', text: 'Your competitors are pulling ahead on reviews' },
+    { label: 'A-S2', text: 'Something I noticed about [business type] in [city]' },
+    { label: 'A-S3', text: 'How you stack up against other [business type] in [city]' },
+    { label: 'A-S4', text: 'The review gap between you and [Competitor] is wider than you think' },
+    { label: 'A-S5', text: 'One number that\'s costing local [business type] owners clients' },
+  ],
+  B: [
+    { label: 'B-S1', text: 'Quick question about your competitors' },
+    { label: 'B-S2', text: 'Curious — do you track your local competition?' },
+    { label: 'B-S3', text: 'I made something you might find useful' },
+    { label: 'B-S4', text: 'Who are your top 2-3 competitors?' },
+    { label: 'B-S5', text: 'Free competitive report — no link to click' },
+  ],
+};
+
+function renderSubjectOptions(pid, group, selectedLabel) {
+  if (!group || !AB_SUBJECTS[group]) return '';
+  return AB_SUBJECTS[group].map(s => {
+    const sel = s.label === selectedLabel ? ' selected' : '';
+    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)})">`
+      + `<span class="ab-badge ${group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">${s.label}</span>${escHtml(s.text)}</button>`;
+  }).join('');
+}
+
+function selectAbGroup(id, group) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.group = group;
+  el.dataset.label = '';
+
+  // Update toggle buttons
+  const btns = el.querySelectorAll('.ab-group-btn');
+  btns.forEach(b => { b.className = 'ab-group-btn'; });
+  btns[group === 'A' ? 0 : 1].className = `ab-group-btn active-${group.toLowerCase()}`;
+
+  // Show subject picker
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.style.display = '';
+  picker.innerHTML = renderSubjectOptions(id, group, '');
+}
+
+function selectAbSubject(id, label, text) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.label = label;
+
+  // Highlight selected option
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.querySelectorAll('.ab-subject-option').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+
+  // Auto-fill subject line
+  const subjectInput = document.getElementById(`subject-${id}`);
+  if (subjectInput && !subjectInput.readOnly) subjectInput.value = text;
+}
+
+function clearAbGroup(id) {
+  const el = document.getElementById(`ab-${id}`);
+  if (!el) return;
+  el.dataset.group = '';
+  el.dataset.label = '';
+  const picker = document.getElementById(`ab-picker-${id}`);
+  picker.style.display = 'none';
+  picker.innerHTML = '';
+  el.querySelectorAll('.ab-group-btn').forEach(b => { b.className = 'ab-group-btn'; });
+}
+
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
 function setMsg(id, text, isError) {
@@ -715,7 +723,7 @@ async function saveDraft(id) {
   const subject = document.getElementById(`subject-${id}`)?.value.trim();
   const body = document.getElementById(`body-${id}`)?.value.trim();
 
-  // Collect A/B selection
+  // Collect A/B test selection
   const abEl = document.getElementById(`ab-${id}`);
   const abGroup = abEl?.dataset.group || null;
   const abLabel = abEl?.dataset.label || null;
@@ -886,4 +894,35 @@ async function startAgencyDiscovery() {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.statusText);
- 
+    status.textContent = data.message;
+    status.style.color = '#2e7d32';
+
+    const poll = setInterval(async () => {
+      try {
+        const sr = await fetch(`${API}/outreach/discover/status`);
+        const sd = await sr.json();
+        if (!sd.running) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔍 Find Agencies';
+          status.textContent = sd.last || 'Done.';
+          loadAgencies();
+          loadAgencyStats();
+        }
+      } catch(_) { clearInterval(poll); }
+    }, 5000);
+
+  } catch(e) {
+    status.textContent = `Failed: ${e.message}`;
+    status.style.color = '#c62828';
+    btn.disabled = false;
+    btn.textContent = '🔍 Find Agencies';
+  }
+}
+
+// Init
+loadQueue();
+loadStats();
+</script>
+</body>
+</html>
