@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -661,7 +661,7 @@ function renderSubjectOptions(pid, group, selectedLabel) {
   if (!group || !AB_SUBJECTS[group]) return '';
   return AB_SUBJECTS[group].map(s => {
     const sel = s.label === selectedLabel ? ' selected' : '';
-    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)},this)">`
+    return `<button class="ab-subject-option${sel}" onclick="selectAbSubject('${pid}','${s.label}',${JSON.stringify(s.text)})">`
       + `<span class="ab-badge ${group === 'A' ? 'ab-badge-a' : 'ab-badge-b'}">${s.label}</span>${escHtml(s.text)}</button>`;
   }).join('');
 }
