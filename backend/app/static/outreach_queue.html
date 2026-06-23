@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -900,4 +900,65 @@ function setAgencyCategory(value) {
 async function startAgencyDiscovery() {
   const city = document.getElementById('ag-disc-city').value.trim();
   const state = document.getElementById('ag-disc-state').value.trim().toUpperCase();
-  const categories = document.getElementById('ag-disc-ca
+  const categories = document.getElementById('ag-disc-categories').value.trim();
+  const partnerType = document.getElementById('ag-disc-partner-type').value;
+  const btn = document.getElementById('ag-disc-btn');
+  const status = document.getElementById('ag-disc-status');
+
+  if (!city || !state || !categories) {
+    status.textContent = 'Fill in city, state, and at least one agency type.';
+    status.style.color = '#c62828';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Running...';
+  status.style.color = '#62738f';
+  status.textContent = 'Discovery started — this takes a few minutes. Queue will update automatically.';
+
+  try {
+    const r = await fetch(`${API}/outreach/discover`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        city,
+        state,
+        categories,
+        prospect_type: 'agency',
+        partnership_type: partnerType,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    status.textContent = data.message;
+    status.style.color = '#2e7d32';
+
+    const poll = setInterval(async () => {
+      try {
+        const sr = await fetch(`${API}/outreach/discover/status`);
+        const sd = await sr.json();
+        if (!sd.running) {
+          clearInterval(poll);
+          btn.disabled = false;
+          btn.textContent = '🔍 Find Agencies';
+          status.textContent = sd.last || 'Done.';
+          loadAgencies();
+          loadAgencyStats();
+        }
+      } catch(_) { clearInterval(poll); }
+    }, 5000);
+
+  } catch(e) {
+    status.textContent = `Failed: ${e.message}`;
+    status.style.color = '#c62828';
+    btn.disabled = false;
+    btn.textContent = '🔍 Find Agencies';
+  }
+}
+
+// Init
+loadQueue();
+loadStats();
+</script>
+</body>
+</html>
