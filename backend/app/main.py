@@ -9,7 +9,7 @@ from app.api.generated_reports import router as generated_reports_router
 from app.api.intake import router as intake_router
 from app.api.outreach import router as outreach_router
 from app.api.routes import router as api_router
-from app.core.db import close_pool
+from app.core.db import close_pool, get_conn
 
 app = FastAPI(
     title="Local Competitor Intelligence (Phase 1)",
@@ -69,6 +69,6 @@ def serve_logo():
     return FileResponse(logo_path, media_type="image/png")
 
 
-@app.on_event("shutdown")
-def on_shutdown():
-    close_pool()
+@app.on_event("startup")
+def on_startup():
+    """R

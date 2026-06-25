@@ -16,6 +16,7 @@ from app.core.config import settings
 class EmailSendResult:
     ok: bool
     error: str | None = None
+    message_id: str | None = None  # Message-ID header from sent email (for threading)
 
 
 def _has_stripe_customer(business_id: str) -> bool:
@@ -263,6 +264,7 @@ def send_plain_email(
     attachment_path: str | None = None,
     attachment_filename: str | None = None,
     tracking_id: str | None = None,
+    in_reply_to: str | None = None,  # Message-ID of original email (for threading)
 ) -> "EmailSendResult":
     """
     Send a plain-text (+ HTML alternative) email, optionally with a file attachment.
@@ -271,6 +273,9 @@ def send_plain_email(
     If tracking_id is provided (prospect UUID), the HTML version will include:
       - A 1x1 tracking pixel that logs opens via /outreach/track/open/{tracking_id}
       - Website links rewritten to /outreach/track/click/{tracking_id}?url=...
+
+    If in_reply_to is provided, sets In-Reply-To + References headers so the email
+    threads in the recipient's inbox as a reply to the original.
     """
     import re
     import smtplib
@@ -292,74 +297,10 @@ def send_plain_email(
     display_from = f"{from_name} <{resolved_from}>"
 
     if dry_run:
-        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject} attachment={attachment_path} tracking_id={tracking_id}")
-        return EmailSendResult(ok=True, error=None)
+        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject} attachment={attachment_path} tracking_id={tracking_id} in_reply_to={in_reply_to}")
+        return EmailSendResult(ok=True, error=None, message_id="<dry-run@pulselci.com>")
 
     if not user or not password:
         return EmailSendResult(ok=False, error="Missing SMTP_USER or SMTP_PASS")
 
-    def _make_html(plain: str, tid: str | None) -> str:
-        import html as html_lib
-        import urllib.parse
-
-        # Convert plain text to basic HTML paragraphs
-        paragraphs = plain.strip().split("\n\n")
-        paras_html = "".join(
-            f'<p style="margin:0 0 14px 0;font-size:14px;line-height:1.6;color:#172033;">'
-            f'{html_lib.escape(p.strip()).replace(chr(10), "<br>")}</p>'
-            for p in paragraphs if p.strip()
-        )
-
-        # Rewrite http(s) links to click-tracking redirects
-        if tid:
-            def _wrap_url(m: re.Match) -> str:
-                encoded = urllib.parse.quote(m.group(0), safe="")
-                return f"{api_base}/outreach/track/click/{tid}?url={encoded}"
-            paras_html = re.sub(r"https?://[^\s<>\"']+", _wrap_url, paras_html)
-
-        pixel = (
-            f'<img src="{api_base}/outreach/track/open/{tid}" '
-            f'width="1" height="1" style="display:block;width:1px;height:1px;border:0;" alt="" />'
-            if tid else ""
-        )
-
-        return (
-            f'<html><body style="margin:0;padding:0;background:#ffffff;'
-            f'font-family:Arial,Helvetica,sans-serif;">'
-            f'<div style="max-width:600px;margin:0 auto;padding:24px 20px;">'
-            f'{paras_html}'
-            f'</div>{pixel}</body></html>'
-        )
-
-    try:
-        msg = MIMEMultipart("mixed")
-        msg["Subject"] = subject
-        msg["From"] = display_from
-        msg["Reply-To"] = display_from
-        msg["To"] = to_email
-
-        # Multipart/alternative: plain text + HTML (with tracking pixel)
-        alt = MIMEMultipart("alternative")
-        alt.attach(MIMEText(body, "plain"))
-        alt.attach(MIMEText(_make_html(body, tracking_id), "html"))
-        msg.attach(alt)
-
-        if attachment_path and os.path.exists(attachment_path):
-            with open(attachment_path, "rb") as f:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(f.read())
-            encoders.encode_base64(part)
-            fname = attachment_filename or os.path.basename(attachment_path)
-            part.add_header("Content-Disposition", f'attachment; filename="{fname}"')
-            msg.attach(part)
-
-        with smtplib.SMTP(host, port) as server:
-            if use_tls:
-                server.starttls()
-            server.login(user, password)
-            server.sendmail(resolved_from, [to_email], msg.as_string())
-
-        return EmailSendResult(ok=True, error=None)
-    except Exception as e:
-        print(f"[EMAIL] plain email failed to={to_email}: {e}")
-        return EmailSendResult(ok=False, error=str(e))
+    def _make_html(plain: str, tid: str | Non

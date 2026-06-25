@@ -319,10 +319,11 @@ def approve_and_send(prospect_id: str) -> dict:
             cur.execute(
                 """
                 UPDATE outreach_prospects
-                SET status = 'sent', approved_at = NOW(), sent_at = NOW(), updated_at = NOW()
+                SET status = 'sent', approved_at = NOW(), sent_at = NOW(), updated_at = NOW(),
+                    message_id = %s
                 WHERE id = %s
                 """,
-                (prospect_id,),
+                (result.message_id, prospect_id),
             )
         conn.commit()
 
@@ -464,5 +465,4 @@ def track_click(prospect_id: str, url: str = "https://pulselci.com"):
                     (prospect_id,),
                 )
             conn.commit()
-    except Exception as e:
-        print(f"[TRACK CLICK] error: {e}")  # fixed
+    except Exception as
