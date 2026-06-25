@@ -58,7 +58,7 @@ def outreach_queue_ui():
 @app.get("/hub", include_in_schema=False)
 @app.get("/admin/hub", include_in_schema=False)
 def command_hub():
-    """Unified navigation hub — access all internal tools from one URL."""
+    """Unified navigation hub."""
     hub_path = Path(__file__).resolve().parent / "static" / "hub.html"
     return FileResponse(hub_path)
 
@@ -71,4 +71,19 @@ def serve_logo():
 
 @app.on_event("startup")
 def on_startup():
-    """R
+    """Run idempotent DB migrations on every deploy."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE outreach_prospects ADD COLUMN IF NOT EXISTS message_id TEXT"
+                )
+            conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Startup migration warning: %s", e)
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    close_pool()
