@@ -240,7 +240,7 @@
     </div>
     <div class="form-row">
       <div class="form-field" style="flex:1;">
-        <label>Email Body</label>
+        <label>Email Body <button type="button" onclick="fillAgencyTemplate()" style="font-size:11px;padding:2px 8px;border:1px solid #c8d8ee;border-radius:6px;background:#f0f7ff;color:#2563eb;cursor:pointer;font-weight:600;margin-left:6px;">Fill template</button></label>
         <textarea id="ag-body" placeholder="Hi [Name],&#10;&#10;I run Pulse LCI — a monthly competitor intelligence report for local businesses..."></textarea>
       </div>
     </div>
@@ -469,6 +469,12 @@ function renderCard(p) {
 
 // ─── Agency tab ───────────────────────────────────────────────────────────────
 
+function fillAgencyTemplate() {
+  const el = document.getElementById('ag-body');
+  el.value = AGENCY_BODY_DEFAULT;
+  el.focus();
+}
+
 function toggleAddForm() {
   const fields = document.getElementById('add-agency-fields');
   const btn = document.getElementById('form-toggle-btn');
@@ -664,6 +670,18 @@ I put together a free competitive report for you showing review trends, rating g
 Craig
 Pulse LCI`,
 };
+
+const AGENCY_BODY_DEFAULT = `Hi [Name],
+
+I run Pulse LCI — we build monthly competitive intelligence reports for local businesses showing exactly how they stack up against competitors in their market: review trends, rating gaps, and positioning opportunities.
+
+I think there's a real partnership opportunity here. Whether you want to add a data layer to your client reporting or offer it as a white-label product under your brand, Pulse LCI can work either way.
+
+You can see what the reports look like at https://pulselci.com — happy to send a free sample report for any local market your clients are in.
+
+Craig
+Pulse LCI
+https://pulselci.com`;
 
 const AB_SUBJECTS = {
   A: [

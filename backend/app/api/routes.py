@@ -3311,7 +3311,8 @@ def followup_cold_prospects():
                     followup1_sent_at, followup2_sent_at, status,
                     COALESCE(is_test, false) AS is_test,
                     email_opened_at, email_open_count, link_clicked_at,
-                    ab_group, ab_subject_label
+                    ab_group, ab_subject_label,
+                    COALESCE(prospect_type, 'local_business') AS prospect_type
                 FROM outreach_prospects
                 WHERE status IN ('sent', 'converted')
                   AND sent_at IS NOT NULL
@@ -3342,6 +3343,7 @@ def followup_cold_prospects():
                     "link_clicked_at":    r["link_clicked_at"].isoformat() if r["link_clicked_at"] else None,
                     "ab_group":           r["ab_group"],
                     "ab_subject_label":   r["ab_subject_label"],
+                    "prospect_type":      r["prospect_type"],
                 }
                 for r in rows
             ]

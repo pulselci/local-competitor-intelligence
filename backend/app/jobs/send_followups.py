@@ -96,6 +96,7 @@ def run_cold_email_followups() -> dict:
                        draft_subject, top_competitor_name, ab_group, message_id
                 FROM outreach_prospects
                 WHERE status = 'sent'
+                  AND COALESCE(prospect_type, 'local_business') != 'agency'
                   AND email_unsubscribed = FALSE
                   AND followup1_sent_at IS NULL
                   AND sent_at IS NOT NULL
@@ -141,6 +142,7 @@ def run_cold_email_followups() -> dict:
                        top_competitor_name, reviews_count, rating, ab_group, message_id
                 FROM outreach_prospects
                 WHERE status = 'sent'
+                  AND COALESCE(prospect_type, 'local_business') != 'agency'
                   AND email_unsubscribed = FALSE
                   AND followup2_sent_at IS NULL
                   AND sent_at IS NOT NULL
@@ -187,6 +189,76 @@ def run_cold_email_followups() -> dict:
                         + _unsub_footer(str(p['id']), "prospect")
                     )
                     ok = _send(p['contact_email'], f"One thing I noticed in {market}'s market", body)
+                if ok:
+                    cur.execute("UPDATE outreach_prospects SET followup2_sent_at = NOW() WHERE id = %s", (p['id'],))
+                    sent2 += 1
+
+
+            # ── Agency Day-5 follow-ups ─────────────────────────────────────
+            cur.execute("""
+                SELECT id, business_name, contact_email, city, state,
+                       draft_subject, message_id
+                FROM outreach_prospects
+                WHERE status = 'sent'
+                  AND prospect_type = 'agency'
+                  AND email_unsubscribed = FALSE
+                  AND followup1_sent_at IS NULL
+                  AND sent_at IS NOT NULL
+                  AND sent_at >= NOW() - INTERVAL '7 days'
+                  AND sent_at <= NOW() - INTERVAL '4 days'
+                  AND contact_email IS NOT NULL
+            """)
+            for p in cur.fetchall():
+                orig_subject = p.get('draft_subject') or 'partner opportunity'
+                body = (
+                    f"Hi,\n\n"
+                    f"Just following up on my last note — wanted to make sure this didn't get buried.\n\n"
+                    f"Pulse LCI builds monthly competitive intelligence reports for local businesses. "
+                    f"Agencies use us to add a data layer to client reporting, or to offer it as a "
+                    f"white-label product under their own brand.\n\n"
+                    f"You can see what the reports look like and how it all works at https://pulselci.com — "
+                    f"happy to send a free sample report for any local market your clients are in.\n\n"
+                    f"Craig\n"
+                    f"Pulse LCI\n"
+                    f"https://pulselci.com"
+                    + _unsub_footer(str(p['id']), "prospect")
+                )
+                ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
+                           attach_onesheet=True, in_reply_to=p.get('message_id'))
+                if ok:
+                    cur.execute("UPDATE outreach_prospects SET followup1_sent_at = NOW() WHERE id = %s", (p['id'],))
+                    sent1 += 1
+
+            # ── Agency Day-12 follow-ups ─────────────────────────────────────
+            cur.execute("""
+                SELECT id, business_name, contact_email, city, state,
+                       draft_subject, message_id
+                FROM outreach_prospects
+                WHERE status = 'sent'
+                  AND prospect_type = 'agency'
+                  AND email_unsubscribed = FALSE
+                  AND followup2_sent_at IS NULL
+                  AND sent_at IS NOT NULL
+                  AND sent_at >= NOW() - INTERVAL '14 days'
+                  AND sent_at <= NOW() - INTERVAL '11 days'
+                  AND contact_email IS NOT NULL
+            """)
+            for p in cur.fetchall():
+                orig_subject = p.get('draft_subject') or 'partner opportunity'
+                body = (
+                    f"Hi,\n\n"
+                    f"Last note from me on this.\n\n"
+                    f"If you're ever looking to add competitive intelligence to what you offer clients — "
+                    f"monthly reports on review trends, rating gaps, and local market positioning — "
+                    f"that's exactly what Pulse LCI does.\n\n"
+                    f"When the timing is right, https://pulselci.com has everything you need to know. "
+                    f"Or just reply and I'll set up a quick call.\n\n"
+                    f"Craig\n"
+                    f"Pulse LCI"
+                    + _unsub_footer(str(p['id']), "prospect")
+                )
+                ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
+                           attach_onesheet=False, in_reply_to=p.get('message_id'))
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup2_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent2 += 1
