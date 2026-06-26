@@ -112,7 +112,7 @@ def run_cold_email_followups() -> dict:
                     body = (
                         f"Hi,\n\n"
                         f"Just circling back on my last note. Still happy to send that free competitive report for "
-                        f"{p['business_name']} — no link to click, just reply here and I'll send it straight to your inbox.\n\n"
+                        f"{p['business_name']}. No link to click, just reply here and I'll send it straight to your inbox.\n\n"
                         f"Craig\n"
                         f"Pulse LCI"
                         + _unsub_footer(str(p['id']), "prospect")
@@ -162,7 +162,7 @@ def run_cold_email_followups() -> dict:
                     )
                     body = (
                         f"Hi,\n\n"
-                        f"Last note from me — I don't want to keep filling your inbox.\n\n"
+                        f"Last note from me. I don't want to keep filling your inbox.\n\n"
                         f"{comp_line}\n\n"
                         f"If you're ever curious how {p['business_name']} stacks up, just reply and I'll send the report over. "
                         f"No strings, no link to click.\n\n"
@@ -212,11 +212,11 @@ def run_cold_email_followups() -> dict:
                 orig_subject = p.get('draft_subject') or 'partner opportunity'
                 body = (
                     f"Hi,\n\n"
-                    f"Just following up on my last note — wanted to make sure this didn't get buried.\n\n"
+                    f"Just following up on my last note. Wanted to make sure this didn't get buried.\n\n"
                     f"Pulse LCI builds monthly competitive intelligence reports for local businesses. "
                     f"Agencies use us to add a data layer to client reporting, or to offer it as a "
                     f"white-label product under their own brand.\n\n"
-                    f"You can see what the reports look like and how it all works at https://pulselci.com — "
+                    f"You can see what the reports look like and how it all works at https://pulselci.com. "
                     f"happy to send a free sample report for any local market your clients are in.\n\n"
                     f"Craig\n"
                     f"Pulse LCI\n"
@@ -248,8 +248,8 @@ def run_cold_email_followups() -> dict:
                 body = (
                     f"Hi,\n\n"
                     f"Last note from me on this.\n\n"
-                    f"If you're ever looking to add competitive intelligence to what you offer clients — "
-                    f"monthly reports on review trends, rating gaps, and local market positioning — "
+                    f"If you're ever looking to add competitive intelligence to what you offer clients: "
+                    f"monthly reports on review trends, rating gaps, and local market positioning. "
                     f"that's exactly what Pulse LCI does.\n\n"
                     f"When the timing is right, https://pulselci.com has everything you need to know. "
                     f"Or just reply and I'll set up a quick call.\n\n"

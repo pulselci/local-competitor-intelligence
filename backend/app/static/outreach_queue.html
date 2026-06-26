@@ -235,13 +235,13 @@
     <div class="form-row">
       <div class="form-field" style="flex:1; min-width:300px;">
         <label>Email Subject</label>
-        <input id="ag-subject" type="text" placeholder="Partner opportunity — local competitor intelligence for your clients">
+        <input id="ag-subject" type="text" placeholder="Partner opportunity: local competitor intelligence for your clients">
       </div>
     </div>
     <div class="form-row">
       <div class="form-field" style="flex:1;">
         <label>Email Body <button type="button" onclick="fillAgencyTemplate()" style="font-size:11px;padding:2px 8px;border:1px solid #c8d8ee;border-radius:6px;background:#f0f7ff;color:#2563eb;cursor:pointer;font-weight:600;margin-left:6px;">Fill template</button></label>
-        <textarea id="ag-body" placeholder="Hi [Name],&#10;&#10;I run Pulse LCI — a monthly competitor intelligence report for local businesses..."></textarea>
+        <textarea id="ag-body" placeholder="Hi [Name],&#10;&#10;I run Pulse LCI. We build monthly competitive intelligence reports for local businesses..."></textarea>
       </div>
     </div>
     <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
@@ -653,7 +653,7 @@ const AB_BODY_TEMPLATES = {
 
 I came across ${name} while researching businesses in ${city} and wanted to reach out.
 
-I put together a free competitive snapshot showing how you compare to your top nearby competitors — review trends, rating changes, and who is gaining ground in your market.
+I put together a free competitive snapshot showing how you compare to your top nearby competitors: review trends, rating changes, and who is gaining ground in your market.
 
 I would love to send you the full report. Check us out at pulselci.com, or just reply and I will send it right over.
 
@@ -663,9 +663,9 @@ Pulse LCI`,
 
   B: (name, city) => `Hi there,
 
-Quick question — do you know how ${name} compares to your top 2-3 competitors right now?
+Quick question: do you know how ${name} compares to your top 2-3 competitors right now?
 
-I put together a free competitive report for you showing review trends, rating gaps, and who is gaining ground in ${city}. No strings attached — just reply to this email and I will send it over.
+I put together a free competitive report for you showing review trends, rating gaps, and who is gaining ground in ${city}. No strings attached. Just reply to this email and I will send it over.
 
 Craig
 Pulse LCI`,
@@ -673,11 +673,11 @@ Pulse LCI`,
 
 const AGENCY_BODY_DEFAULT = `Hi [Name],
 
-I run Pulse LCI — we build monthly competitive intelligence reports for local businesses showing exactly how they stack up against competitors in their market: review trends, rating gaps, and positioning opportunities.
+I run Pulse LCI. We build monthly competitive intelligence reports for local businesses showing exactly how they stack up against competitors in their market: review trends, rating gaps, and positioning opportunities.
 
 I think there's a real partnership opportunity here. Whether you want to add a data layer to your client reporting or offer it as a white-label product under your brand, Pulse LCI can work either way.
 
-You can see what the reports look like at https://pulselci.com — happy to send a free sample report for any local market your clients are in.
+You can see what the reports look like at https://pulselci.com. Happy to send a free sample report for any local market your clients are in.
 
 Craig
 Pulse LCI
@@ -693,10 +693,10 @@ const AB_SUBJECTS = {
   ],
   B: [
     { label: 'B-S1', text: 'Quick question about your competitors' },
-    { label: 'B-S2', text: 'Curious — do you track your local competition?' },
+    { label: 'B-S2', text: 'Curious: do you track your local competition?' },
     { label: 'B-S3', text: 'I made something you might find useful' },
     { label: 'B-S4', text: 'Who are your top 2-3 competitors?' },
-    { label: 'B-S5', text: 'Free competitive report — no link to click' },
+    { label: 'B-S5', text: 'Free competitive report (no link to click)' },
   ],
 };
 
