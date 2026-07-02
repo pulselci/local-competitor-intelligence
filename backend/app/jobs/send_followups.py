@@ -122,16 +122,13 @@ def run_cold_email_followups() -> dict:
                 else:
                     body = (
                         f"Hi,\n\n"
-                        f"Just making sure this didn't get buried. Happy to run the free "
-                        f"competitive snapshot for {p['business_name']} whenever it works for you.\n\n"
-                        f"It shows exactly where you stand against local competitors in {market} "
-                        f"and what to focus on this month. Free report lands in your inbox in less than 5 minutes.\n\n"
-                        f"{FREE_REPORT_URL}\n\n"
+                        f"Just wanted to make sure my last note didn't get lost. Still happy to pull that free competitive report for {p['business_name']}.\n\n"
+                        f"Reply with your top 2-3 competitors and I'll send it over.\n\n"
                         f"Craig\n"
                         f"Pulse LCI"
                         + _unsub_footer(str(p['id']), "prospect")
                     )
-                    ok = _send(p['contact_email'], f"Re: {orig_subject}", body, attach_onesheet=True)
+                    ok = _send(p['contact_email'], f"Re: {orig_subject}", body, attach_onesheet=False)
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup1_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent1 += 1
@@ -176,19 +173,17 @@ def run_cold_email_followups() -> dict:
                     competitor_line = (
                         f"{competitor} has been building review momentum recently."
                         if competitor
-                        else f"competitors in {market} have been gaining review ground recently."
+                        else f"competitors in {market} have been gaining ground recently."
                     )
                     body = (
                         f"Hi,\n\n"
                         f"One thing I noticed while tracking {market}: {competitor_line}\n\n"
-                        f"If you'd like to see where {p['business_name']} stands in comparison, "
-                        f"I can pull a free competitive snapshot this week. No strings attached.\n\n"
-                        f"{FREE_REPORT_URL}\n\n"
+                        f"If you want to see where {p['business_name']} stands, just reply and I'll pull the report this week.\n\n"
                         f"Craig\n"
                         f"Pulse LCI"
                         + _unsub_footer(str(p['id']), "prospect")
                     )
-                    ok = _send(p['contact_email'], f"One thing I noticed in {market}'s market", body)
+                    ok = _send(p['contact_email'], f"One thing I noticed in {market}", body)
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup2_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent2 += 1

@@ -83,27 +83,21 @@ def generate_draft(
         else:
             opening = f"I was reviewing {cat}s in {city} and came across {business_name}."
 
-    subject = f"Quick question for {business_name}"
+    if top_competitor_name:
+        subject = f"{business_name} vs {top_competitor_name} in {city}"
+    else:
+        subject = f"Quick data point about {cat}s in {city}"
+
+    gap_block = f"{gap_line} {comp_context}\n\n" if gap_line else ""
 
     body = f"""Hi,
 
-When someone searches for a {cat} in {city}, they're comparing options side by side. Research consistently shows they're more likely to call the business with more reviews, not necessarily the best one.
-
 {opening}
 
-{gap_line + chr(10) + chr(10) if gap_line else ""}{comp_context}
+{gap_block}I track this monthly for local businesses. Happy to pull a free report showing exactly where you stand. Just reply with your top 2-3 competitors and I'll send it over.
 
-Quick question:
-
-Is improving your local review position something you're actively tracking, or more of a "whenever it happens" situation?
-
-I built a tool called Pulse LCI that tracks this automatically and shows exactly where competitors are gaining ground.
-
-If you'd like, reply with the names of up to 3 of your closest competitors and I'll pull a free report for you. Or request one at pulselci.com/#free-report.
-
-Craig White
-Founder & CEO, Pulse LCI
-craig@pulselci.com | pulselci.com
+Craig
+Pulse LCI
 """
 
     return subject, body
