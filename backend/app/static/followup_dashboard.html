@@ -103,12 +103,6 @@
   .ab-group-header.group-a { background: #dbeafe; color: #1e40af; }
   .ab-group-header.group-b { background: #ede9fe; color: #5b21b6; }
   .ab-group-header.group-none { background: #f1f5f9; color: #475569; }
-  .agency-stats-card { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
-  .agency-group-card { flex:1; min-width:220px; border-radius:10px; padding:14px 16px; border:2px solid #6ee7b7; background:#ecfdf5; }
-  .agency-group-card .gc-title { font-size:12px; font-weight:700; margin-bottom:10px; color:#065f46; }
-  .agency-group-card .gc-stats { display:flex; gap:20px; }
-  .agency-group-card .gc-stat { font-size:11px; color:#64748b; }
-  .agency-group-card .gc-stat strong { display:block; font-size:22px; color:#0f172a; font-weight:800; line-height:1.1; margin-bottom:2px; }
 </style>
 </head>
 <body>
@@ -230,31 +224,6 @@
   </div>
 </div>
 
-<hr class="divider" />
-
-<!-- ── AGENCY OUTREACH ── -->
-<div class="section">
-  <div class="section-title">
-    Agency outreach
-    <span class="count-badge" id="agency-cold-count">0</span>
-  </div>
-  <div class="agency-stats-card" id="agency-stats-card" style="display:none;"></div>
-  <div class="filter-row" id="agency-filter-row">
-    <button class="filter-btn active" onclick="setFilter('agency','all',this)">All</button>
-    <button class="filter-btn" onclick="setFilter('agency','overdue',this)">Overdue</button>
-    <button class="filter-btn" onclick="setFilter('agency','due',this)">Due today</button>
-    <button class="filter-btn" onclick="setFilter('agency','pending',this)">Pending</button>
-    <button class="filter-btn" onclick="setFilter('agency','converted',this)">Converted</button>
-  </div>
-  <table id="agency-table">
-    <thead><tr>
-      <th>Agency</th><th>Contact email</th><th>Sent</th>
-      <th>Opened</th><th>Days ago</th><th>Day 5</th><th>Day 12</th><th>Status</th><th></th>
-    </tr></thead>
-    <tbody id="agency-body"><tr><td colspan="9" class="loading">Loading…</td></tr></tbody>
-  </table>
-</div>
-
 <!-- ── SANDBOX BUSINESSES ── -->
 <div class="sandbox-section" id="sandbox-section" style="display:none">
   <div class="sandbox-toggle" onclick="toggleSandbox()">
@@ -298,8 +267,7 @@ function esc(str) {
 let reportData = [], coldData = [], alertData = [];
 let liveReportData = [], sandboxReportData = [];
 let liveColdData = [], sandboxColdData = [];
-let liveAgencyData = [], sandboxAgencyData = [];
-let reportFilter = 'all', coldFilter = 'all', agencyFilter = 'all';
+let reportFilter = 'all', coldFilter = 'all';
 
 function daysBetween(dateStr) {
   if (!dateStr) return null;
@@ -424,16 +392,8 @@ function renderReports(data) {
   }).join('');
 }
 
-// Returns true only if the open happened 2+ minutes after send (filters bot/scanner pre-fetches)
-function isRealOpen(r) {
-  if (!r.email_opened_at) return false;
-  if (!r.sent_at) return true;
-  const diffMs = new Date(r.email_opened_at) - new Date(r.sent_at);
-  return diffMs >= 2 * 60 * 1000;
-}
-
 function openedPill(r) {
-  if (!isRealOpen(r)) return '<span class="pill pill-na">Not opened</span>';
+  if (!r.email_opened_at) return '<span class="pill pill-na">Not opened</span>';
   const count = r.email_open_count > 1 ? ` ×${r.email_open_count}` : '';
   const date = new Date(r.email_opened_at).toLocaleDateString();
   return `<span class="pill pill-done" title="First opened ${date}">Opened${count}</span>`;
@@ -447,15 +407,15 @@ const AB_SUBJECT_TEXTS = {
   'A-S4': 'The review gap between you and [Competitor] is wider than you think',
   'A-S5': "One number that's costing local [business type] owners clients",
   'B-S1': 'Quick question about your competitors',
-  'B-S2': 'Curious: do you track your local competition?',
+  'B-S2': 'Curious — do you track your local competition?',
   'B-S3': 'I made something you might find useful',
   'B-S4': 'Who are your top 2-3 competitors?',
-  'B-S5': 'Free competitive report (no link to click)',
+  'B-S5': 'Free competitive report — no link to click',
 };
 
 function renderAbComparisonCard(group, rows) {
   const total = rows.length;
-  const opened = rows.filter(r => isRealOpen(r)).length;
+  const opened = rows.filter(r => r.email_opened_at).length;
   const followedUp = rows.filter(r => r.followup1_sent_at).length;
   const openRate = total ? Math.round(opened / total * 100) : 0;
   const fuRate   = total ? Math.round(followedUp / total * 100) : 0;
@@ -477,7 +437,7 @@ function renderSublineChips(group, rows) {
   return labels.map(lbl => {
     const subset = rows.filter(r => r.ab_subject_label === lbl);
     if (!subset.length) return '';
-    const opened  = subset.filter(r => isRealOpen(r)).length;
+    const opened  = subset.filter(r => r.email_opened_at).length;
     const fuSent  = subset.filter(r => r.followup1_sent_at).length;
     const openPct = Math.round(opened / subset.length * 100);
     const fuPct   = Math.round(fuSent  / subset.length * 100);
@@ -611,67 +571,6 @@ async function convertProspect(id, btn) {
   }
 }
 
-function renderAgencyStatsCard(rows) {
-  const total = rows.length;
-  const opened = rows.filter(r => isRealOpen(r)).length;
-  const fu1 = rows.filter(r => r.followup1_sent_at).length;
-  const openRate = total ? Math.round(opened / total * 100) : 0;
-  const fuRate = total ? Math.round(fu1 / total * 100) : 0;
-  return `<div class="agency-group-card">
-    <div class="gc-title">Agency Outreach</div>
-    <div class="gc-stats">
-      <div class="gc-stat"><strong>${total}</strong>Sent</div>
-      <div class="gc-stat"><strong>${openRate}%</strong>Open rate</div>
-      <div class="gc-stat"><strong>${fuRate}%</strong>Follow-up rate</div>
-    </div>
-  </div>`;
-}
-
-function renderAgency(data) {
-  const applyFilter = rows => rows.filter(r => {
-    if (agencyFilter === 'all') return true;
-    if (agencyFilter === 'converted') return r.status === 'converted';
-    if (agencyFilter === 'pending')   return r.status !== 'converted' && rowUrgency(r, 'cold') === 0;
-    if (agencyFilter === 'due')       return r.status !== 'converted' && rowUrgency(r, 'cold') === 1;
-    if (agencyFilter === 'overdue')   return r.status !== 'converted' && rowUrgency(r, 'cold') === 2;
-    return true;
-  });
-  const filtered = applyFilter(data);
-  document.getElementById('agency-cold-count').textContent = filtered.length;
-  const statsCard = document.getElementById('agency-stats-card');
-  if (data.length > 0) {
-    statsCard.style.display = 'flex';
-    statsCard.innerHTML = renderAgencyStatsCard(data);
-  } else {
-    statsCard.style.display = 'none';
-  }
-  const tbody = document.getElementById('agency-body');
-  if (!filtered.length) {
-    tbody.innerHTML = data.length
-      ? '<tr><td colspan="9" class="empty">No records match this filter.</td></tr>'
-      : '<tr><td colspan="9" class="empty">No agency outreach sent yet.</td></tr>';
-    return;
-  }
-  filtered.sort((a, b) => rowUrgency(b, 'cold') - rowUrgency(a, 'cold'));
-  tbody.innerHTML = filtered.map(r => {
-    const days = daysBetween(r.sent_at);
-    const dClass = days >= 12 ? ' urgent' : '';
-    const loc = [r.city, r.state].filter(Boolean).join(', ');
-    return `<tr>
-      <td><div class="business-name">${esc(r.business_name)}</div>
-          ${loc ? `<div class="email-text">${esc(loc)}</div>` : ''}</td>
-      <td><div class="email-text">${esc(r.contact_email || '—')}</div></td>
-      <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
-      <td>${openedPill(r)}</td>
-      <td><span class="days-text${dClass}">${days !== null ? days + 'd ago' : '—'}</span></td>
-      <td>${pillFor(5, r.followup1_sent_at, days)}</td>
-      <td>${pillFor(12, r.followup2_sent_at, days)}</td>
-      <td>${coldStatusPill(r)}</td>
-      <td>${r.status !== 'converted' ? `<button class="convert-btn" onclick="convertProspect('${r.id}',this)">Mark Converted</button>` : ''}</td>
-    </tr>`;
-  }).join('');
-}
-
 function renderStats() { updateStats(); }
 
 function updateStats() {
@@ -708,11 +607,6 @@ function setFilter(type, val, btn) {
     });
     btn.classList.add('active');
     renderReports(liveReportData);
-  } else if (type === 'agency') {
-    agencyFilter = val;
-    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    renderAgency(liveAgencyData);
   } else {
     coldFilter = val;
     btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -779,15 +673,11 @@ async function loadAll() {
     coldData   = await coldRes.json();
     liveReportData    = reportData.filter(r => !r.is_test);
     sandboxReportData = reportData.filter(r => r.is_test);
-    const isAgency = r => r.prospect_type === 'agency';
-    liveAgencyData    = coldData.filter(r => !r.is_test && isAgency(r));
-    sandboxAgencyData = coldData.filter(r => r.is_test && isAgency(r));
-    liveColdData      = coldData.filter(r => !r.is_test && !isAgency(r));
-    sandboxColdData   = coldData.filter(r => r.is_test && !isAgency(r));
+    liveColdData      = coldData.filter(r => !r.is_test);
+    sandboxColdData   = coldData.filter(r => r.is_test);
     renderStats(reportData, coldData);
     renderReports(liveReportData);
     renderCold(liveColdData);
-    renderAgency(liveAgencyData);
     renderSandbox();
     document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
   } catch(e) {

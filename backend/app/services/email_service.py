@@ -16,7 +16,6 @@ from app.core.config import settings
 class EmailSendResult:
     ok: bool
     error: str | None = None
-    message_id: str | None = None  # Message-ID header (for threading)
 
 
 def _has_stripe_customer(business_id: str) -> bool:
@@ -264,7 +263,6 @@ def send_plain_email(
     attachment_path: str | None = None,
     attachment_filename: str | None = None,
     tracking_id: str | None = None,
-    in_reply_to: str | None = None,
 ) -> "EmailSendResult":
     """
     Send a plain-text (+ HTML alternative) email, optionally with a file attachment.
@@ -294,8 +292,8 @@ def send_plain_email(
     display_from = f"{from_name} <{resolved_from}>"
 
     if dry_run:
-        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject} attachment={attachment_path} tracking_id={tracking_id} in_reply_to={in_reply_to}")
-        return EmailSendResult(ok=True, error=None, message_id="<dry-run@pulselci.com>")
+        print(f"[EMAIL DRY RUN] plain email from={display_from} to={to_email} subject={subject} attachment={attachment_path} tracking_id={tracking_id}")
+        return EmailSendResult(ok=True, error=None)
 
     if not user or not password:
         return EmailSendResult(ok=False, error="Missing SMTP_USER or SMTP_PASS")
@@ -334,16 +332,11 @@ def send_plain_email(
         )
 
     try:
-        import email.utils
         msg = MIMEMultipart("mixed")
         msg["Subject"] = subject
         msg["From"] = display_from
         msg["Reply-To"] = display_from
         msg["To"] = to_email
-        msg["Message-ID"] = email.utils.make_msgid(domain="pulselci.com")
-        if in_reply_to:
-            msg["In-Reply-To"] = in_reply_to
-            msg["References"] = in_reply_to
 
         # Multipart/alternative: plain text + HTML (with tracking pixel)
         alt = MIMEMultipart("alternative")
@@ -366,7 +359,7 @@ def send_plain_email(
             server.login(user, password)
             server.sendmail(resolved_from, [to_email], msg.as_string())
 
-        return EmailSendResult(ok=True, error=None, message_id=msg["Message-ID"])
+        return EmailSendResult(ok=True, error=None)
     except Exception as e:
         print(f"[EMAIL] plain email failed to={to_email}: {e}")
         return EmailSendResult(ok=False, error=str(e))

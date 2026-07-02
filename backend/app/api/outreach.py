@@ -284,8 +284,6 @@ def approve_and_send(prospect_id: str) -> dict:
     # Attach relevant one-sheet based on prospect type
     attachment_path = None
     attachment_filename = None
-    # Group B = reply-ask email, no PDF
-    ab_group = prospect.get("ab_group")
     prospect_type = prospect.get("prospect_type") or "local_business"
     static_dir = Path(__file__).resolve().parent.parent / "static"
 
@@ -296,7 +294,7 @@ def approve_and_send(prospect_id: str) -> dict:
         onesheet = static_dir / "pulse_lci_business_onesheet.pdf"
         fname = "Pulse_LCI_Overview.pdf"
 
-    if onesheet.exists() and ab_group != 'B':
+    if onesheet.exists():
         attachment_path = str(onesheet)
         attachment_filename = fname
     else:
@@ -319,11 +317,10 @@ def approve_and_send(prospect_id: str) -> dict:
             cur.execute(
                 """
                 UPDATE outreach_prospects
-                SET status = 'sent', approved_at = NOW(), sent_at = NOW(), updated_at = NOW(),
-                    message_id = %s
+                SET status = 'sent', approved_at = NOW(), sent_at = NOW(), updated_at = NOW()
                 WHERE id = %s
                 """,
-                (result.message_id, prospect_id),
+                (prospect_id,),
             )
         conn.commit()
 
@@ -466,4 +463,6 @@ def track_click(prospect_id: str, url: str = "https://pulselci.com"):
                 )
             conn.commit()
     except Exception as e:
-        print(f"[TRACK CLICK] error: {e}")  # fixed
+        print(f"[TRACK CLICK] error for {prospect_id}: {e}")
+
+    return RedirectResponse(url=url, status_code=302)

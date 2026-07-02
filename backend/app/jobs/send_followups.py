@@ -212,19 +212,13 @@ def run_cold_email_followups() -> dict:
                 orig_subject = p.get('draft_subject') or 'partner opportunity'
                 body = (
                     f"Hi,\n\n"
-                    f"Just following up on my last note. Wanted to make sure this didn't get buried.\n\n"
-                    f"Pulse LCI builds monthly competitive intelligence reports for local businesses. "
-                    f"Agencies use us to add a data layer to client reporting, or to offer it as a "
-                    f"white-label product under their own brand.\n\n"
-                    f"You can see what the reports look like and how it all works at https://pulselci.com. "
-                    f"happy to send a free sample report for any local market your clients are in.\n\n"
-                    f"Craig\n"
-                    f"Pulse LCI\n"
-                    f"https://pulselci.com"
+                    f"Wanted to follow up with something specific. I can pull a free competitive intelligence report for any local market your clients are in. Takes me about a minute to run.\n\n"
+                    f"If you have a client in a competitive local market, just reply with their city and business type and I'll send it over. No strings, no call needed.\n\n"
+                    f"Craig"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
-                           attach_onesheet=True, in_reply_to=p.get('message_id'))
+                           attach_onesheet=False, in_reply_to=p.get('message_id'))
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup1_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent1 += 1
@@ -247,14 +241,9 @@ def run_cold_email_followups() -> dict:
                 orig_subject = p.get('draft_subject') or 'partner opportunity'
                 body = (
                     f"Hi,\n\n"
-                    f"Last note from me on this.\n\n"
-                    f"If you're ever looking to add competitive intelligence to what you offer clients: "
-                    f"monthly reports on review trends, rating gaps, and local market positioning. "
-                    f"that's exactly what Pulse LCI does.\n\n"
-                    f"When the timing is right, https://pulselci.com has everything you need to know. "
-                    f"Or just reply and I'll set up a quick call.\n\n"
-                    f"Craig\n"
-                    f"Pulse LCI"
+                    f"No worries if the timing isn't right. I'll leave it here.\n\n"
+                    f"If competitive reporting for local clients ever becomes relevant, reply anytime and I'll get you a sample same day.\n\n"
+                    f"Craig"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
