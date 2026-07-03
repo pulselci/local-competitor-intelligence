@@ -373,10 +373,4 @@ def send_plain_email(
         with smtplib.SMTP(host, port) as server:
             if use_tls:
                 server.starttls()
-            server.login(user, password)
-            server.sendmail(resolved_from, [to_email], msg.as_string())
-
-        return EmailSendResult(ok=True, error=None, message_id=msg["Message-ID"])
-    except Exception as e:
-        print(f"[EMAIL] plain email failed to={to_email}: {e}")
-        return EmailSendResult(ok=False, error=str(e))
+     

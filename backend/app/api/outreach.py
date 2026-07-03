@@ -208,10 +208,12 @@ def list_queue(status: str = "draft_ready", limit: int = 50) -> list[dict]:
                     ) AS previously_contacted
                 FROM outreach_prospects p
                 WHERE p.status = %s
-                ORDER BY p.reviews_count DESC NULLS LAST
+                ORDER BY
+                    CASE WHEN %s = 'sent' THEN p.sent_at END DESC NULLS LAST,
+                    CASE WHEN %s != 'sent' THEN p.reviews_count END DESC NULLS LAST
                 LIMIT %s
                 """,
-                (status, limit),
+                (status, status, status, limit),
             )
             rows = cur.fetchall()
             return [dict(r) for r in rows]
