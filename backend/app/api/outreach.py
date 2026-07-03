@@ -18,12 +18,15 @@ from fastapi.responses import Response, RedirectResponse
 from pydantic import BaseModel
 
 from app.core.db import get_conn
-from app.services.email_service import send_plain_email
+from app.services.email_service import send_plain_email, log_report_delivery
 
 router = APIRouter(prefix="/outreach", tags=["outreach"])
 
 # Track discovery job status in memory
 _discovery_status: dict = {"running": False, "last": None, "log": []}
+
+# Track send-report jobs: prospect_id -> {status, error, report_id}
+_send_report_jobs: dict[str, dict] = {}
 
 
 def _run_discovery(
@@ -466,3 +469,158 @@ def track_click(prospect_id: str, url: str = "https://pulselci.com"):
         print(f"[TRACK CLICK] error for {prospect_id}: {e}")
 
     return RedirectResponse(url=url, status_code=302)
+
+
+# ---------------------------------------------------------------------------
+# Send-report-as-reply — generates a full report and sends it in-thread
+# ---------------------------------------------------------------------------
+
+class SendReportIn(BaseModel):
+    competitor_names: List[str]
+
+
+def _run_send_report_bg(prospect_id: str, prospect: dict, competitor_names: list) -> None:
+    """
+    Background job: onboard prospect, generate report, send as reply in cold email thread.
+    Status tracked in _send_report_jobs[prospect_id].
+    """
+    import os
+    import tempfile
+    from uuid import UUID
+
+    _send_report_jobs[prospect_id] = {"status": "generating", "error": None, "report_id": None}
+
+    try:
+        # 1. Create/find business + resolve Place IDs + collect snapshots/reviews synchronously
+        from app.services.prospect_onboarding_service import onboard_prospect
+        result = onboard_prospect(
+            contact_name="",
+            contact_email=prospect["contact_email"],
+            business_name=prospect["business_name"],
+            city=prospect.get("city") or "",
+            state=prospect.get("state") or "",
+            competitor_names=competitor_names,
+            skip_report=True,
+            background_data_collection=False,
+        )
+        if not result.ok:
+            raise RuntimeError(f"Onboarding failed: {result.error}")
+
+        business_id = UUID(result.business_id)
+
+        # 2. Generate report
+        from app.api.routes import generate_business_report
+        report_data = generate_business_report(business_id)
+        if hasattr(report_data, "model_dump"):
+            report_data = report_data.model_dump()
+        elif hasattr(report_data, "dict"):
+            report_data = report_data.dict()
+        report_id = str(report_data.get("id") or report_data.get("report_id") or "")
+        if not report_id:
+            raise RuntimeError("Report generation returned no ID")
+
+        # 3. Mark as full (not blurred free preview)
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE generated_reports "
+                    "SET sections = sections || '{\"is_free_preview\": false}'::jsonb "
+                    "WHERE id = %s",
+                    (report_id,),
+                )
+            conn.commit()
+
+        # 4. Render PDF
+        from app.api.generated_reports import _fetch_report
+        from app.services.pdf_service import render_report_pdf
+        report = _fetch_report(UUID(report_id))
+        pdf_bytes = render_report_pdf(report)
+
+        # 5. Build personal email body
+        business_name = prospect["business_name"]
+        orig_subject = (prospect.get("draft_subject") or f"Your competitive report for {business_name}").strip()
+        email_body = (
+            f"Hi,\n\n"
+            f"As promised, here is the competitive intelligence report for {business_name}. "
+            f"It covers where you stand on reviews, ratings, and local market positioning "
+            f"vs your competitors.\n\n"
+            f"Happy to walk through anything in there. Just reply here.\n\n"
+            f"Craig\n"
+            f"Pulse LCI"
+        )
+
+        # 6. Write PDF to temp file and send via craig@ as threaded reply
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+            tf.write(pdf_bytes)
+            tmp_path = tf.name
+
+        try:
+            fname = business_name.replace(" ", "_").replace("/", "-") + "_LCI_Report.pdf"
+            send_result = send_plain_email(
+                to_email=prospect["contact_email"],
+                subject=f"Re: {orig_subject}",
+                body=email_body,
+                attachment_path=tmp_path,
+                attachment_filename=fname,
+                in_reply_to=prospect.get("message_id"),
+            )
+        finally:
+            os.unlink(tmp_path)
+
+        if not send_result.ok:
+            raise RuntimeError(f"Email send failed: {send_result.error}")
+
+        # 7. Log delivery so post-report follow-up sequence (Day-5/12/21) fires
+        log_report_delivery(
+            report_id=report_id,
+            recipient_email=prospect["contact_email"],
+            status="sent",
+        )
+
+        # 8. Mark prospect converted — stops cold follow-up chain
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE outreach_prospects SET status = 'converted', updated_at = NOW() WHERE id = %s",
+                    (prospect_id,),
+                )
+            conn.commit()
+
+        _send_report_jobs[prospect_id] = {"status": "done", "error": None, "report_id": report_id}
+
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        _send_report_jobs[prospect_id] = {"status": "error", "error": str(exc), "report_id": None}
+
+
+@router.post("/{prospect_id}/send-report")
+def send_report_reply(prospect_id: str, body: SendReportIn, background_tasks: BackgroundTasks) -> dict:
+    """
+    Generate and send a full competitive report as a threaded reply to the original cold email.
+    Fires a background job — poll /{prospect_id}/send-report/status for completion.
+    """
+    if not any(n.strip() for n in body.competitor_names):
+        raise HTTPException(status_code=400, detail="At least one competitor name is required")
+
+    prospect = _get_prospect(prospect_id)
+
+    if not prospect.get("contact_email"):
+        raise HTTPException(status_code=400, detail="No contact email for this prospect")
+
+    if _send_report_jobs.get(prospect_id, {}).get("status") == "generating":
+        raise HTTPException(status_code=409, detail="Report generation already in progress")
+
+    competitor_names = [n.strip() for n in body.competitor_names if n.strip()]
+    background_tasks.add_task(_run_send_report_bg, prospect_id, dict(prospect), competitor_names)
+
+    return {"ok": True, "status": "generating"}
+
+
+@router.get("/{prospect_id}/send-report/status")
+def send_report_job_status(prospect_id: str) -> dict:
+    """Poll for send-report job completion."""
+    job = _send_report_jobs.get(prospect_id)
+    if not job:
+        return {"status": "not_started"}
+    return job

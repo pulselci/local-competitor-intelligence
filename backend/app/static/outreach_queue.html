@@ -85,6 +85,22 @@
   .add-agency-form .form-field textarea { resize: vertical; height: 80px; }
   .add-agency-form .toggle-btn { font-size: 12px; color: #2c5eff; background: none; border: none; padding: 0; cursor: pointer; font-weight: 600; }
   .add-agency-form .toggle-btn:hover { opacity: 0.75; }
+
+  /* Send Report modal */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(10,20,40,0.55); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal-box { background:#fff; border-radius:16px; padding:28px; width:480px; max-width:95vw; box-shadow:0 8px 40px rgba(0,0,0,0.18); }
+  .modal-title { font-size:16px; font-weight:700; color:#122033; margin-bottom:4px; }
+  .modal-sub { font-size:13px; color:#62738f; margin-bottom:20px; }
+  .modal-field { margin-bottom:14px; }
+  .modal-field label { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#8a9ab5; margin-bottom:5px; }
+  .modal-field input { width:100%; font-size:13px; padding:8px 12px; border:1px solid #c8d8ee; border-radius:8px; font-family:inherit; color:#172033; }
+  .modal-field input:read-only { background:#f9fafb; color:#888; }
+  .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:20px; }
+  .modal-status { font-size:12px; color:#62738f; margin-top:12px; min-height:18px; }
+  .modal-status.error { color:#c62828; }
+  .modal-status.success { color:#2e7d32; }
+  .btn-report { background:#2c5eff; color:#fff; }
 </style>
 </head>
 <body>
@@ -431,7 +447,9 @@ function renderCard(p) {
     </div>
     <div class="card-footer">
       <span class="msg" id="msg-${p.id}"></span>
-      ${!isReadOnly ? `
+      ${p.status === 'sent' ? `
+        <button class="btn-report" onclick="openReportModal('${p.id}', ${JSON.stringify(p.business_name)}, ${JSON.stringify(p.city || '')}, ${JSON.stringify(p.state || '')})">📄 Send Report</button>
+      ` : !isReadOnly ? `
         <button class="btn-save" onclick="saveDraft('${p.id}')">Save edits</button>
         <button class="btn-skip" onclick="skip('${p.id}')">Skip</button>
         <button class="btn-approve" onclick="approve('${p.id}')">✓ Approve &amp; Send</button>
@@ -858,10 +876,148 @@ async function startAgencyDiscovery() {
   }
 }
 
+
+// ─── Send Report modal ────────────────────────────────────────────────────────
+
+let _reportProspectId = null;
+let _reportPollTimer = null;
+
+function openReportModal(prospectId, bizName, city, state) {
+  _reportProspectId = prospectId;
+  document.getElementById('modal-biz-name').value = bizName || '';
+  document.getElementById('modal-biz-label').textContent = `Send report for ${bizName}`;
+  document.getElementById('modal-city').value = city || '';
+  document.getElementById('modal-state').value = state || '';
+  document.getElementById('modal-comp1').value = '';
+  document.getElementById('modal-comp2').value = '';
+  document.getElementById('modal-comp3').value = '';
+  setModalStatus('', '');
+  document.getElementById('modal-submit-btn').disabled = false;
+  document.getElementById('modal-submit-btn').textContent = 'Generate & Send Report';
+  document.getElementById('modal-cancel-btn').disabled = false;
+  document.getElementById('report-modal').classList.add('open');
+  document.getElementById('modal-comp1').focus();
+}
+
+function closeReportModal() {
+  if (_reportPollTimer) { clearInterval(_reportPollTimer); _reportPollTimer = null; }
+  document.getElementById('report-modal').classList.remove('open');
+  _reportProspectId = null;
+}
+
+function setModalStatus(msg, type) {
+  const el = document.getElementById('modal-status');
+  el.textContent = msg;
+  el.className = 'modal-status' + (type ? ' ' + type : '');
+}
+
+async function submitReport() {
+  if (!_reportProspectId) return;
+
+  const comp1 = document.getElementById('modal-comp1').value.trim();
+  const comp2 = document.getElementById('modal-comp2').value.trim();
+  const comp3 = document.getElementById('modal-comp3').value.trim();
+  const competitors = [comp1, comp2, comp3].filter(Boolean);
+
+  if (!competitors.length) {
+    setModalStatus('Enter at least one competitor name.', 'error');
+    return;
+  }
+
+  document.getElementById('modal-submit-btn').disabled = true;
+  document.getElementById('modal-submit-btn').textContent = '⏳ Generating...';
+  document.getElementById('modal-cancel-btn').disabled = true;
+  setModalStatus('Starting — this takes about 30–60 seconds while we collect live data...', '');
+
+  try {
+    const r = await fetch(`${API}/outreach/${_reportProspectId}/send-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ competitor_names: competitors }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+
+    // Poll for completion
+    const pid = _reportProspectId;
+    _reportPollTimer = setInterval(async () => {
+      try {
+        const sr = await fetch(`${API}/outreach/${pid}/send-report/status`);
+        const sd = await sr.json();
+        if (sd.status === 'done') {
+          clearInterval(_reportPollTimer); _reportPollTimer = null;
+          setModalStatus('Report sent successfully!', 'success');
+          document.getElementById('modal-submit-btn').textContent = 'Done';
+          document.getElementById('modal-cancel-btn').disabled = false;
+          document.getElementById('modal-cancel-btn').textContent = 'Close';
+          // Refresh the queue card
+          setTimeout(() => { loadQueue(); closeReportModal(); }, 1500);
+        } else if (sd.status === 'error') {
+          clearInterval(_reportPollTimer); _reportPollTimer = null;
+          setModalStatus(`Error: ${sd.error || 'Unknown error'}`, 'error');
+          document.getElementById('modal-submit-btn').disabled = false;
+          document.getElementById('modal-submit-btn').textContent = 'Retry';
+          document.getElementById('modal-cancel-btn').disabled = false;
+        }
+        // else still generating — keep polling
+      } catch(_) {}
+    }, 4000);
+
+  } catch(e) {
+    setModalStatus(`Failed: ${e.message}`, 'error');
+    document.getElementById('modal-submit-btn').disabled = false;
+    document.getElementById('modal-submit-btn').textContent = 'Generate & Send Report';
+    document.getElementById('modal-cancel-btn').disabled = false;
+  }
+}
+
 // Init
 loadQueue();
 loadStats();
 </script>
+
+<!-- Send Report Modal -->
+<div class="modal-overlay" id="report-modal" onclick="if(event.target===this)closeReportModal()">
+  <div class="modal-box">
+    <div class="modal-title">Send Competitive Report</div>
+    <div class="modal-sub" id="modal-biz-label">Generating report for —</div>
+
+    <div class="modal-field">
+      <label>Business</label>
+      <input id="modal-biz-name" type="text" readonly>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div class="modal-field" style="flex:2;">
+        <label>City</label>
+        <input id="modal-city" type="text" placeholder="Chicago">
+      </div>
+      <div class="modal-field" style="flex:1;">
+        <label>State</label>
+        <input id="modal-state" type="text" placeholder="IL" maxlength="2" style="text-transform:uppercase;">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Competitor 1</label>
+      <input id="modal-comp1" type="text" placeholder="e.g. Smith Roofing">
+    </div>
+    <div class="modal-field">
+      <label>Competitor 2</label>
+      <input id="modal-comp2" type="text" placeholder="optional">
+    </div>
+    <div class="modal-field">
+      <label>Competitor 3</label>
+      <input id="modal-comp3" type="text" placeholder="optional">
+    </div>
+
+    <div class="modal-status" id="modal-status"></div>
+
+    <div class="modal-actions">
+      <button class="btn-skip" onclick="closeReportModal()" id="modal-cancel-btn">Cancel</button>
+      <button class="btn-report" onclick="submitReport()" id="modal-submit-btn">Generate &amp; Send Report</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
                                                                                                                                                                                   
