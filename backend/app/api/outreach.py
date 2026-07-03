@@ -545,6 +545,8 @@ def _run_send_report_bg(prospect_id: str, prospect: dict, competitor_names: list
             f"It covers where you stand on reviews, ratings, and local market positioning "
             f"vs your competitors.\n\n"
             f"Happy to walk through anything in there. Just reply here.\n\n"
+            f"If you would like this updated monthly, you can subscribe at pulselci.com/#pricing. "
+            f"$99/month, cancel anytime.\n\n"
             f"Craig\n"
             f"Pulse LCI"
         )
