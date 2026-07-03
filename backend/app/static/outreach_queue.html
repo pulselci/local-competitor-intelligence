@@ -167,6 +167,7 @@
 </div>
 
 <div class="filter-bar">
+  <input id="queue-search" type="text" placeholder="Search by name or email..." oninput="loadQueue()" style="font-size:13px;padding:7px 12px;border:1px solid #c8d8ee;border-radius:8px;font-family:inherit;color:#172033;width:260px;">
   <label for="status-filter">Show:</label>
   <select id="status-filter" onchange="loadQueue()">
     <option value="draft_ready">Ready to send</option>
@@ -362,7 +363,8 @@ async function loadQueue() {
   loadStats();
 
   try {
-    const r = await fetch(`${API}/outreach/queue?status=${status}&limit=50`);
+    const search = (document.getElementById('queue-search')?.value || '').trim();
+    const r = await fetch(`${API}/outreach/queue?status=${status}&limit=50${search ? '&search=' + encodeURIComponent(search) : ''}`);
     if (!r.ok) throw new Error(await r.text());
     const prospects = await r.json();
 
