@@ -132,17 +132,72 @@ def get_place_details(place_id: str) -> dict:
         return {}
 
 
+# Maps human-readable category strings to strict Google Places types.
+# When a type is set, Google only returns businesses of that exact place type,
+# preventing cross-category matches (e.g. plumber vs HVAC company).
+_CATEGORY_TO_PLACE_TYPE: dict[str, str] = {
+    "plumber": "plumber",
+    "plumbing": "plumber",
+    "plumbing service": "plumber",
+    "electrician": "electrician",
+    "roofing contractor": "roofing_contractor",
+    "roofer": "roofing_contractor",
+    "hvac contractor": "hvac_contractor",
+    "air conditioning contractor": "hvac_contractor",
+    "heating contractor": "hvac_contractor",
+    "auto repair shop": "car_repair",
+    "auto mechanic": "car_repair",
+    "car repair": "car_repair",
+    "automotive service": "car_repair",
+    "dentist": "dentist",
+    "dental office": "dentist",
+    "dental clinic": "dentist",
+    "gym": "gym",
+    "hair salon": "hair_care",
+    "beauty salon": "beauty_salon",
+    "spa": "spa",
+    "medical spa": "spa",
+    "chiropractor": "physiotherapist",
+    "physical therapy": "physiotherapist",
+    "restaurant": "restaurant",
+    "painter": "painter",
+    "landscaping": "landscaping",
+    "locksmith": "locksmith",
+    "moving company": "moving_company",
+}
+
+
+def _place_type_for_category(category: str) -> str | None:
+    """Return the strict Google Places type for a category string, or None."""
+    normalized = (category or "").lower().strip()
+    # Exact match first
+    if normalized in _CATEGORY_TO_PLACE_TYPE:
+        return _CATEGORY_TO_PLACE_TYPE[normalized]
+    # Partial match
+    for key, place_type in _CATEGORY_TO_PLACE_TYPE.items():
+        if key in normalized or normalized in key:
+            return place_type
+    return None
+
+
 def find_top_competitor(lat: float, lng: float, category: str, own_place_id: str) -> dict | None:
     """Find the highest-reviewed nearby business in the same category."""
+    params: dict = {
+        "location": f"{lat},{lng}",
+        "radius": 8000,  # 5 miles
+        "keyword": category,
+        "key": _api_key(),
+    }
+    # Add strict type filter when we have a known mapping — prevents
+    # cross-category matches (e.g. plumber vs HVAC company).
+    place_type = _place_type_for_category(category)
+    if place_type:
+        params["type"] = place_type
+
     try:
         r = requests.get(
             GOOGLE_PLACES_NEARBY,
-            params={
-                "location": f"{lat},{lng}",
-                "radius": 8000,  # 5 miles
-                "keyword": category,
-                "key": _api_key(),
-            },
+            params=params,
             timeout=10,
         )
         r.raise_for_status()
@@ -732,3 +787,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
