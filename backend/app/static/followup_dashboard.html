@@ -407,13 +407,12 @@ function renderOutreachStatCards(coldRows, summary) {
     const total     = summaryEntry ? summaryEntry.total      : rows.length;
     const converted = summaryEntry ? summaryEntry.converted  : rows.filter(r => r.status === 'converted').length;
     const opened    = rows.filter(r => isRealOpen(r)).length;
-    const emailedPct  = total  ? Math.round(sent      / total * 100) : 0;
-    const openPct     = sent   ? Math.round(opened    / sent  * 100) : 0;
-    const reportPct   = sent   ? Math.round(converted / sent  * 100) : 0;
+    const openPct   = sent ? Math.round(opened    / sent * 100) : 0;
+    const reportPct = sent ? Math.round(converted / sent * 100) : 0;
     return `<div class="outreach-card ${cssClass}">
       <div class="oc-title">${title}</div>
       <div class="oc-stats">
-        <div class="oc-stat"><strong>${emailedPct}%</strong>Emails sent</div>
+        <div class="oc-stat"><strong>${sent}</strong>Emails sent</div>
         <div class="oc-stat"><strong>${openPct}%</strong>Open rate</div>
         <div class="oc-stat"><strong>${reportPct}%</strong>Report requested</div>
       </div>
