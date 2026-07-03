@@ -434,13 +434,15 @@ def lookup_email_apollo(domain: str, business_name: str | None = None) -> str | 
 
     try:
         payload = {
+            "api_key": api_key,
             "q_organization_domain_name": domain,
+            "person_titles": APOLLO_TARGET_TITLES,
             "per_page": 10,
         }
         r = requests.post(
             APOLLO_PEOPLE_SEARCH,
             json=payload,
-            headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+            headers={"X-Api-Key": api_key, "Content-Type": "application/json", "Accept": "application/json"},
             timeout=(4, 15),
         )
         r.raise_for_status()
@@ -548,30 +550,17 @@ def generate_agency_draft(
     partnership_type: str = "both",
 ) -> tuple[str, str]:
     """Generate a short cold email for an agency prospect."""
-    subject = "Partner opportunity: local competitor intelligence for your clients"
+    subject = "Quick question about your local business clients"
 
-    if partnership_type == "reseller":
-        angle = "white-label our reports under your brand and offer them as an add-on to your current services"
-    elif partnership_type == "referral":
-        angle = "earn 25% recurring revenue on every local business client you refer, for as long as they stay subscribed"
-    else:
-        angle = "either white-label our reports under your brand or refer clients and earn 25% recurring, whichever fits your model better"
+    body = f"""Hi,
 
-    body = f"""Hi there,
+Do you currently give your local business clients any insight into how they're performing against local competitors on reviews?
 
-I came across {business_name} and wanted to reach out about a potential partnership.
+I ask because I built something for exactly that. Monthly reports showing review momentum, rating gaps, and competitor positioning in their local market. Takes 60 seconds to set up per client.
 
-I run Pulse LCI, a monthly local competitor intelligence report for small businesses. Each report shows owners how they stack up against nearby competitors: review trends, rating changes, who is gaining ground, and where they are falling behind.
+Happy to pull a free sample report for any of your clients' markets. Just reply with a city and business type and I'll send it over.
 
-We are looking to partner with agencies like yours to {angle}.
-
-It is a simple value-add for your existing clients, and most agencies find it complements their SEO or reputation management work well. I attached a one-pager with the details.
-
-I would be happy to run a free report for one of your clients so you can see exactly what they would receive before committing to anything.
-
-Best,
 Craig
-Pulse LCI
 """
     return subject, body
 

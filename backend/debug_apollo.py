@@ -12,15 +12,16 @@ if not api_key:
     sys.exit(1)
 
 payload = {
+    "api_key": api_key,
     "q_organization_domain_name": "strobeldentistry.com",
+    "person_titles": ["owner", "founder", "president", "ceo", "manager"],
     "per_page": 5,
-    "page": 1,
 }
 
 r = requests.post(
-    "https://api.apollo.io/v1/people/search",
+    "https://api.apollo.io/api/v1/mixed_people/api_search",
     json=payload,
-    headers={"X-Api-Key": api_key, "Content-Type": "application/json"},
+    headers={"X-Api-Key": api_key, "Content-Type": "application/json", "Accept": "application/json"},
     timeout=15,
 )
 
