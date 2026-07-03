@@ -568,7 +568,9 @@ def _run_send_report_bg(prospect_id: str, prospect: dict, competitor_names: list
 
         # 5. Build personal email body
         business_name = prospect["business_name"]
-        orig_subject = (prospect.get("draft_subject") or f"Your competitive report for {business_name}").strip()
+        orig_subject = (prospect.get("draft_subject") or f"competitive report for {business_name}").strip()
+        has_thread = bool(prospect.get("message_id"))
+        email_subject = f"Re: {orig_subject}" if has_thread else orig_subject
         email_body = (
             f"Hi,\n\n"
             f"As promised, here is the competitive intelligence report for {business_name}. "
@@ -590,7 +592,7 @@ def _run_send_report_bg(prospect_id: str, prospect: dict, competitor_names: list
             fname = business_name.replace(" ", "_").replace("/", "-") + "_LCI_Report.pdf"
             send_result = send_plain_email(
                 to_email=prospect["contact_email"],
-                subject=f"Re: {orig_subject}",
+                subject=email_subject,
                 body=email_body,
                 attachment_path=tmp_path,
                 attachment_filename=fname,
