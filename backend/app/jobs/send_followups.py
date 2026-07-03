@@ -306,15 +306,15 @@ def run_report_followups() -> dict:
 # ── email templates ───────────────────────────────────────────────────────────
 
 def _report_followup_day5(name: str, business: str, business_id: str) -> tuple[str, str]:
-    subject = f"Did you get a chance to review your report, {name}?"
+    greeting = name if name != "there" else ""
+    subject = f"did you get a chance to look?" if not greeting else f"did you get a chance to look, {greeting}?"
     body = (
-        f"Hi {name},\n\n"
-        f"Just checking in. Did you get a chance to look at the competitive report "
-        f"for {business}?\n\n"
-        f"The friction signals section is worth a look. It shows exactly "
-        f"which complaint themes are showing up across your market and how your competitors "
-        f"compare.\n\n"
-        f"Happy to answer any questions. Just reply to this email.\n\n"
+        f"Hi{' ' + greeting if greeting else ''},\n\n"
+        f"Just checking in on the competitive report for {business}.\n\n"
+        f"The friction signals section is worth a look if you haven't gotten there yet. "
+        f"It shows which complaint themes are showing up across your market and how your "
+        f"competitors compare.\n\n"
+        f"Happy to answer any questions, just reply here.\n\n"
         f"Craig\n"
         f"Pulse LCI"
         + _unsub_footer(business_id, "business")
@@ -323,17 +323,17 @@ def _report_followup_day5(name: str, business: str, business_id: str) -> tuple[s
 
 
 def _report_followup_day12(name: str, business: str, business_id: str) -> tuple[str, str]:
-    subject = f"One thing worth knowing about your market, {name}"
+    greeting = name if name != "there" else ""
+    subject = f"one thing worth knowing about your market"
     body = (
-        f"Hi {name},\n\n"
-        f"Wanted to follow up on the competitive report for {business}.\n\n"
+        f"Hi{' ' + greeting if greeting else ''},\n\n"
+        f"Wanted to follow up on the report for {business}.\n\n"
         f"Your market moves every month. Review counts shift, complaint patterns change, "
         f"and competitors gain or lose ground. The snapshot you received shows where things "
         f"stood when we ran it, but that picture is already getting older.\n\n"
-        f"For $99/month, you'd get this updated every month -- tracking exactly how your "
+        f"For $99/month you'd get this updated every month, tracking exactly how your "
         f"competitive position is shifting and what to focus on. Cancel anytime, no contracts.\n\n"
-        f"{PRICING_URL}\n\n"
-        f"Worth trying for one month?\n\n"
+        f"Worth trying for one month? {PRICING_URL}\n\n"
         f"Craig\n"
         f"Pulse LCI"
         + _unsub_footer(business_id, "business")
@@ -342,18 +342,17 @@ def _report_followup_day12(name: str, business: str, business_id: str) -> tuple[
 
 
 def _report_followup_day21(name: str, business: str, business_id: str) -> tuple[str, str]:
-    subject = f"Last check-in -- {business}"
+    greeting = name if name != "there" else ""
+    subject = f"last note on this"
     body = (
-        f"Hi {name},\n\n"
+        f"Hi{' ' + greeting if greeting else ''},\n\n"
         f"Last follow-up on this.\n\n"
         f"The report we sent gives you a baseline. What it can't show you is what's "
         f"changing: which competitor is quietly gaining ground, which complaint themes "
         f"are rising in your market, and whether the gap is widening or closing.\n\n"
-        f"That's what the monthly subscription does. $99/month. Report delivered to your "
-        f"inbox the first of every month. Cancel anytime.\n\n"
-        f"{PRICING_URL}\n\n"
-        f"If the timing isn't right, no worries -- but if you'd like to keep watching "
-        f"your market, that's the link.\n\n"
+        f"That's what the monthly subscription covers. $99/month, report in your inbox "
+        f"every month, cancel anytime. {PRICING_URL}\n\n"
+        f"If the timing isn't right, no worries. The link is there whenever it makes sense.\n\n"
         f"Craig\n"
         f"Pulse LCI"
         + _unsub_footer(business_id, "business")
@@ -367,4 +366,4 @@ def run_all_followups() -> dict:
     cold = run_cold_email_followups()
     report = run_report_followups()
     return {**cold, **report}
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         
