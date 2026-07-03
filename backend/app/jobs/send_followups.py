@@ -81,9 +81,7 @@ def _send(
 def run_cold_email_followups() -> dict:
     """
     Day-5 and Day-12 follow-ups for outreach_prospects with status='sent'.
-
-    Group A: separate emails, PDF on day 5, link-focused copy.
-    Group B: threaded replies (In-Reply-To), no PDF, conversational reply-ask copy.
+    All sequences are reply-first: threaded replies, no PDF, single CTA.
     """
     sent1 = sent2 = 0
 
@@ -93,7 +91,7 @@ def run_cold_email_followups() -> dict:
             # Day-5 follow-ups
             cur.execute("""
                 SELECT id, business_name, contact_email, city, state,
-                       draft_subject, top_competitor_name, ab_group, message_id
+                       draft_subject, top_competitor_name, message_id
                 FROM outreach_prospects
                 WHERE status = 'sent'
                   AND COALESCE(prospect_type, 'local_business') != 'agency'
@@ -105,30 +103,17 @@ def run_cold_email_followups() -> dict:
                   AND contact_email IS NOT NULL
             """)
             for p in cur.fetchall():
-                market = f"{p['city']}, {p['state']}" if p.get('city') else "your market"
-                ab = p.get('ab_group') or 'A'
                 orig_subject = p.get('draft_subject') or f"competitive snapshot for {p['business_name']}"
-                if ab == 'B':
-                    body = (
-                        f"Hi,\n\n"
-                        f"Just circling back on my last note. Still happy to send that free competitive report for "
-                        f"{p['business_name']}. No link to click, just reply here and I'll send it straight to your inbox.\n\n"
-                        f"Craig\n"
-                        f"Pulse LCI"
-                        + _unsub_footer(str(p['id']), "prospect")
-                    )
-                    ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
-                               attach_onesheet=False, in_reply_to=p.get('message_id'))
-                else:
-                    body = (
-                        f"Hi,\n\n"
-                        f"Just wanted to make sure my last note didn't get lost. Still happy to pull that free competitive report for {p['business_name']}.\n\n"
-                        f"Reply with your top 2-3 competitors and I'll send it over.\n\n"
-                        f"Craig\n"
-                        f"Pulse LCI"
-                        + _unsub_footer(str(p['id']), "prospect")
-                    )
-                    ok = _send(p['contact_email'], f"Re: {orig_subject}", body, attach_onesheet=False)
+                body = (
+                    f"Hi,\n\n"
+                    f"Just circling back on my last note. Still happy to pull that free competitive report for {p['business_name']}.\n\n"
+                    f"Reply with your top 2-3 competitors and I'll send it over.\n\n"
+                    f"Craig\n"
+                    f"Pulse LCI"
+                    + _unsub_footer(str(p['id']), "prospect")
+                )
+                ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
+                           attach_onesheet=False, in_reply_to=p.get('message_id'))
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup1_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent1 += 1
@@ -136,7 +121,7 @@ def run_cold_email_followups() -> dict:
             # Day-12 follow-ups
             cur.execute("""
                 SELECT id, business_name, contact_email, city, state,
-                       top_competitor_name, reviews_count, rating, ab_group, message_id
+                       draft_subject, top_competitor_name, reviews_count, rating, message_id
                 FROM outreach_prospects
                 WHERE status = 'sent'
                   AND COALESCE(prospect_type, 'local_business') != 'agency'
@@ -149,41 +134,23 @@ def run_cold_email_followups() -> dict:
             """)
             for p in cur.fetchall():
                 market = f"{p['city']}, {p['state']}" if p.get('city') else "your market"
-                ab = p.get('ab_group') or 'A'
                 competitor = p.get('top_competitor_name')
-                if ab == 'B':
-                    comp_line = (
-                        f"For what it's worth, I've been watching {competitor} pick up reviews in {market} over the past few weeks."
-                        if competitor
-                        else f"I've been watching the competitive landscape in {market} shift over the past few weeks."
-                    )
-                    body = (
-                        f"Hi,\n\n"
-                        f"Last note from me. I don't want to keep filling your inbox.\n\n"
-                        f"{comp_line}\n\n"
-                        f"If you're ever curious how {p['business_name']} stacks up, just reply and I'll send the report over. "
-                        f"No strings, no link to click.\n\n"
-                        f"Craig\n"
-                        f"Pulse LCI"
-                        + _unsub_footer(str(p['id']), "prospect")
-                    )
-                    ok = _send(p['contact_email'], "Re: last note", body,
-                               attach_onesheet=False, in_reply_to=p.get('message_id'))
-                else:
-                    competitor_line = (
-                        f"{competitor} has been building review momentum recently."
-                        if competitor
-                        else f"competitors in {market} have been gaining ground recently."
-                    )
-                    body = (
-                        f"Hi,\n\n"
-                        f"One thing I noticed while tracking {market}: {competitor_line}\n\n"
-                        f"If you want to see where {p['business_name']} stands, just reply and I'll pull the report this week.\n\n"
-                        f"Craig\n"
-                        f"Pulse LCI"
-                        + _unsub_footer(str(p['id']), "prospect")
-                    )
-                    ok = _send(p['contact_email'], f"One thing I noticed in {market}", body)
+                comp_line = (
+                    f"For what it's worth, I've been watching {competitor} pick up reviews in {market} over the past few weeks."
+                    if competitor
+                    else f"I've been watching the competitive landscape in {market} shift over the past few weeks."
+                )
+                body = (
+                    f"Hi,\n\n"
+                    f"Last note from me.\n\n"
+                    f"{comp_line}\n\n"
+                    f"If you're ever curious how {p['business_name']} stacks up, just reply and I'll send the report over.\n\n"
+                    f"Craig\n"
+                    f"Pulse LCI"
+                    + _unsub_footer(str(p['id']), "prospect")
+                )
+                ok = _send(p['contact_email'], f"Re: last note", body,
+                           attach_onesheet=False, in_reply_to=p.get('message_id'))
                 if ok:
                     cur.execute("UPDATE outreach_prospects SET followup2_sent_at = NOW() WHERE id = %s", (p['id'],))
                     sent2 += 1
@@ -400,3 +367,4 @@ def run_all_followups() -> dict:
     cold = run_cold_email_followups()
     report = run_report_followups()
     return {**cold, **report}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
