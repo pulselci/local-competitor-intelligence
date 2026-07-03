@@ -75,7 +75,7 @@ def generate_draft(
 
         if reviews and stars:
             opening = (
-                f"I was looking at {cats} in {city} and pulled some data on {business_name} — "
+                f"I was looking at {cats} in {city} and pulled some data on {business_name}: "
                 f"{reviews} Google reviews at {stars} stars. {top_competitor_name} is sitting at {top_competitor_reviews}."
             )
         else:
@@ -87,12 +87,12 @@ def generate_draft(
         gap_line = ""
         comp_context = f"Most {cats} don't have a clear picture of where they stand on reviews relative to local competition."
         if reviews and stars:
-            opening = f"I was looking at {cats} in {city} and pulled some data on {business_name} — {reviews} Google reviews at {stars} stars."
+            opening = f"I was looking at {cats} in {city} and pulled some data on {business_name}: {reviews} Google reviews at {stars} stars."
         else:
             opening = f"I was looking at {cats} in {city} and came across {business_name}."
 
     if top_competitor_name:
-        subject = f"quick question about {business_name}"
+        subject = f"{business_name} vs {top_competitor_name} in {city}"
     else:
         subject = f"quick question about {business_name}"
 
