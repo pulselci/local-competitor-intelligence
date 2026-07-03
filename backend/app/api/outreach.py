@@ -263,6 +263,37 @@ def get_stats() -> dict:
             return {r["status"]: r["count"] for r in rows}
 
 
+@router.get("/summary")
+def get_summary() -> dict:
+    """
+    Returns total prospect counts and email-sent counts broken down by type
+    (business vs agency). Powers the follow-up dashboard stat cards.
+    """
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    COALESCE(prospect_type, 'local_business') AS ptype,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status IN ('sent', 'converted')) AS emailed,
+                    COUNT(*) FILTER (WHERE status = 'converted') AS converted
+                FROM outreach_prospects
+                WHERE COALESCE(is_test, false) = false
+                GROUP BY ptype
+                """
+            )
+            rows = cur.fetchall()
+            result = {}
+            for r in rows:
+                result[r["ptype"]] = {
+                    "total":     r["total"],
+                    "emailed":   r["emailed"],
+                    "converted": r["converted"],
+                }
+            return result
+
+
 @router.patch("/{prospect_id}/draft")
 def update_draft(prospect_id: str, body: DraftUpdateIn) -> dict:
     """Edit a prospect's email, contact email, or notes before approving."""
