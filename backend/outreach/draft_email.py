@@ -36,6 +36,13 @@ def _friendly_category(category: str | None) -> str:
     return "business"
 
 
+def _pluralize(cat: str) -> str:
+    """Simple pluralization that handles 'business' -> 'businesses', etc."""
+    if cat.endswith("s") or cat.endswith("x") or cat.endswith("ch"):
+        return cat + "es"
+    return cat + "s"
+
+
 def generate_draft(
     business_name: str,
     city: str,
@@ -49,6 +56,7 @@ def generate_draft(
     Returns (subject, body) for a personalized cold email.
     """
     cat = _friendly_category(category)
+    cats = _pluralize(cat)
     reviews = reviews_count or 0
     stars = f"{rating:.1f}" if rating else ""
 
@@ -56,7 +64,7 @@ def generate_draft(
     if top_competitor_name and top_competitor_reviews is not None:
         gap = reviews - top_competitor_reviews
         if gap > 0:
-            gap_line = f"That's a lead of {gap} reviews."
+            gap_line = f"That's a {gap}-review lead."
             comp_context = f"Leads like that tend to shrink faster than most owners expect."
         elif gap < 0:
             gap_line = f"That's a gap of {abs(gap)} reviews."
@@ -67,26 +75,26 @@ def generate_draft(
 
         if reviews and stars:
             opening = (
-                f"I was reviewing {cat}s in {city} and noticed {business_name} has "
-                f"{reviews} Google reviews ({stars} stars) while {top_competitor_name} has {top_competitor_reviews}."
+                f"I was looking at {cats} in {city} and pulled some data on {business_name} — "
+                f"{reviews} Google reviews at {stars} stars. {top_competitor_name} is sitting at {top_competitor_reviews}."
             )
         else:
             opening = (
-                f"I was reviewing {cat}s in {city} and noticed {business_name} "
+                f"I was looking at {cats} in {city} and noticed {business_name} "
                 f"while {top_competitor_name} nearby has {top_competitor_reviews} reviews."
             )
     else:
         gap_line = ""
-        comp_context = f"Most {cat}s don't have a clear picture of where they stand relative to local competition on reviews."
+        comp_context = f"Most {cats} don't have a clear picture of where they stand on reviews relative to local competition."
         if reviews and stars:
-            opening = f"I was reviewing {cat}s in {city} and noticed {business_name} has {reviews} Google reviews ({stars} stars)."
+            opening = f"I was looking at {cats} in {city} and pulled some data on {business_name} — {reviews} Google reviews at {stars} stars."
         else:
-            opening = f"I was reviewing {cat}s in {city} and came across {business_name}."
+            opening = f"I was looking at {cats} in {city} and came across {business_name}."
 
     if top_competitor_name:
-        subject = f"{business_name} vs {top_competitor_name} in {city}"
+        subject = f"quick question about {business_name}"
     else:
-        subject = f"Quick data point about {cat}s in {city}"
+        subject = f"quick question about {business_name}"
 
     gap_block = f"{gap_line} {comp_context}\n\n" if gap_line else ""
 
