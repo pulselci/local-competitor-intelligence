@@ -953,10 +953,14 @@
               {% set headline_text = "Your #1 Priority: Win the Review Race" %}
             {% elif "defend" in _at or ("protect" in _at and "lead" in _at) %}
               {% set headline_text = "You're #1 — Here's How to Stay There" %}
+            {% elif "keep" in _at and ("lead" in _at or "review" in _at) %}
+              {% set headline_text = "You're Leading — Don't Let the Gap Shrink" %}
             {% elif "extend" in _at and "lead" in _at %}
               {% set headline_text = "Extend Your Lead Before Competitors Catch Up" %}
             {% elif "maintain" in _at and ("lead" in _at or "review" in _at) %}
               {% set headline_text = "Protect Your #1 Market Position" %}
+            {% elif "rating" in _at and ("edge" in _at or "visible" in _at or "advantage" in _at) %}
+              {% set headline_text = "Your Rating Is a Trust Signal — Make It Work Harder" %}
             {% elif "positioning" in _at or ("reinforce" in _at and "advantage" in _at) %}
               {% set headline_text = "Customers Can't Choose You If They Can't See Your Edge" %}
             {% elif "credibility" in _at or "trust" in _at or "proof" in _at %}
@@ -965,10 +969,14 @@
               {% set headline_text = "Speed & Convenience Are Your Competitive Edge" %}
             {% elif "rank" in _at or "tier" in _at %}
               {% set headline_text = "One Position Separates You From the Leaders" %}
+            {% elif ("protect" in _at or "volume" in _at or "cadence" in _at) and "review" in _at %}
+              {% set headline_text = "Consistent Reviews Beat a One-Time Surge" %}
             {% elif "review" in _at and ("grow" in _at or "generate" in _at or "consistent" in _at) %}
               {% set headline_text = "Consistent Review Growth Beats a One-Time Surge" %}
+            {% elif "visibility" in _at or "profile" in _at %}
+              {% set headline_text = "Make Your Business Easier to Choose Online" %}
             {% else %}
-              {% set headline_text = "Your Biggest Growth Lever This Month" %}
+              {% set headline_text = "This Month's Highest-Impact Action" %}
             {% endif %}
             {% set detail = item.get("detail") or "" %}
             {% set _why_raw = item.get("why_it_matters") or item.get("implication") or "" %}
@@ -983,8 +991,12 @@
               {% set why_text = "How you're described in reviews shapes how new customers perceive you before they ever contact you." %}
             {% elif "credibility" in _at2 or "trust" in _at2 or "presented" in _at2 %}
               {% set why_text = "Customers compare you side by side before making a decision — your trust signals need to be immediately visible." %}
+            {% elif "rating" in _at2 %}
+              {% set why_text = "Star rating is one of the first things prospects see when comparing options — it shapes the decision before they read a single review." %}
+            {% elif "volume" in _at2 or "cadence" in _at2 %}
+              {% set why_text = "Consistent review volume signals an active, trusted business. A gap in cadence is the fastest way to let competitors close the distance." %}
             {% else %}
-              {% set why_text = "Acting on this now compounding advantage over competitors who aren't paying attention to these signals." %}
+              {% set why_text = "Acting on this signal now builds a compounding advantage over competitors who are not paying attention to the same data." %}
             {% endif %}
             {% set action_text = item.get("recommended_action") or summary_text %}
             {% set how_text = item.get("how_to_implement") or detail %}
@@ -1220,7 +1232,11 @@
               </tr>
             </thead>
             <tbody>
+              {% set seen_names = namespace(names=[]) %}
               {% for row in sov_rows %}
+                {% set r_name_check = row.get("competitor_name") or row.get("name") or "" %}
+                {% if r_name_check not in seen_names.names %}
+                {% set seen_names.names = seen_names.names + [r_name_check] %}
                 {% set is_you = row.get("is_business") %}
                 {% set r_reviews = row.get("reviews_total") or row.get("review_count") or 0 %}
                 {% set r_share = row.get("share_pct") | round(1) %}
@@ -1238,6 +1254,7 @@
                     {% if r_rating %}★ {{ "%.1f"|format(r_rating|float) }}{% else %}<span style="color:#c4cdd8;">—</span>{% endif %}
                   </td>
                 </tr>
+                {% endif %}
               {% endfor %}
             </tbody>
           </table>
