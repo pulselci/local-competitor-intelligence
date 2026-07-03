@@ -448,7 +448,12 @@ function renderCard(p) {
     <div class="card-footer">
       <span class="msg" id="msg-${p.id}"></span>
       ${p.status === 'sent' ? `
-        <button class="btn-report" onclick="openReportModal('${p.id}', ${JSON.stringify(p.business_name)}, ${JSON.stringify(p.city || '')}, ${JSON.stringify(p.state || '')})">📄 Send Report</button>
+        <button class="btn-report"
+          data-id="${p.id}"
+          data-name="${(p.business_name||'').replace(/"/g,'&quot;')}"
+          data-city="${(p.city||'').replace(/"/g,'&quot;')}"
+          data-state="${(p.state||'').replace(/"/g,'&quot;')}"
+          onclick="openReportModal(this)">📄 Send Report</button>
       ` : !isReadOnly ? `
         <button class="btn-save" onclick="saveDraft('${p.id}')">Save edits</button>
         <button class="btn-skip" onclick="skip('${p.id}')">Skip</button>
@@ -882,12 +887,16 @@ async function startAgencyDiscovery() {
 let _reportProspectId = null;
 let _reportPollTimer = null;
 
-function openReportModal(prospectId, bizName, city, state) {
+function openReportModal(btn) {
+  const prospectId = btn.dataset.id;
+  const bizName = btn.dataset.name || '';
+  const city = btn.dataset.city || '';
+  const state = btn.dataset.state || '';
   _reportProspectId = prospectId;
-  document.getElementById('modal-biz-name').value = bizName || '';
+  document.getElementById('modal-biz-name').value = bizName;
   document.getElementById('modal-biz-label').textContent = `Send report for ${bizName}`;
-  document.getElementById('modal-city').value = city || '';
-  document.getElementById('modal-state').value = state || '';
+  document.getElementById('modal-city').value = city;
+  document.getElementById('modal-state').value = state;
   document.getElementById('modal-comp1').value = '';
   document.getElementById('modal-comp2').value = '';
   document.getElementById('modal-comp3').value = '';
