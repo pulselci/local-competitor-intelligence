@@ -338,7 +338,7 @@ def send_plain_email(
         return (
             f'<html><body style="margin:0;padding:0;background:#ffffff;'
             f'font-family:Arial,Helvetica,sans-serif;">'
-            f'<div style="max-width:600px;margin:0 auto;padding:24px 20px;">'
+            f'<div style="max-width:600px;margin:0;padding:0;">'
             f'{paras_html}'
             f'</div>{pixel}</body></html>'
         )
