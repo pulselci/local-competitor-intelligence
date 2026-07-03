@@ -373,4 +373,20 @@ def send_plain_email(
         with smtplib.SMTP(host, port) as server:
             if use_tls:
                 server.starttls()
-     
+            server.login(user, password)
+            server.sendmail(resolved_from, [to_email], msg.as_string())
+
+        return EmailSendResult(ok=True, error=None, message_id=msg["Message-ID"])
+    except Exception as e:
+        print(f"[EMAIL] plain email failed to={to_email}: {e}")
+        return EmailSendResult(ok=False, error=str(e))
+
+
+def log_report_delivery(
+    report_id: "UUID | str | None",
+    recipient_email: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    """Public wrapper around _log_report_delivery for use outside this module."""
+    _log_report_delivery(report_id=report_id, recipient_email=recipient_email, status=status, error=error)
