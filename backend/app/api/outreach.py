@@ -322,14 +322,15 @@ def approve_and_send(prospect_id: str) -> dict:
             cur.execute(
                 """
                 UPDATE outreach_prospects
-                SET status = 'sent', approved_at = NOW(), sent_at = NOW(), updated_at = NOW()
+                SET status = 'sent', approved_at = NOW(), sent_at = NOW(),
+                    updated_at = NOW(), message_id = %s
                 WHERE id = %s
                 """,
-                (prospect_id,),
+                (result.message_id, prospect_id),
             )
         conn.commit()
 
-    return {"ok": True, "sent_to": to_email}
+    return {"ok": True, "sent_to": to_email, "message_id": result.message_id}
 
 
 @router.post("/agency")
