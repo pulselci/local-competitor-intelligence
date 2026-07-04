@@ -62,6 +62,9 @@ CHAIN_BLOCKLIST = [
     "great clips", "supercuts", "sport clips",
     "planet fitness", "anytime fitness", "la fitness",
     "massage envy",
+    "benjamin franklin plumbing", "mr. rooter", "roto-rooter", "roto rooter",
+    "rescue rooter", "one hour heating", "one hour air", "comfort systems",
+    "aire serv", "mr. electric", "mister sparky", "ground works",
 ]
 
 MIN_REVIEWS = 15       # must have enough reviews to be worth targeting
@@ -210,6 +213,7 @@ def find_top_competitor(lat: float, lng: float, category: str, own_place_id: str
         p for p in nearby
         if p.get("place_id") != own_place_id
         and p.get("user_ratings_total", 0) >= MIN_REVIEWS
+        and not _is_chain(p.get("name", ""))
     ]
     if not candidates:
         return None
