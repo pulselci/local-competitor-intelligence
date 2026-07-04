@@ -641,4 +641,30 @@ def _run_send_report_bg(prospect_id: str, prospect: dict, competitor_names: list
 @router.post("/{prospect_id}/send-report")
 def send_report_reply(prospect_id: str, body: SendReportIn, background_tasks: BackgroundTasks) -> dict:
     """
-    Generate and send a full competitive report as a threaded reply to the original cold email
+    Generate and send a full competitive report as a threaded reply to the original cold email.
+    Fires a background job — poll /{prospect_id}/send-report/status for completion.
+    """
+    if not any(n.strip() for n in body.competitor_names):
+        raise HTTPException(status_code=400, detail="At least one competitor name is required")
+
+    prospect = _get_prospect(prospect_id)
+
+    if not prospect.get("contact_email"):
+        raise HTTPException(status_code=400, detail="No contact email for this prospect")
+
+    if _send_report_jobs.get(prospect_id, {}).get("status") == "generating":
+        raise HTTPException(status_code=409, detail="Report generation already in progress")
+
+    competitor_names = [n.strip() for n in body.competitor_names if n.strip()]
+    background_tasks.add_task(_run_send_report_bg, prospect_id, dict(prospect), competitor_names)
+
+    return {"ok": True, "status": "generating"}
+
+
+@router.get("/{prospect_id}/send-report/status")
+def send_report_job_status(prospect_id: str) -> dict:
+    """Poll for send-report job completion."""
+    job = _send_report_jobs.get(prospect_id)
+    if not job:
+        return {"status": "not_started"}
+    return job
