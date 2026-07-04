@@ -183,8 +183,9 @@ def _place_type_for_category(category: str) -> str | None:
     return None
 
 
-def find_top_competitor(lat: float, lng: float, category: str, own_place_id: str) -> dict | None:
-    """Find the highest-reviewed nearby business in the same category."""
+def find_top_competitor(lat: float, lng: float, category: str, own_place_id: str, prospect_reviews: int = 0) -> dict | None:
+    """Find the highest-reviewed nearby business in the same category.
+    Caps competitor reviews at 3x the prospect's count so the gap stays actionable."""
     params: dict = {
         "location": f"{lat},{lng}",
         "radius": 8000,  # 5 miles
@@ -209,10 +210,11 @@ def find_top_competitor(lat: float, lng: float, category: str, own_place_id: str
         print(f"  [WARN] Nearby search failed: {e}")
         return None
 
+    comp_max = min(MAX_REVIEWS, prospect_reviews * 3) if prospect_reviews else MAX_REVIEWS
     candidates = [
         p for p in nearby
         if p.get("place_id") != own_place_id
-        and p.get("user_ratings_total", 0) >= MIN_REVIEWS
+        and MIN_REVIEWS <= p.get("user_ratings_total", 0) <= comp_max
         and not _is_chain(p.get("name", ""))
     ]
     if not candidates:
@@ -686,7 +688,7 @@ def discover(
             top_competitor_name = None
             top_competitor_reviews = None
             if not is_agency and lat and lng:
-                competitor = find_top_competitor(lat, lng, category, place_id)
+                competitor = find_top_competitor(lat, lng, category, place_id, prospect_reviews=reviews)
                 if competitor:
                     top_competitor_name = competitor.get("name")
                     top_competitor_reviews = competitor.get("user_ratings_total")
@@ -774,6 +776,7 @@ def discover(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Discover cold outreach prospects via Google Places")
