@@ -727,7 +727,6 @@ async function approve(id, isAgency = false) {
     setMsg(id, 'Add a contact email first.', true);
     return;
   }
-  if (!confirm(`Send this email to ${email}?`)) return;
 
   await saveDraft(id);
 
