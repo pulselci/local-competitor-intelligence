@@ -480,6 +480,23 @@
     {% endif %}
   {% endfor %}
 
+  {# Fallback: if flat_insights had no Immediate/Next items, count from this_month_focus #}
+  {% if immediate_items|length + next_items|length == 0 %}
+    {% for item in experience.get("this_month_focus") or [] %}
+      {% if item.get("priority") == "Immediate" %}
+        {% set _ = immediate_items.append(item) %}
+      {% elif item.get("priority") == "Next" %}
+        {% set _ = next_items.append(item) %}
+      {% endif %}
+    {% endfor %}
+    {# If still 0 (no priority field), treat all this_month_focus items as Immediate #}
+    {% if immediate_items|length + next_items|length == 0 %}
+      {% for item in experience.get("this_month_focus") or [] %}
+        {% set _ = immediate_items.append(item) %}
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+
   {# Always ensure at least one monitor item using real SOV data #}
   {% if not monitor_items %}
     {% set competitors = sov_rows | rejectattr("is_business") | list %}
@@ -789,6 +806,14 @@
               {% set you_share = you.get("share_pct") or you.get("share") or 0 %}
               {% set review_target = report.sections.report_experience.review_target or {} %}
               {% set your_rank = review_target.get("current_rank") or "—" %}
+              {% if your_rank == "—" and sov_rows %}
+                {% set ns_rank = namespace(rank="—", idx=0) %}
+                {% for row in sov_rows %}
+                  {% set ns_rank.idx = ns_rank.idx + 1 %}
+                  {% if row.get("is_business") %}{% set ns_rank.rank = ns_rank.idx %}{% endif %}
+                {% endfor %}
+                {% set your_rank = ns_rank.rank %}
+              {% endif %}
 
               <div style="display:flex; gap: 16px; margin-top: 6px;">
                 <div style="text-align:center;">
@@ -995,8 +1020,14 @@
               {% set why_text = "Star rating is one of the first things prospects see when comparing options — it shapes the decision before they read a single review." %}
             {% elif "volume" in _at2 or "cadence" in _at2 %}
               {% set why_text = "Consistent review volume signals an active, trusted business. A gap in cadence is the fastest way to let competitors close the distance." %}
+            {% elif "rank" in _at2 or "position" in _at2 or "tier" in _at2 or "milestone" in _at2 %}
+              {% set why_text = "Every rank you move up in local search means more customers see you before competitors — compounding over time." %}
+            {% elif "friction" in _at2 or "complaint" in _at2 or "weakness" in _at2 %}
+              {% set why_text = "Unresolved friction in your reviews actively pushes customers toward competitors at the moment of decision." %}
+            {% elif "lead" in _at2 and "review" not in _at2 %}
+              {% set why_text = "Protecting your market lead requires consistent action — challengers grow fastest when leaders stop paying attention." %}
             {% else %}
-              {% set why_text = "Acting on this signal now builds a compounding advantage over competitors who are not paying attention to the same data." %}
+              {% set why_text = "Customers compare multiple businesses before choosing — improving this signal moves them in your direction." %}
             {% endif %}
             {% set action_text = item.get("recommended_action") or summary_text %}
             {% set how_text = item.get("how_to_implement") or detail %}
