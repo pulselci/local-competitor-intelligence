@@ -615,13 +615,14 @@ def generate_agency_draft(
 
     body = f"""Hi,
 
-Do you currently give your local business clients any insight into how they're performing against local competitors on reviews?
+Do you give local business clients any visibility into how they're performing against competitors on reviews?
 
-I ask because I built something for exactly that. Monthly reports showing review momentum, rating gaps, and competitor positioning in their local market. Takes 60 seconds to set up per client.
+I built a tool that generates monthly competitive reports covering review momentum, rating gaps, and local market positioning for any local business. Agencies use it to add a recurring intelligence layer to their service without building anything themselves.
 
-Happy to pull a free sample report for any of your clients' markets. Just reply with a city and business type and I'll send it over.
+Happy to pull a free sample for a business in {city}. Just reply and I'll send it over same day.
 
 Craig
+pulselci.com
 """
     return subject, body
 
