@@ -425,7 +425,7 @@ function renderOutreachStatCards(coldRows, summary) {
   const el = document.getElementById('outreach-stat-cards');
   el.innerHTML =
     card('Business outreach', 'biz',    bizRows,    bizSummary) +
-    (agencyRows.length || agencySummary ? card('Agency outreach', 'agency', agencyRows, agencySummary) : '');
+    card('Agency outreach',   'agency', agencyRows, agencySummary);
 }
 
 // Rows for ungrouped prospects (full columns: business, email, city/state, ...)
