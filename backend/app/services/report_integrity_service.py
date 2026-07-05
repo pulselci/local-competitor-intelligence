@@ -508,6 +508,74 @@ def _challenger_fallback_recommendations(sections: Optional[Dict[str, Any]] = No
         growth_action = "Set a monthly review target tied to the gap with the market leader."
         growth_how = "Set a monthly goal tied to the gap, request reviews after every job, and track weekly progress."
 
+    # -- Card 2: perception -- use real praise words if available
+    perception_text = (sections or {}).get("customer_perception_insights", {})
+    if isinstance(perception_text, dict):
+        perception_body = perception_text.get("body") or ""
+    else:
+        perception_body = str(perception_text or "")
+
+    owner_words = ""
+    if "highlight:" in perception_body:
+        try:
+            owner_words = perception_body.split("highlight:")[1].split(".")[0].strip().rstrip(",")
+        except Exception:
+            pass
+
+    if owner_words:
+        perception_summary = f"Your reviews already use the words that win patients: {owner_words}."
+        perception_action = f"Make sure '{owner_words}' appear in your Google Business profile, website, and how you coach patients to leave reviews."
+        perception_why = "The words your patients already use are your most credible marketing asset — they came from real experiences, not copywriting."
+        perception_how = f"Add '{owner_words}' to your Google Business profile description. When asking for reviews, suggest patients mention what made them comfortable. Repeat the same language in follow-up emails."
+    else:
+        perception_summary = "No competitor in your market has claimed a clear positioning advantage yet."
+        perception_action = "Pick one thing your patients already love and make it your signature message."
+        perception_why = "The first business to own a clear position in a local market gains a compounding trust advantage."
+        perception_how = "Read your most recent 10 reviews and find the one word that shows up most. Put it in your Google profile headline, your website above the fold, and your review ask message."
+
+    # -- Card 3: rating advantage or credibility
+    owner_rating = float(owner.get("google_rating") or owner.get("rating") or 0) if owner else 0
+    competitors = [r for r in rows if not r.get("is_business")]
+    rated_comps = [c for c in competitors if float(c.get("google_rating") or c.get("rating") or 0) > 0]
+    weakest_rated = min(rated_comps, key=lambda c: float(c.get("google_rating") or c.get("rating") or 0), default=None)
+
+    if owner_rating >= 4.7 and weakest_rated:
+        weak_name = _name(weakest_rated)
+        weak_rating = float(weakest_rated.get("google_rating") or weakest_rated.get("rating") or 0)
+        if owner_rating > weak_rating:
+            credibility_summary = f"Your {owner_rating:.1f}* rating is a visible edge over {weak_name} ({weak_rating:.1f}*) — use it."
+            credibility_action = f"Highlight your rating advantage over {weak_name} on your website and in patient follow-up messages."
+            credibility_why = f"Patients comparison-shop ratings before calling. Your {owner_rating:.1f}* vs {weak_name}'s {weak_rating:.1f}* is a decision-point advantage most practices ignore."
+            credibility_how = f"Add your star rating to your Google profile headline, your website homepage, and your post-appointment follow-up email. A single line is enough."
+        else:
+            credibility_summary = "Your reviews are your strongest trust signal — make them visible before patients decide."
+            credibility_action = "Feature your top reviews prominently and respond to every new review within 48 hours."
+            credibility_why = "Patients compare options quickly. The practice that surfaces proof first wins the call."
+            credibility_how = "Pin your top 2-3 reviews on your Google profile, respond to all new reviews, and highlight your review count on your website homepage."
+    else:
+        credibility_summary = "Your reviews are your strongest trust signal — make them visible before patients decide."
+        credibility_action = "Feature your top reviews prominently and respond to every new review within 48 hours."
+        credibility_why = "Patients compare options quickly. The practice that surfaces proof first wins the call."
+        credibility_how = "Pin your top 2-3 reviews on your Google profile, respond to all new reviews, and highlight your review count on your website homepage."
+
+    # -- Card 4: pressure from below
+    below_owner = [r for r in rows if not r.get("is_business") and int(r.get("reviews_total") or 0) < owner_reviews]
+    closest_below = below_owner[0] if below_owner else None
+
+    if closest_below:
+        below_name = _name(closest_below)
+        below_reviews = int(closest_below.get("reviews_total") or 0)
+        cushion = owner_reviews - below_reviews
+        protect_summary = f"{below_name} is {cushion} reviews behind you — keep growing or they close the gap."
+        protect_action = f"Maintain your review ask so {below_name} cannot close the {cushion}-review gap."
+        protect_why = f"You have a {cushion}-review cushion over {below_name}. Inconsistent review volume is the fastest way to lose a rank."
+        protect_how = f"Track {below_name}'s monthly review count alongside yours. If they gain more than you in any month, increase your ask frequency immediately."
+    else:
+        protect_summary = "Protecting your rank requires consistent review volume — not a one-time push."
+        protect_action = "Build a repeatable review ask into your standard patient close-out process."
+        protect_why = "Review rank is won gradually and lost quickly. A consistent monthly ask compounds over time."
+        protect_how = "Send a review request within 24 hours of every appointment. A single follow-up text outperforms a periodic email blast every time."
+
     return [
         {
             "summary": growth_summary,
@@ -518,27 +586,27 @@ def _challenger_fallback_recommendations(sections: Optional[Dict[str, Any]] = No
             "is_fallback": True,
         },
         {
-            "summary": "No competitor clearly owns a dominant customer perception.",
-            "action": "Define and consistently communicate one clear advantage customers should associate with your business.",
+            "summary": perception_summary,
+            "action": perception_action,
             "priority": "Immediate",
-            "why_it_matters": "When no competitor owns a position, the first to claim one gains a decision-making advantage.",
-            "how_to_implement": "Look at what your happiest customers say in reviews and pick one theme — painless experience, attentive staff, clear communication, or fast turnaround — then reinforce it consistently across your Google profile, website, and review responses.",
+            "why_it_matters": perception_why,
+            "how_to_implement": perception_how,
             "is_fallback": True,
         },
         {
-            "summary": "Stronger competitors often win by appearing more credible at the decision point.",
-            "action": "Improve how your reviews and trust signals are presented.",
+            "summary": credibility_summary,
+            "action": credibility_action,
             "priority": "Next",
-            "why_it_matters": "Customers compare options quickly. Clear proof reduces hesitation and increases conversions.",
-            "how_to_implement": "Feature top reviews, respond to all new reviews, and highlight guarantees or certifications prominently.",
+            "why_it_matters": credibility_why,
+            "how_to_implement": credibility_how,
             "is_fallback": True,
         },
         {
-            "summary": "Competitors below you are close enough to apply pressure on your position.",
-            "action": "Maintain consistent review generation to protect your current ranking.",
+            "summary": protect_summary,
+            "action": protect_action,
             "priority": "Next",
-            "why_it_matters": "Without steady growth, competitors can close the gap from below.",
-            "how_to_implement": "Track monthly review gains and ensure consistent request processes across all customer interactions.",
+            "why_it_matters": protect_why,
+            "how_to_implement": protect_how,
             "is_fallback": True,
         },
     ]
