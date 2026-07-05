@@ -1727,6 +1727,39 @@ def get_business(business_id: UUID):
 def get_businesses():
     return list_businesses()
 
+
+@router.post("/admin/businesses/set-sandbox")
+def set_businesses_sandbox(
+    payload: dict,
+    admin_ok: None = Depends(verify_admin_key),
+):
+    """
+    Mark one or more businesses as sandbox (is_test=true) or real (is_test=false).
+    Body: {"business_ids": ["uuid1", "uuid2", ...], "sandbox": true}
+    """
+    business_ids = payload.get("business_ids") or []
+    sandbox = bool(payload.get("sandbox", True))
+
+    if not business_ids:
+        raise HTTPException(status_code=400, detail="business_ids required")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE businesses
+                SET is_test = %s
+                WHERE id = ANY(%s::uuid[])
+                RETURNING id, name, is_test
+                """,
+                (sandbox, business_ids),
+            )
+            updated = [{"id": str(r["id"]), "name": r["name"], "is_test": r["is_test"]} for r in cur.fetchall()]
+        conn.commit()
+
+    return {"updated": updated, "sandbox": sandbox}
+
+
 def _build_share_of_voice_donut_payload(sections: dict) -> dict | None:
     import base64
     import io
