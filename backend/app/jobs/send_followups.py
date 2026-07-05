@@ -109,7 +109,7 @@ def run_cold_email_followups() -> dict:
                     f"Just circling back on my last note. Still happy to pull that free competitive report for {p['business_name']}.\n\n"
                     f"Reply with your top 2-3 competitors and I'll send it over.\n\n"
                     f"Craig\n"
-                    f"Pulse LCI"
+                    f"pulselci.com"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
@@ -146,7 +146,7 @@ def run_cold_email_followups() -> dict:
                     f"{comp_line}\n\n"
                     f"If you're ever curious how {p['business_name']} stacks up, just reply and I'll send the report over.\n\n"
                     f"Craig\n"
-                    f"Pulse LCI"
+                    f"pulselci.com"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: last note", body,
