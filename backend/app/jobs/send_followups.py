@@ -172,11 +172,14 @@ def run_cold_email_followups() -> dict:
             """)
             for p in cur.fetchall():
                 orig_subject = p.get('draft_subject') or 'partner opportunity'
+                city = p.get('city') or 'your market'
                 body = (
                     f"Hi,\n\n"
-                    f"Wanted to follow up with something specific. I can pull a free competitive intelligence report for any local market your clients are in. Takes me about a minute to run.\n\n"
-                    f"If you have a client in a competitive local market, just reply with their city and business type and I'll send it over. No strings, no call needed.\n\n"
-                    f"Craig"
+                    f"Just following up on my last note.\n\n"
+                    f"I can pull a sample competitive report for a business in {city} in about a minute. Shows review momentum, rating gaps, and how they stack up against local competitors. A few agencies have started including this kind of report as part of their monthly client deliverables.\n\n"
+                    f"Happy to send one over if it would be useful. Just reply and I'll get it to you same day.\n\n"
+                    f"Craig\n"
+                    f"pulselci.com"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
@@ -203,9 +206,10 @@ def run_cold_email_followups() -> dict:
                 orig_subject = p.get('draft_subject') or 'partner opportunity'
                 body = (
                     f"Hi,\n\n"
-                    f"No worries if the timing isn't right. I'll leave it here.\n\n"
-                    f"If competitive reporting for local clients ever becomes relevant, reply anytime and I'll get you a sample same day.\n\n"
-                    f"Craig"
+                    f"Last note from me on this.\n\n"
+                    f"If adding a competitive intelligence layer to your client reporting ever makes sense, I'm happy to pull a sample anytime. No call needed, just reply.\n\n"
+                    f"Craig\n"
+                    f"pulselci.com"
                     + _unsub_footer(str(p['id']), "prospect")
                 )
                 ok = _send(p['contact_email'], f"Re: {orig_subject}", body,
