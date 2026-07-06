@@ -745,7 +745,6 @@ async function approve(id, isAgency = false) {
         loadAgencies();
         loadAgencyStats();
       } else {
-        document.getElementById('status-filter').value = 'sent';
         loadQueue();
         loadStats();
       }
