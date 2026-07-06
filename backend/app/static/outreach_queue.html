@@ -737,8 +737,17 @@ async function approve(id, isAgency = false) {
     try { data = JSON.parse(text); } catch(_) {}
     if (!r.ok) throw new Error(data.detail || text.slice(0, 120) || r.statusText);
     setMsg(id, `✓ Sent to ${data.sent_to}`, false);
-    setTimeout(() => isAgency ? loadAgencies() : loadQueue(), 1200);
-    if (isAgency) loadAgencyStats(); else loadStats();
+    setTimeout(() => {
+      if (isAgency) {
+        document.getElementById('agency-status-filter').value = 'sent';
+        loadAgencies();
+        loadAgencyStats();
+      } else {
+        document.getElementById('status-filter').value = 'sent';
+        loadQueue();
+        loadStats();
+      }
+    }, 1200);
   } catch(e) {
     setMsg(id, `Send failed: ${e.message}`, true);
   }
@@ -749,13 +758,15 @@ function escHtml(str) {
 }
 
 async function clearQueue() {
-  if (!confirm('Clear all queued prospects? Sent records will be kept.')) return;
+  if (!confirm('Clear all unsent prospects? Sent records will be kept.')) return;
   try {
     const r = await fetch(`${API}/outreach/clear`, { method: 'POST' });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.statusText);
     loadQueue();
     loadStats();
+    loadAgencies();
+    loadAgencyStats();
   } catch(e) {
     alert(`Clear failed: ${e.message}`);
   }
