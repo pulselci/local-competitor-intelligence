@@ -578,6 +578,8 @@ function renderAgencyCard(a) {
         <button class="btn-save" onclick="saveDraft('${a.id}')">Save edits</button>
         <button class="btn-skip" onclick="skipAgency('${a.id}')">Skip</button>
         <button class="btn-approve" onclick="approve('${a.id}', true)">✓ Approve &amp; Send</button>
+      ` : a.status === 'sent' ? `
+        <button class="btn-approve" onclick="openSampleModal('${a.id}', ${JSON.stringify(escHtml(a.business_name))}, ${JSON.stringify(escHtml(a.city || ''))})">📊 Send Sample Report</button>
       ` : ''}
     </div>
   `;
@@ -992,6 +994,107 @@ async function submitReport() {
   }
 }
 
+// ─── Agency Sample Report modal ──────────────────────────────────────────────
+
+let _sampleAgencyId = null;
+let _samplePollTimer = null;
+
+function openSampleModal(agencyId, agencyName, agencyCity) {
+  _sampleAgencyId = agencyId;
+  document.getElementById('sample-modal-sub').textContent =
+    `Sending to: ${agencyName} — the report goes to the agency, not the client.`;
+  document.getElementById('sample-biz-name').value = '';
+  document.getElementById('sample-city').value = agencyCity || '';
+  document.getElementById('sample-state').value = '';
+  document.getElementById('sample-comp1').value = '';
+  document.getElementById('sample-comp2').value = '';
+  document.getElementById('sample-comp3').value = '';
+  setSampleStatus('', '');
+  document.getElementById('sample-submit-btn').disabled = false;
+  document.getElementById('sample-submit-btn').textContent = 'Generate & Send to Agency';
+  document.getElementById('sample-cancel-btn').disabled = false;
+  document.getElementById('sample-cancel-btn').textContent = 'Cancel';
+  document.getElementById('sample-modal').classList.add('open');
+  document.getElementById('sample-biz-name').focus();
+}
+
+function closeSampleModal() {
+  if (_samplePollTimer) { clearInterval(_samplePollTimer); _samplePollTimer = null; }
+  document.getElementById('sample-modal').classList.remove('open');
+  _sampleAgencyId = null;
+}
+
+function setSampleStatus(msg, type) {
+  const el = document.getElementById('sample-modal-status');
+  el.textContent = msg;
+  el.className = 'modal-status' + (type ? ' ' + type : '');
+}
+
+async function submitSample() {
+  if (!_sampleAgencyId) return;
+
+  const bizName = document.getElementById('sample-biz-name').value.trim();
+  const city    = document.getElementById('sample-city').value.trim();
+  const state   = document.getElementById('sample-state').value.trim().toUpperCase();
+  const comp1   = document.getElementById('sample-comp1').value.trim();
+  const comp2   = document.getElementById('sample-comp2').value.trim();
+  const comp3   = document.getElementById('sample-comp3').value.trim();
+  const competitors = [comp1, comp2, comp3].filter(Boolean);
+
+  if (!bizName) { setSampleStatus('Enter the client business name.', 'error'); return; }
+  if (!city)    { setSampleStatus('Enter the city.', 'error'); return; }
+  if (!competitors.length) { setSampleStatus('Enter at least one competitor name.', 'error'); return; }
+
+  document.getElementById('sample-submit-btn').disabled = true;
+  document.getElementById('sample-submit-btn').textContent = 'Generating...';
+  document.getElementById('sample-cancel-btn').disabled = true;
+  setSampleStatus('Building report — this takes about 30 to 60 seconds...', '');
+
+  try {
+    const r = await fetch(`${API}/outreach/${_sampleAgencyId}/send-agency-sample`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        business_name: bizName,
+        city,
+        state: state || 'US',
+        competitor_names: competitors,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+
+    // Poll for completion
+    const aid = _sampleAgencyId;
+    _samplePollTimer = setInterval(async () => {
+      try {
+        const sr = await fetch(`${API}/outreach/${aid}/send-agency-sample/status`);
+        const sd = await sr.json();
+        if (sd.status === 'done') {
+          clearInterval(_samplePollTimer); _samplePollTimer = null;
+          setSampleStatus('Sample report sent to agency!', 'success');
+          document.getElementById('sample-submit-btn').textContent = 'Done';
+          document.getElementById('sample-cancel-btn').disabled = false;
+          document.getElementById('sample-cancel-btn').textContent = 'Close';
+          setTimeout(() => { loadAgencies(); loadAgencyStats(); closeSampleModal(); }, 2000);
+        } else if (sd.status === 'error') {
+          clearInterval(_samplePollTimer); _samplePollTimer = null;
+          setSampleStatus(`Error: ${sd.error || 'Unknown error'}`, 'error');
+          document.getElementById('sample-submit-btn').disabled = false;
+          document.getElementById('sample-submit-btn').textContent = 'Retry';
+          document.getElementById('sample-cancel-btn').disabled = false;
+        }
+      } catch(_) {}
+    }, 4000);
+
+  } catch(e) {
+    setSampleStatus(`Failed: ${e.message}`, 'error');
+    document.getElementById('sample-submit-btn').disabled = false;
+    document.getElementById('sample-submit-btn').textContent = 'Generate & Send to Agency';
+    document.getElementById('sample-cancel-btn').disabled = false;
+  }
+}
+
 // Init
 loadQueue();
 loadStats();
@@ -1035,6 +1138,46 @@ loadStats();
     <div class="modal-actions">
       <button class="btn-skip" onclick="closeReportModal()" id="modal-cancel-btn">Cancel</button>
       <button class="btn-report" onclick="submitReport()" id="modal-submit-btn">Generate &amp; Send Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- Agency Sample Report Modal -->
+<div class="modal-overlay" id="sample-modal">
+  <div class="modal-box">
+    <div class="modal-title">Send Agency Sample Report</div>
+    <div class="modal-sub" id="sample-modal-sub">Generate a competitive report for one of their clients and email it to the agency with partnership options.</div>
+
+    <div class="modal-field">
+      <label>Client Business Name *</label>
+      <input id="sample-biz-name" type="text" placeholder="e.g. Bright Smiles Dental">
+    </div>
+    <div class="modal-field">
+      <label>City *</label>
+      <input id="sample-city" type="text" placeholder="e.g. Chicago">
+    </div>
+    <div class="modal-field">
+      <label>State *</label>
+      <input id="sample-state" type="text" placeholder="e.g. IL" maxlength="2" style="width:80px;">
+    </div>
+    <div class="modal-field">
+      <label>Competitor 1 *</label>
+      <input id="sample-comp1" type="text" placeholder="Top local competitor">
+    </div>
+    <div class="modal-field">
+      <label>Competitor 2</label>
+      <input id="sample-comp2" type="text" placeholder="optional">
+    </div>
+    <div class="modal-field">
+      <label>Competitor 3</label>
+      <input id="sample-comp3" type="text" placeholder="optional">
+    </div>
+
+    <div class="modal-status" id="sample-modal-status"></div>
+
+    <div class="modal-actions">
+      <button class="btn-skip" onclick="closeSampleModal()" id="sample-cancel-btn">Cancel</button>
+      <button class="btn-approve" onclick="submitSample()" id="sample-submit-btn">Generate &amp; Send to Agency</button>
     </div>
   </div>
 </div>

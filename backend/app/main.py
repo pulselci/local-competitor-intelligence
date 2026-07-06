@@ -9,7 +9,7 @@ from app.api.generated_reports import router as generated_reports_router
 from app.api.intake import router as intake_router
 from app.api.outreach import router as outreach_router
 from app.api.routes import router as api_router
-from app.core.db import close_pool
+from app.core.db import close_pool, get_conn
 
 app = FastAPI(
     title="Local Competitor Intelligence (Phase 1)",
@@ -58,7 +58,7 @@ def outreach_queue_ui():
 @app.get("/hub", include_in_schema=False)
 @app.get("/admin/hub", include_in_schema=False)
 def command_hub():
-    """Unified navigation hub — access all internal tools from one URL."""
+    """Unified navigation hub."""
     hub_path = Path(__file__).resolve().parent / "static" / "hub.html"
     return FileResponse(hub_path)
 
@@ -67,6 +67,21 @@ def command_hub():
 def serve_logo():
     logo_path = Path(__file__).resolve().parent / "static" / "pulse-lci-logo.png"
     return FileResponse(logo_path, media_type="image/png")
+
+
+@app.on_event("startup")
+def on_startup():
+    """Run idempotent DB migrations on every deploy."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "ALTER TABLE outreach_prospects ADD COLUMN IF NOT EXISTS message_id TEXT"
+                )
+            conn.commit()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Startup migration warning: %s", e)
 
 
 @app.on_event("shutdown")
