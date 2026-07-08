@@ -382,6 +382,7 @@ def run_targeted_followups() -> dict:
                 FROM targeted_prospects
                 WHERE status = 'sent'
                   AND followup1_sent_at IS NULL
+                  AND replied_at IS NULL
                   AND sent_at IS NOT NULL
                   AND sent_at >= NOW() - INTERVAL '7 days'
                   AND sent_at <= NOW() - INTERVAL '4 days'
@@ -419,6 +420,7 @@ def run_targeted_followups() -> dict:
                 FROM targeted_prospects
                 WHERE status = 'sent'
                   AND followup2_sent_at IS NULL
+                  AND replied_at IS NULL
                   AND sent_at IS NOT NULL
                   AND sent_at >= NOW() - INTERVAL '14 days'
                   AND sent_at <= NOW() - INTERVAL '11 days'

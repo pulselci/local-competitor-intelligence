@@ -163,12 +163,48 @@
   <div class="section-title">
     Targeted outreach follow-ups
     <span class="count-badge" id="targeted-count">0</span>
+    <button onclick="toggleTargetedEmails()" id="preview-emails-btn" style="margin-left:auto;font-size:11px;font-weight:600;padding:4px 10px;border:1px solid #c8d8ee;border-radius:6px;background:#f0f7ff;color:#2563eb;cursor:pointer;">Preview follow-up emails</button>
   </div>
+
+  <!-- Stats -->
+  <div class="outreach-stat-cards" id="targeted-stat-cards" style="margin-bottom:14px;"></div>
+
+  <!-- Follow-up email preview (collapsed by default) -->
+  <div id="targeted-email-preview" style="display:none;background:#f8faff;border:1px solid #c8d8ee;border-radius:10px;padding:16px 18px;margin-bottom:16px;">
+    <div style="display:flex;gap:24px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:260px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px;">Day 5 — Check-in</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">Hi,
+
+Just checking in -- did you get a chance to look at the report for [Business]?
+
+Curious what you thought of how you stack up against [Competitors]. Happy to answer any questions or pull an updated version with different competitors if useful.
+
+Craig
+pulselci.com</div>
+      </div>
+      <div style="flex:1;min-width:260px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:8px;">Day 12 — Last note</div>
+        <div style="font-size:13px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">Hi,
+
+Last note from me on this.
+
+If the report was useful and you want your competitive data updated monthly, that's exactly what Pulse LCI does -- $99/month, cancel anytime.
+
+pulselci.com/#pricing
+
+Craig
+pulselci.com</div>
+      </div>
+    </div>
+  </div>
+
   <div class="filter-row">
     <button class="filter-btn active" onclick="setFilter('targeted','all',this)">All</button>
     <button class="filter-btn" onclick="setFilter('targeted','overdue',this)">Overdue</button>
     <button class="filter-btn" onclick="setFilter('targeted','due',this)">Due today</button>
     <button class="filter-btn" onclick="setFilter('targeted','pending',this)">Pending</button>
+    <button class="filter-btn" onclick="setFilter('targeted','replied',this)">Replied</button>
   </div>
   <table id="targeted-table">
     <thead>
@@ -180,9 +216,10 @@
         <th>Days ago</th>
         <th>Day 5</th>
         <th>Day 12</th>
+        <th></th>
       </tr>
     </thead>
-    <tbody id="targeted-body"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+    <tbody id="targeted-body"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
   </table>
 </div>
 
@@ -660,15 +697,45 @@ async function loadAlerts() {
 
 let targetedData = [];
 
+function toggleTargetedEmails() {
+  const panel = document.getElementById('targeted-email-preview');
+  const btn = document.getElementById('preview-emails-btn');
+  const open = panel.style.display === 'none';
+  panel.style.display = open ? 'block' : 'none';
+  btn.textContent = open ? 'Hide follow-up emails' : 'Preview follow-up emails';
+}
+
+function renderTargetedStats(rows) {
+  const total    = rows.length;
+  const d5sent   = rows.filter(r => r.followup1_sent_at).length;
+  const d12sent  = rows.filter(r => r.followup2_sent_at).length;
+  const replied  = rows.filter(r => r.replied_at).length;
+
+  document.getElementById('targeted-stat-cards').innerHTML = `
+    <div class="outreach-card" style="background:#f0f9ff;border-color:#bae6fd;flex:none;min-width:0;">
+      <div class="oc-title" style="color:#0369a1;">Targeted outreach</div>
+      <div class="oc-stats">
+        <div class="oc-stat"><strong>${total}</strong>Emails sent</div>
+        <div class="oc-stat"><strong>${d5sent}</strong>Day 5 sent</div>
+        <div class="oc-stat"><strong>${d12sent}</strong>Day 12 sent</div>
+        <div class="oc-stat"><strong>${replied}</strong>Replied</div>
+      </div>
+    </div>`;
+}
+
 function renderTargeted(rows) {
   const tbody = document.getElementById('targeted-body');
   const now = Date.now();
 
+  renderTargetedStats(rows);
+
   const filtered = rows.filter(r => {
-    if (targetedFilter === 'all') return true;
+    if (targetedFilter === 'replied') return !!r.replied_at;
+    if (r.replied_at) return targetedFilter === 'all';
     const days = (now - new Date(r.sent_at).getTime()) / 86400000;
     const overdue = (!r.followup1_sent_at && days >= 7) || (!r.followup2_sent_at && days >= 14);
     const due     = (!r.followup1_sent_at && days >= 5) || (!r.followup2_sent_at && days >= 12);
+    if (targetedFilter === 'all')     return true;
     if (targetedFilter === 'overdue') return overdue;
     if (targetedFilter === 'due')     return due && !overdue;
     if (targetedFilter === 'pending') return !overdue && !due;
@@ -678,22 +745,28 @@ function renderTargeted(rows) {
   document.getElementById('targeted-count').textContent = rows.length;
 
   if (!filtered.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="empty">No targeted prospects${targetedFilter !== 'all' ? ' matching filter' : ''}.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">No targeted prospects${targetedFilter !== 'all' ? ' matching filter' : ''}.</td></tr>`;
     return;
   }
 
   tbody.innerHTML = filtered.map(r => {
     const days = Math.floor((now - new Date(r.sent_at).getTime()) / 86400000);
     const comps = (r.competitor_names || []).slice(0, 3).join(', ') || '—';
+    const replied = !!r.replied_at;
 
     function fpill(dayNum, sentAt, daysElapsed) {
-      if (sentAt) return `<span class="pill pill-sent">Sent</span>`;
+      if (replied && !sentAt) return `<span class="pill pill-na">—</span>`;
+      if (sentAt) return `<span class="pill pill-done">Sent</span>`;
       if (daysElapsed >= dayNum + 2) return `<span class="pill pill-overdue">Overdue</span>`;
       if (daysElapsed >= dayNum)     return `<span class="pill pill-due">Due</span>`;
-      return `<span class="pill pill-na">In ${dayNum - daysElapsed}d</span>`;
+      return `<span class="pill pill-pending">In ${dayNum - daysElapsed}d</span>`;
     }
 
-    return `<tr>
+    const repliedBtn = replied
+      ? `<button onclick="markReplied('${r.id}', false)" style="font-size:11px;padding:3px 8px;border:1px solid #c8d8ee;border-radius:5px;background:#f8fafc;cursor:pointer;color:#64748b;">Resume</button>`
+      : `<button onclick="markReplied('${r.id}', true)" style="font-size:11px;padding:3px 8px;border:1px solid #6ee7b7;border-radius:5px;background:#ecfdf5;cursor:pointer;color:#065f46;">Mark Replied</button>`;
+
+    return `<tr style="${replied ? 'opacity:0.6;' : ''}">
       <td><strong>${r.business_name || ''}</strong></td>
       <td>${r.contact_email || '—'}</td>
       <td style="font-size:11px;color:#64748b">${comps}</td>
@@ -701,8 +774,23 @@ function renderTargeted(rows) {
       <td>${days}d ago</td>
       <td>${fpill(5,  r.followup1_sent_at, days)}</td>
       <td>${fpill(12, r.followup2_sent_at, days)}</td>
+      <td>${repliedBtn}</td>
     </tr>`;
   }).join('');
+}
+
+async function markReplied(id, replied) {
+  const endpoint = replied ? 'mark-replied' : 'unmark-replied';
+  try {
+    const r = await fetch(`${API}/targeted/${id}/${endpoint}`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    // Refresh targeted data only
+    const res = await fetch(`${API}/targeted/followup-stats`);
+    targetedData = res.ok ? await res.json() : targetedData;
+    renderTargeted(targetedData);
+  } catch(e) {
+    alert(`Failed: ${e.message}`);
+  }
 }
 
 async function loadAll() {

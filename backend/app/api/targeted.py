@@ -171,6 +171,34 @@ def _run_generate_bg(prospect_id: str) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
+@router.post("/{prospect_id}/mark-replied")
+def mark_replied(prospect_id: str) -> dict:
+    """Stop follow-up sequence for a prospect that has replied."""
+    _get_targeted(prospect_id)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE targeted_prospects SET replied_at = NOW(), updated_at = NOW() WHERE id = %s",
+                (prospect_id,),
+            )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.post("/{prospect_id}/unmark-replied")
+def unmark_replied(prospect_id: str) -> dict:
+    """Re-enable follow-ups for a prospect."""
+    _get_targeted(prospect_id)
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE targeted_prospects SET replied_at = NULL, updated_at = NOW() WHERE id = %s",
+                (prospect_id,),
+            )
+        conn.commit()
+    return {"ok": True}
+
+
 @router.get("/followup-stats")
 def followup_stats() -> list:
     """Return sent targeted prospects with follow-up status for the dashboard."""
@@ -178,7 +206,7 @@ def followup_stats() -> list:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, business_name, contact_email, city, state,
-                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at
+                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at, replied_at
                 FROM targeted_prospects
                 WHERE status = 'sent'
                 ORDER BY sent_at DESC
