@@ -708,16 +708,22 @@ function renderTargeted(rows) {
 
 async function loadAll() {
   try {
-    const [reportRes, coldRes, summaryRes, targetedRes] = await Promise.all([
+    const [reportRes, coldRes, summaryRes] = await Promise.all([
       fetch(`${API}/followups/report-prospects`),
       fetch(`${API}/followups/cold-prospects`),
       fetch(`${API}/outreach/summary`),
-      fetch(`${API}/targeted/followup-stats`),
     ]);
     reportData = await reportRes.json();
     coldData   = await coldRes.json();
     const summary = summaryRes.ok ? await summaryRes.json() : {};
-    targetedData  = targetedRes.ok ? await targetedRes.json() : [];
+
+    // Targeted fetch is isolated so it can't break the main load
+    try {
+      const targetedRes = await fetch(`${API}/targeted/followup-stats`);
+      targetedData = targetedRes.ok ? await targetedRes.json() : [];
+    } catch(_) {
+      targetedData = [];
+    }
 
     liveReportData    = reportData.filter(r => !r.is_test);
     sandboxReportData = reportData.filter(r => r.is_test);
