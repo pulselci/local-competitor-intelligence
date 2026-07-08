@@ -1124,7 +1124,7 @@
         {% set perception_body = (sections.get("customer_perception_insights") or {}).get("body") or "" %}
         {% if perception_body %}
           {% set perception_sections = perception_body.split('\n\n') %}
-          {% set _label_prefixes = ['What Patients Are Saying', 'What Customers Are Saying', 'Your Next Rank Target', 'Your Closest Competitor', "Your Action This Month"] %}
+          {% set _label_prefixes = ['What Patients Are Saying', 'What Customers Are Saying', 'Your Next Rank Target', 'Your Closest Challenger', 'Your Closest Competitor', "Your Action This Month"] %}
           {# Weak spot label is dynamic e.g. "Blue Ash Dental Group's Weak Spot" — detect by suffix #}
           {% for raw_block in perception_sections %}
             {% set bk = raw_block.strip() %}

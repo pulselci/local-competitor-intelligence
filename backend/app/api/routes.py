@@ -2732,6 +2732,11 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
     print("[EXEC_PLAN] baseline report — using static position-based recs")
 
     # ── Static path: baseline report (no prior period data) ───────────────
+    # Sentinel values for leader-specific data shared between Item 1 and Item 4
+    _leader_margin_name = ""
+    _leader_margin_gap = 0
+    _leader_margin_pace = 18
+
     sov = sections.get("share_of_voice") or {}
     sov_rows = sov.get("rows") or []
 
@@ -2765,23 +2770,37 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
                 top_mover_name = r.get("competitor_name")
 
         if owner_reviews >= leader_reviews:
-            # Owner is leading
-            next_comp = competitors[1] if len(competitors) > 1 else None
-            if next_comp:
-                gap_below = owner_reviews - int(next_comp.get("reviews_total") or 0)
-                challenger = next_comp.get("competitor_name") or "your closest challenger"
-                action = "Keep your review lead — it's your most visible competitive advantage."
-                detail = (
-                    f"You lead {leader_name} with {owner_reviews:,} reviews. "
-                    f"{challenger} is {gap_below:,} reviews behind. "
-                    f"Ask every customer for a review this month to maintain your margin."
+            # Owner is the market leader — closest threat is competitors[0]
+            _challenger = competitors[0]  # closest competitor by review count
+            _challenger_name = _challenger.get("competitor_name") or "your closest challenger"
+            _challenger_reviews = int(_challenger.get("reviews_total") or 0)
+            _gap_to_challenger = owner_reviews - _challenger_reviews
+            # Store for Item 4 to use
+            _leader_margin_name = _challenger_name
+            _leader_margin_gap = _gap_to_challenger
+            _leader_margin_pace = realistic_monthly
+
+            if _gap_to_challenger <= 75:
+                _urgency = (
+                    f"That {_gap_to_challenger}-review margin can close in weeks if your ask cadence drops. "
+                    f"This is your most urgent priority."
+                )
+            elif _gap_to_challenger <= 200:
+                _urgency = (
+                    f"That gap is smaller than it looks — at typical review pace, {_challenger_name} "
+                    f"could cut it in half inside 3 months if you slow down."
                 )
             else:
-                action = "Keep your review lead — it's your most visible competitive advantage."
-                detail = (
-                    f"You lead the market with {owner_reviews:,} reviews. "
-                    f"A consistent review ask after every appointment keeps the gap growing."
+                _urgency = (
+                    f"That margin is comfortable, but every review you skip is ground you have to make up later."
                 )
+
+            action = "Keep your review lead — it\'s your most visible competitive advantage."
+            detail = (
+                f"Your closest challenger is {_challenger_name} with {_challenger_reviews:,} reviews — "
+                f"just {_gap_to_challenger} behind you. {_urgency} "
+                f"A consistent post-{service_word} ask is the only thing keeping that gap from shrinking."
+            )
         else:
             gap = leader_reviews - owner_reviews
             if top_mover_name and top_mover_gain > 0:
@@ -3032,17 +3051,65 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
                 last_period = full.rfind(".")
                 detail = full[:last_period + 1] if last_period > 100 else full
             else:
-                action = "Improve how your reviews and credibility are presented."
-                detail = (
-                    "Feature your top 2–3 reviews prominently on your homepage, respond to every review within 48 hours, "
-                    "and highlight any credentials, guarantees, or awards that competitors can't claim."
+                # Check for themes where owner is above market average even at low counts
+                _friction_themes_all = friction_data.get("themes") or []
+                _above_avg = [
+                    t for t in _friction_themes_all
+                    if float(t.get("owner_count") or 0) > 0
+                    and float(t.get("owner_count") or 0) > float(t.get("market_average") or 0)
+                ]
+                _above_avg.sort(
+                    key=lambda t: float(t.get("owner_count") or 0) / max(0.1, float(t.get("market_average") or 0.1)),
+                    reverse=True
                 )
+                if _above_avg:
+                    _top_above = _above_avg[:2]
+                    _theme_parts = []
+                    for _t in _top_above:
+                        _tlabel = (_t.get("theme_label") or "").lower()
+                        _tcount = int(_t.get("owner_count") or 0)
+                        _tavg = float(_t.get("market_average") or 0.1)
+                        _tratio = _tcount / _tavg
+                        _theme_parts.append(
+                            f"{_tlabel} ({_tcount} complaint{'s' if _tcount != 1 else ''}, "
+                            f"{_tratio:.1f}x the market average)"
+                        )
+                    _theme_str = " and ".join(_theme_parts)
+                    action = "Your complaint pattern is a hidden liability — address it before it compounds."
+                    detail = (
+                        f"You're above market average on {_theme_str}. "
+                        f"Even a handful of negative reviews can drag a rating down faster than hundreds of positive ones. "
+                        f"Pull your most recent 1-2 star reviews, tag each by theme, and identify one operational "
+                        f"fix per category this month -- before the pattern becomes visible in your rating."
+                    )
+                else:
+                    action = "Improve how your reviews and credibility are presented."
+                    detail = (
+                        "Feature your top 2–3 reviews prominently on your homepage, respond to every review within 48 hours, "
+                        "and highlight any credentials, guarantees, or awards that competitors can't claim."
+                    )
 
     plan.append({"type": "execution_weakness", "action": action, "detail": detail})
 
     # ── Item 4: Review ask process ────────────────────────────────────────
     owner_reviews_val = int(owner.get("reviews_total") or 0) if owner else 0
-    if owner_reviews_val < 50:
+    # Check if owner is the market leader (set by Item 1 leader branch)
+    _is_market_leader = owner_reviews_val >= (int(leader.get("reviews_total") or 0) if leader else 0)
+
+    if _is_market_leader and _leader_margin_gap > 0:
+        # Give leaders the margin math — specific and urgent
+        _margin_weeks = max(1, round(_leader_margin_gap / 4.5))  # ~4.5 reviews/week at 18/month
+        _monthly_floor = max(realistic_monthly, 15)
+        ask_action = "Set a monthly review floor — your lead depends on it."
+        ask_detail = (
+            f"Your {_leader_margin_gap}-review margin over {_leader_margin_name} represents roughly "
+            f"{_margin_weeks} weeks of separation at typical market pace. "
+            f"Set a hard monthly floor of {_monthly_floor}+ new reviews. "
+            f"Check your count on the 1st of every month — if you're under target, "
+            f"push the ask harder that week. Consistency here is what separates leaders who hold their position "
+            f"from ones who slowly get caught."
+        )
+    elif owner_reviews_val < 50:
         ask_action = "Set up your review request workflow before your next report."
         ask_detail = (
             f"With fewer than 50 reviews, a simple ask after every completed {service_word} is your highest-leverage move. "

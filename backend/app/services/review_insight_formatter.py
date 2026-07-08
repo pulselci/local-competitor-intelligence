@@ -274,12 +274,14 @@ def format_insights_for_report(
     # Fall back to the highest-reviewed competitor when owner count is unknown.
     if owner_review_count > 0:
         above_owner = [r for r in competitor_rows if (r.get("review_count") or 0) > owner_review_count]
+        _owner_is_leader = len(above_owner) == 0
         if above_owner:
             ranked_rows = sorted(above_owner, key=lambda r: r.get("review_count") or 0)
         else:
             # Owner is already the leader — show the strongest competitor instead
             ranked_rows = sorted(competitor_rows, key=lambda r: r.get("review_count") or 0, reverse=True)
     else:
+        _owner_is_leader = False
         ranked_rows = sorted(competitor_rows, key=lambda r: r.get("review_count") or 0, reverse=True)
 
     top_competitor = ranked_rows[0] if ranked_rows else None
@@ -291,12 +293,21 @@ def format_insights_for_report(
 
         comp_lines: list[str] = []
         if actual_word_str:
-            comp_lines.append(
-                _ensure_period(
-                    f"Their customers use words like \"{actual_word_str}\" — that's the reputation they've built, "
-                    f"and it's what new customers see when they're comparing options"
+            if _owner_is_leader:
+                comp_lines.append(
+                    _ensure_period(
+                        f"Their customers use words like \"{actual_word_str}\" — "
+                        f"the same reputation signals your market is competing on. "
+                        f"Staying ahead here keeps you differentiated when patients compare options"
+                    )
                 )
-            )
+            else:
+                comp_lines.append(
+                    _ensure_period(
+                        f"Their customers use words like \"{actual_word_str}\" — that's the reputation they've built, "
+                        f"and it's what new customers see when they're comparing options"
+                    )
+                )
         elif top_competitor.get("praise"):
             comp_lines.append(
                 _ensure_period(
@@ -305,8 +316,9 @@ def format_insights_for_report(
             )
 
         if comp_lines:
+            _section_label = "Your Closest Challenger" if _owner_is_leader else f"Your Next Rank Target"
             sections.append(
-                f"Your Next Rank Target: {top_name}\n"
+                f"{_section_label}: {top_name}\n"
                 + "\n".join([s.strip() for s in comp_lines])
             )
 
