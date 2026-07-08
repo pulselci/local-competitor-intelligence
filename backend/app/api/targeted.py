@@ -108,12 +108,12 @@ def _run_generate_bg(prospect_id: str) -> None:
         if not report_id:
             raise RuntimeError("Report generation returned no ID")
 
-        # 3. Mark as full (not blurred)
+        # 3. Mark as full (not blurred) and flag for subscription CTA
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE generated_reports "
-                    "SET sections = sections || '{\"is_free_preview\": false}'::jsonb "
+                    "SET sections = sections || '{\"is_free_preview\": false, \"show_subscription_cta\": true}'::jsonb "
                     "WHERE id = %s",
                     (report_id,),
                 )
