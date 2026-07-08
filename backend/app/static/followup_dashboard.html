@@ -158,6 +158,36 @@
 
 <hr class="divider" />
 
+<!-- ── TARGETED OUTREACH FOLLOW-UPS ── -->
+<div class="section">
+  <div class="section-title">
+    Targeted outreach follow-ups
+    <span class="count-badge" id="targeted-count">0</span>
+  </div>
+  <div class="filter-row">
+    <button class="filter-btn active" onclick="setFilter('targeted','all',this)">All</button>
+    <button class="filter-btn" onclick="setFilter('targeted','overdue',this)">Overdue</button>
+    <button class="filter-btn" onclick="setFilter('targeted','due',this)">Due today</button>
+    <button class="filter-btn" onclick="setFilter('targeted','pending',this)">Pending</button>
+  </div>
+  <table id="targeted-table">
+    <thead>
+      <tr>
+        <th>Business</th>
+        <th>Contact email</th>
+        <th>Competitors</th>
+        <th>Sent</th>
+        <th>Days ago</th>
+        <th>Day 5</th>
+        <th>Day 12</th>
+      </tr>
+    </thead>
+    <tbody id="targeted-body"><tr><td colspan="7" class="loading">Loading...</td></tr></tbody>
+  </table>
+</div>
+
+<hr class="divider" />
+
 <!-- ── COLD EMAIL FOLLOW-UPS ── -->
 <div class="section">
   <div class="section-title">
@@ -258,7 +288,7 @@ let reportData = [], coldData = [], alertData = [];
 let liveReportData = [], sandboxReportData = [];
 let liveColdData = [], sandboxColdData = [];
 let liveAgencyData = [], sandboxAgencyData = [];
-let reportFilter = 'all', coldFilter = 'all', agencyFilter = 'all';
+let reportFilter = 'all', coldFilter = 'all', agencyFilter = 'all', targetedFilter = 'all';
 
 function daysBetween(dateStr) {
   if (!dateStr) return null;
@@ -553,7 +583,12 @@ function updateStats() {
 }
 
 function setFilter(type, val, btn) {
-  if (type === 'report') {
+  if (type === 'targeted') {
+    targetedFilter = val;
+    btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderTargeted(targetedData);
+  } else if (type === 'report') {
     reportFilter = val;
     document.querySelectorAll('#report-table ~ .filter-row .filter-btn, .section .filter-btn').forEach(b => {
       b.closest('.section') && b.closest('.section').querySelector('#report-table') && b.classList.remove('active');
@@ -621,16 +656,68 @@ async function loadAlerts() {
   }
 }
 
+// ── Targeted outreach follow-ups ─────────────────────────────────────────────
+
+let targetedData = [];
+let targetedFilter = 'all';
+
+function renderTargeted(rows) {
+  const tbody = document.getElementById('targeted-body');
+  const now = Date.now();
+
+  const filtered = rows.filter(r => {
+    if (targetedFilter === 'all') return true;
+    const days = (now - new Date(r.sent_at).getTime()) / 86400000;
+    const overdue = (!r.followup1_sent_at && days >= 7) || (!r.followup2_sent_at && days >= 14);
+    const due     = (!r.followup1_sent_at && days >= 5) || (!r.followup2_sent_at && days >= 12);
+    if (targetedFilter === 'overdue') return overdue;
+    if (targetedFilter === 'due')     return due && !overdue;
+    if (targetedFilter === 'pending') return !overdue && !due;
+    return true;
+  });
+
+  document.getElementById('targeted-count').textContent = rows.length;
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="empty">No targeted prospects${targetedFilter !== 'all' ? ' matching filter' : ''}.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    const days = Math.floor((now - new Date(r.sent_at).getTime()) / 86400000);
+    const comps = (r.competitor_names || []).slice(0, 3).join(', ') || '—';
+
+    function fpill(dayNum, sentAt, daysElapsed) {
+      if (sentAt) return `<span class="pill pill-sent">Sent</span>`;
+      if (daysElapsed >= dayNum + 2) return `<span class="pill pill-overdue">Overdue</span>`;
+      if (daysElapsed >= dayNum)     return `<span class="pill pill-due">Due</span>`;
+      return `<span class="pill pill-na">In ${dayNum - daysElapsed}d</span>`;
+    }
+
+    return `<tr>
+      <td><strong>${r.business_name || ''}</strong></td>
+      <td>${r.contact_email || '—'}</td>
+      <td style="font-size:11px;color:#64748b">${comps}</td>
+      <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
+      <td>${days}d ago</td>
+      <td>${fpill(5,  r.followup1_sent_at, days)}</td>
+      <td>${fpill(12, r.followup2_sent_at, days)}</td>
+    </tr>`;
+  }).join('');
+}
+
 async function loadAll() {
   try {
-    const [reportRes, coldRes, summaryRes] = await Promise.all([
+    const [reportRes, coldRes, summaryRes, targetedRes] = await Promise.all([
       fetch(`${API}/followups/report-prospects`),
       fetch(`${API}/followups/cold-prospects`),
-      fetch(`${API}/outreach/summary`)
+      fetch(`${API}/outreach/summary`),
+      fetch(`${API}/targeted/followup-stats`),
     ]);
     reportData = await reportRes.json();
     coldData   = await coldRes.json();
     const summary = summaryRes.ok ? await summaryRes.json() : {};
+    targetedData  = targetedRes.ok ? await targetedRes.json() : [];
 
     liveReportData    = reportData.filter(r => !r.is_test);
     sandboxReportData = reportData.filter(r => r.is_test);
@@ -642,6 +729,7 @@ async function loadAll() {
 
     renderStats(reportData, coldData);
     renderReports(liveReportData);
+    renderTargeted(targetedData);
     renderCold(liveColdData);
     renderAgency(liveAgencyData);
     renderSandbox();

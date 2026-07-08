@@ -20,7 +20,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.core.db import get_conn
-from app.services.email_service import send_plain_email, log_report_delivery
+from app.services.email_service import send_plain_email
 from app.services.place_resolver import suggest_competitors
 
 router = APIRouter(prefix="/targeted", tags=["targeted"])
@@ -170,6 +170,31 @@ def _run_generate_bg(prospect_id: str) -> None:
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
+
+@router.get("/followup-stats")
+def followup_stats() -> list:
+    """Return sent targeted prospects with follow-up status for the dashboard."""
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT id, business_name, contact_email, city, state,
+                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at
+                FROM targeted_prospects
+                WHERE status = 'sent'
+                ORDER BY sent_at DESC
+                LIMIT 200
+            """)
+            rows = cur.fetchall()
+
+    result = []
+    for row in rows:
+        d = dict(row)
+        d["id"] = str(d["id"])
+        if d.get("competitor_names"):
+            d["competitor_names"] = list(d["competitor_names"])
+        result.append(d)
+    return result
+
 
 @router.post("/find-email")
 def find_email(body: CreateProspectIn) -> dict:
@@ -354,12 +379,9 @@ def approve_and_send(prospect_id: str) -> dict:
     if not send_result.ok:
         raise HTTPException(status_code=500, detail=f"Email send failed: {send_result.error}")
 
-    # Log delivery for Day-5/12/21 follow-up sequence
-    log_report_delivery(
-        report_id=str(report_id),
-        recipient_email=contact_email,
-        status="sent",
-    )
+    # NOTE: intentionally NOT calling log_report_delivery here —
+    # targeted prospects have their own follow-up sequence tracked on targeted_prospects,
+    # separate from the free-report Day-5/12/21 sequence.
 
     with get_conn() as conn:
         with conn.cursor() as cur:

@@ -89,6 +89,12 @@ def on_startup():
                     "ALTER TABLE outreach_prospects ADD COLUMN IF NOT EXISTS message_id TEXT"
                 )
                 cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS followup1_sent_at TIMESTAMPTZ"
+                )
+                cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS followup2_sent_at TIMESTAMPTZ"
+                )
+                cur.execute(
                     """CREATE TABLE IF NOT EXISTS targeted_prospects (
                         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         business_name   TEXT NOT NULL,

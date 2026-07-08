@@ -364,10 +364,95 @@ def _report_followup_day21(name: str, business: str, business_id: str) -> tuple[
     return subject, body
 
 
+# ── targeted outreach follow-ups ─────────────────────────────────────────────
+
+def run_targeted_followups() -> dict:
+    """
+    Day-5 and Day-12 follow-ups for targeted_prospects with status='sent'.
+    Different copy from cold email -- they already have the report.
+    """
+    sent1 = sent2 = 0
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+
+            # Day-5
+            cur.execute("""
+                SELECT id, business_name, contact_email, sent_at, competitor_names
+                FROM targeted_prospects
+                WHERE status = 'sent'
+                  AND followup1_sent_at IS NULL
+                  AND sent_at IS NOT NULL
+                  AND sent_at >= NOW() - INTERVAL '7 days'
+                  AND sent_at <= NOW() - INTERVAL '4 days'
+                  AND contact_email IS NOT NULL
+            """)
+            for p in cur.fetchall():
+                comps = list(p.get("competitor_names") or [])
+                if len(comps) == 1:
+                    comp_str = comps[0]
+                elif len(comps) == 2:
+                    comp_str = f"{comps[0]} and {comps[1]}"
+                elif len(comps) >= 3:
+                    comp_str = f"{comps[0]}, {comps[1]}, and {comps[2]}"
+                else:
+                    comp_str = "your competitors"
+                body = (
+                    f"Hi,\n\n"
+                    f"Just checking in -- did you get a chance to look at the report for {p['business_name']}?\n\n"
+                    f"Curious what you thought of how you stack up against {comp_str}. "
+                    f"Happy to answer any questions or pull an updated version with different competitors if useful.\n\n"
+                    f"Craig\n"
+                    f"pulselci.com"
+                    + _unsub_footer(str(p['id']), "targeted")
+                )
+                ok = _send(p['contact_email'], f"Re: competitive snapshot for {p['business_name']}", body)
+                if ok:
+                    cur.execute(
+                        "UPDATE targeted_prospects SET followup1_sent_at = NOW() WHERE id = %s", (p['id'],)
+                    )
+                    sent1 += 1
+
+            # Day-12
+            cur.execute("""
+                SELECT id, business_name, contact_email, sent_at
+                FROM targeted_prospects
+                WHERE status = 'sent'
+                  AND followup2_sent_at IS NULL
+                  AND sent_at IS NOT NULL
+                  AND sent_at >= NOW() - INTERVAL '14 days'
+                  AND sent_at <= NOW() - INTERVAL '11 days'
+                  AND contact_email IS NOT NULL
+            """)
+            for p in cur.fetchall():
+                body = (
+                    f"Hi,\n\n"
+                    f"Last note from me on this.\n\n"
+                    f"If the report was useful and you want your competitive data updated monthly, "
+                    f"that's exactly what Pulse LCI does -- $99/month, cancel anytime.\n\n"
+                    f"{PRICING_URL}\n\n"
+                    f"Craig\n"
+                    f"pulselci.com"
+                    + _unsub_footer(str(p['id']), "targeted")
+                )
+                ok = _send(p['contact_email'], f"Re: competitive snapshot for {p['business_name']}", body)
+                if ok:
+                    cur.execute(
+                        "UPDATE targeted_prospects SET followup2_sent_at = NOW() WHERE id = %s", (p['id'],)
+                    )
+                    sent2 += 1
+
+        conn.commit()
+
+    logger.info("Targeted follow-ups: Day-5=%d Day-12=%d", sent1, sent2)
+    return {"targeted_day5": sent1, "targeted_day12": sent2}
+
+
 # ── main entry ────────────────────────────────────────────────────────────────
 
 def run_all_followups() -> dict:
     cold = run_cold_email_followups()
     report = run_report_followups()
-    return {**cold, **report}
+    targeted = run_targeted_followups()
+    return {**cold, **report, **targeted}
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
