@@ -1039,7 +1039,7 @@
                 <div class="insight-top">
                   <div class="insight-title-col"><p class="insight-summary">{{ headline_text }}</p></div>
                   <div class="insight-badge-col">
-                    <span class="badge badge-immediate">Immediate</span>
+                    <span class="badge {% if priority == 'Next' %}badge-next{% elif priority == 'Monitor' %}badge-monitor{% else %}badge-immediate{% endif %}">{% if priority == 'Next' %}Next{% elif priority == 'Monitor' %}Monitor{% else %}Immediate{% endif %}</span>
                   </div>
                 </div>
                 <div class="detail-grid">
@@ -1213,7 +1213,7 @@
                 {% endfor %}
               </tbody>
             </table>
-            <div style="margin-top: 8px; font-size: 11px; color: #98a2b3;">Based on negative-review phrase matching across {{ friction_themes | length }} complaint themes.</div>
+            <div style="margin-top: 8px; font-size: 11px; color: #98a2b3;">Based on negative-review phrase matching. Showing themes with at least one mention in this market.</div>
           {% endif %}
         </div>
       {% endif %}

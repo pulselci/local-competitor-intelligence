@@ -2892,13 +2892,22 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
             f"These are the phrases showing up in local reviews right now. "
             f"Add them to your Google Business profile description and coach customers to use them when they leave a review."
         )
-        if weakest_rated and owner_rating_val > float(weakest_rated.get("google_rating") or 0):
-            weak_name = weakest_rated.get("competitor_name") or "a competitor"
-            weak_rating = weakest_rated.get("google_rating")
-            detail += (
-                f" Your {owner_rating_val:.1f}★ rating already beats {weak_name}'s {weak_rating}★ — "
-                f"make sure that comparison is visible to anyone shopping around."
-            )
+        if weakest_rated and owner_rating_val > 0:
+            _weak_rating_val = float(weakest_rated.get("google_rating") or 0)
+            _weak_name = weakest_rated.get("competitor_name") or "a competitor"
+            _weak_rating = weakest_rated.get("google_rating")
+            _rating_gap = _weak_rating_val - owner_rating_val
+            if owner_rating_val > _weak_rating_val:
+                detail += (
+                    f" Your {owner_rating_val:.1f}★ rating already beats {_weak_name}'s {_weak_rating}★ -- "
+                    f"make sure that comparison is visible to anyone shopping around."
+                )
+            elif _rating_gap >= 0.2:
+                detail += (
+                    f" One more lever: your {owner_rating_val:.1f}★ rating trails the market"
+                    f" ({_weak_rating_val:.1f}★ average). A consistent post-visit review ask -- "
+                    f"automated or manual -- will move this number up over the next few months."
+                )
     elif owner_rating_val > 0 and weakest_rated:
         weak_rating_val = float(weakest_rated.get("google_rating") or 0)
         weak_name = weakest_rated.get("competitor_name") or "a competitor"
@@ -3057,7 +3066,10 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
 
     plan.append({"type": "execution_review_ask", "action": ask_action, "detail": ask_detail})
 
-    return plan
+    # Assign priorities: first item is Immediate (highest urgency), rest are Next
+    for _pi, _pitem in enumerate(plan[:4]):
+        _pitem["priority"] = "Immediate" if _pi == 0 else "Next"
+    return plan[:4]
 
 
 # ---------------------------------------------------------------------------

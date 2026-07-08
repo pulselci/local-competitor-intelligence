@@ -335,7 +335,7 @@ def format_insights_for_report(
 
     # ── Section 4: What to do ─────────────────────────────────────────────
     # Prefer the owner's own praise words; fall back to market-wide phrases
-    action_words = _human_join(top_owner_raw[:2]) or _human_join(top_owner_themes[:2]) or _human_join(top_raw_phrases[:2]) or praise_phrase
+    action_words = _human_join(top_owner_raw[:4]) or _human_join(top_owner_themes[:4]) or _human_join(top_raw_phrases[:4]) or praise_phrase
     if action_words:
         sections.append(
             "Your Action This Month\n"
