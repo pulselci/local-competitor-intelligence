@@ -867,11 +867,11 @@
     </div>
 
     {# ── Strategic Recommendations ── #}
-    {# Free preview: show first group/card fully, blur remaining groups #}
+    {# Prefer data-driven this_month_focus items over generic flat_insights grouped_sections #}
     <div class="section">
       <div class="section-title">Strategic Recommendations</div>
 
-      {% if grouped_sections %}
+      {% if grouped_sections and not (experience.get("this_month_focus") or []) %}
         {% for group in grouped_sections %}
           {% set loop_idx = loop.index0 %}
 
@@ -1438,10 +1438,159 @@
     {% endif %}
 
 
+
     {% if sections.get("is_free_preview") == true or sections.get("show_subscription_cta") == true %}
-    <div style="margin: 24px 0; padding: 18px 20px; background: #f0f6ff; border: 1.5px solid #bcd2f0; border-radius: 8px; text-align: center;">
-      <div style="font-size: 13px; font-weight: 700; color: #1a3a5c; margin-bottom: 6px;">Want the full picture every month?</div>
-      <a href="https://pulselci.com/#pricing" style="display:inline-block;background:#1a3a5c;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:9px 22px;border-radius:5px;text-decoration:none;">See Subscription Options</a>
+
+    {# ── Market Position Score + Subscriber Teaser ── #}
+    {% set _mps = namespace(score=50) %}
+    {% set _mps_owner = namespace(rank=0, reviews=0, rating=0.0) %}
+    {% set _mps_leader = namespace(name="", reviews=0) %}
+    {% set _mps_ch = namespace(name="", reviews=0) %}
+
+    {# Gather owner + competitor data from sov_rows #}
+    {% for row in sov_rows %}
+      {% if row.get("is_business") %}
+        {% set _mps_owner.rank = (row.get("rank") or 0)|int %}
+        {% set _mps_owner.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+        {% set _mps_owner.rating = (row.get("google_rating") or 0)|float %}
+      {% endif %}
+    {% endfor %}
+    {% for row in sov_rows %}
+      {% if not row.get("is_business") and (row.get("rank") or 0)|int == 1 and _mps_owner.rank != 1 %}
+        {% set _mps_leader.name = row.get("competitor_name") or row.get("name") or "" %}
+        {% set _mps_leader.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+      {% endif %}
+      {% if not row.get("is_business") and (row.get("rank") or 0)|int == 2 and _mps_owner.rank == 1 %}
+        {% set _mps_ch.name = row.get("competitor_name") or row.get("name") or "" %}
+        {% set _mps_ch.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+      {% endif %}
+    {% endfor %}
+
+    {# Rank contribution #}
+    {% if _mps_owner.rank == 1 %}
+      {% set _mps.score = _mps.score + 25 %}
+    {% elif _mps_owner.rank == 2 %}
+      {% set _mps.score = _mps.score + 8 %}
+    {% elif _mps_owner.rank == 3 %}
+      {% set _mps.score = _mps.score - 5 %}
+    {% else %}
+      {% set _mps.score = _mps.score - 15 %}
+    {% endif %}
+
+    {# Rating contribution #}
+    {% if _mps_owner.rating >= 4.5 %}
+      {% set _mps.score = _mps.score + 12 %}
+    {% elif _mps_owner.rating >= 4.0 %}
+      {% set _mps.score = _mps.score + 5 %}
+    {% elif _mps_owner.rating > 0 %}
+      {% set _mps.score = _mps.score - 8 %}
+    {% endif %}
+
+    {# Friction penalty — count owner themes above market average #}
+    {% set _mps_friction = namespace(penalty=0) %}
+    {% set _mps_friction_data = sections.get("customer_friction_signals") or {} %}
+    {% if _mps_friction_data %}
+      {% set _mps_ft = _mps_friction_data.get("themes") or [] %}
+      {% for t in _mps_ft %}
+        {% if t.get("owner_count", 0)|int > (t.get("market_average") or 0)|float %}
+          {% set _mps_friction.penalty = _mps_friction.penalty + 8 %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    {% set _mps.score = _mps.score - [_mps_friction.penalty, 20]|min %}
+
+    {# Clamp to 0–100 #}
+    {% if _mps.score < 0 %}{% set _mps.score = 0 %}{% endif %}
+    {% if _mps.score > 100 %}{% set _mps.score = 100 %}{% endif %}
+
+    {# Label + colors #}
+    {% if _mps.score >= 80 %}
+      {% set _mps_label = "Market Leader" %}
+      {% set _mps_color = "#027a48" %}
+      {% set _mps_bg = "#ecfdf3" %}
+      {% set _mps_border = "#a6f4c5" %}
+    {% elif _mps.score >= 60 %}
+      {% set _mps_label = "Strong Position" %}
+      {% set _mps_color = "#1d4ed8" %}
+      {% set _mps_bg = "#eff6ff" %}
+      {% set _mps_border = "#bfdbfe" %}
+    {% elif _mps.score >= 40 %}
+      {% set _mps_label = "Emerging" %}
+      {% set _mps_color = "#b54708" %}
+      {% set _mps_bg = "#fffaeb" %}
+      {% set _mps_border = "#fde68a" %}
+    {% else %}
+      {% set _mps_label = "At Risk" %}
+      {% set _mps_color = "#b42318" %}
+      {% set _mps_bg = "#fff1f0" %}
+      {% set _mps_border = "#fca5a5" %}
+    {% endif %}
+
+    <div style="margin: 28px 0 0; page-break-inside: avoid;">
+
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 18px; border-bottom: 1px solid #dce6f5;">Your Competitive Position Score</div>
+
+      <div style="background: {{ _mps_bg }}; border: 1.5px solid {{ _mps_border }}; border-radius: 10px; padding: 18px 22px; margin-bottom: 20px;">
+
+        <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 14px;">
+          <div style="font-size: 38px; font-weight: 800; color: {{ _mps_color }}; line-height: 1; min-width: 56px;">{{ _mps.score }}</div>
+          <div>
+            <div style="font-size: 15px; font-weight: 700; color: {{ _mps_color }};">{{ _mps_label }}</div>
+            <div style="font-size: 12px; color: #62738f; margin-top: 2px;">out of 100 &middot; based on market rank, review standing, rating, and complaint exposure</div>
+          </div>
+        </div>
+
+        <div style="background: #e5e7eb; border-radius: 6px; height: 10px; overflow: hidden; margin-bottom: 12px;">
+          <div style="width: {{ _mps.score }}%; background: {{ _mps_color }}; height: 100%; border-radius: 6px;"></div>
+        </div>
+
+        {% if _mps_owner.rank == 1 %}
+          {% set _gap_to_ch = (_mps_owner.reviews - _mps_ch.reviews)|abs %}
+          <div style="font-size: 12px; color: #344054; line-height: 1.6;">
+            You lead the market{% if _mps_ch.name %} with a <strong>{{ _gap_to_ch }}-review advantage over {{ _mps_ch.name }}</strong>{% endif %}.
+            Your score reflects a strong position &mdash; this advantage requires consistent review volume to maintain.
+          </div>
+        {% else %}
+          {% set _gap_to_lead = (_mps_leader.reviews - _mps_owner.reviews)|abs %}
+          <div style="font-size: 12px; color: #344054; line-height: 1.6;">
+            {% if _mps_leader.name %}You are <strong>{{ _gap_to_lead }} reviews behind {{ _mps_leader.name }}</strong>. {% endif %}
+            Closing this gap &mdash; and maintaining it &mdash; is the single highest-leverage move available to you right now.
+          </div>
+        {% endif %}
+      </div>
+
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 16px; border-bottom: 1px solid #dce6f5;">What Changes Every Month</div>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 22px;">
+        <div style="flex: 1; background: #f8fbff; border: 1px solid #dce6f5; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #3a5278; margin-bottom: 10px;">This Report &mdash; One Snapshot</div>
+          <div style="font-size: 12px; color: #344054; line-height: 1.8;">
+            &#10003;&nbsp; Current market rank &amp; review gap<br/>
+            &#10003;&nbsp; Top customer perception themes<br/>
+            &#10003;&nbsp; Complaint exposure vs. competitors<br/>
+            &#10003;&nbsp; This month's highest-leverage actions
+          </div>
+        </div>
+        <div style="flex: 1; background: #10233f; border-radius: 8px; padding: 14px 16px;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #7eb6f5; margin-bottom: 10px;">Monthly Subscription &mdash; Living Intelligence</div>
+          <div style="font-size: 12px; color: #cbd5e1; line-height: 1.8;">
+            +&nbsp; Review velocity per competitor (who is accelerating)<br/>
+            +&nbsp; Month-over-month score change &mdash; gaining or losing ground?<br/>
+            +&nbsp; Complaint trend alerts before they affect your rating<br/>
+            +&nbsp; Your position score updated with fresh market data
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="background: linear-gradient(135deg, #0f1f3a 0%, #1d3a6e 100%); border-radius: 10px; padding: 22px 24px; text-align: center; margin-bottom: 8px;">
+      <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #7eb6f5; margin-bottom: 8px;">Pulse LCI &mdash; Local Competitive Intelligence</div>
+      <div style="font-size: 16px; font-weight: 800; color: #ffffff; margin-bottom: 6px; line-height: 1.3;">Your score is {{ _mps.score }} today.<br/>See what moves it &mdash; every month.</div>
+      {% set _cta_friction = sections.get("customer_friction_signals") or {} %}
+      {% set _cta_theme_count = (_cta_friction.get("themes") or [])|length or 6 %}
+      <div style="font-size: 12px; color: #94a3b8; margin-bottom: 16px;">This analysis covered {{ sov_rows|length }} competitors and {{ _cta_theme_count }} complaint categories. Subscribers get this refreshed monthly, with trend lines and velocity data.</div>
+      <a href="https://pulselci.com/#pricing" style="display:inline-block;background:#3b82f6;color:#fff;font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;padding:12px 28px;border-radius:6px;text-decoration:none;">See Subscription Options &#8594;</a>
     </div>
     {% endif %}
 
