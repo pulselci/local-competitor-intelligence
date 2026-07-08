@@ -171,6 +171,41 @@ def _run_generate_bg(prospect_id: str) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
+@router.post("/find-email")
+def find_email(body: CreateProspectIn) -> dict:
+    """
+    Resolve the business website via Google Places then scrape / Hunter-lookup
+    for the best contact email. Returns {email, website} or {email: null}.
+    """
+    import sys
+    from pathlib import Path
+
+    # Make sure outreach package is importable
+    backend_dir = Path(__file__).resolve().parent.parent.parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
+
+    from app.services.place_resolver import resolve_place_id
+    from outreach.discover import get_place_details, scrape_email_from_website, lookup_email_hunter
+
+    place = resolve_place_id(body.business_name, body.city, body.state or "")
+    if not place:
+        return {"email": None, "website": None}
+
+    details = get_place_details(place.place_id) or {}
+    website = details.get("website")
+    if not website:
+        return {"email": None, "website": None}
+
+    email = scrape_email_from_website(website)
+    if not email:
+        from urllib.parse import urlparse
+        domain = urlparse(website).netloc.lstrip("www.")
+        email = lookup_email_hunter(domain)
+
+    return {"email": email, "website": website}
+
+
 @router.post("/prospect")
 def create_prospect(body: CreateProspectIn) -> dict:
     """

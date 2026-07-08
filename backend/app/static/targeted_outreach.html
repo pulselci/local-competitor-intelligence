@@ -123,10 +123,6 @@
       <label>Business Name *</label>
       <input id="f-name" type="text" placeholder="e.g. Bright Smiles Dental">
     </div>
-    <div class="form-field field-email">
-      <label>Contact Email *</label>
-      <input id="f-email" type="email" placeholder="owner@businessname.com">
-    </div>
     <div class="form-field field-city">
       <label>City *</label>
       <input id="f-city" type="text" placeholder="Chicago">
@@ -138,6 +134,16 @@
     <div class="form-field" style="justify-content:flex-end;">
       <button class="btn-primary" id="find-comps-btn" onclick="findCompetitors()">Find Competitors →</button>
     </div>
+  </div>
+  <div class="form-row" style="align-items:center;margin-top:2px;">
+    <div class="form-field field-email">
+      <label>Contact Email</label>
+      <input id="f-email" type="email" placeholder="auto-discovered or enter manually">
+    </div>
+    <div class="form-field" style="justify-content:flex-end;">
+      <button class="btn-suggest" id="find-email-btn" onclick="findEmail()" style="margin-top:14px;">🔍 Find Email</button>
+    </div>
+    <span id="email-find-msg" style="font-size:12px;color:#5c6f91;margin-top:14px;"></span>
   </div>
   <div id="add-msg" style="font-size:12px;color:#5c6f91;margin-top:4px;"></div>
 
@@ -336,20 +342,74 @@ function startPolling(prospectId) {
 
 // ── Add prospect flow ──────────────────────────────────────────────────────────
 
+async function findEmail() {
+  const name  = document.getElementById('f-name').value.trim();
+  const city  = document.getElementById('f-city').value.trim();
+  const state = document.getElementById('f-state').value.trim().toUpperCase();
+  if (!name || !city) { document.getElementById('email-find-msg').textContent = 'Enter business name and city first.'; return; }
+
+  const btn = document.getElementById('find-email-btn');
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  document.getElementById('email-find-msg').textContent = '';
+
+  try {
+    const r = await fetch(`${API}/targeted/find-email`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ business_name: name, city, state }),
+    });
+    const data = await r.json();
+    if (data.email) {
+      document.getElementById('f-email').value = data.email;
+      document.getElementById('email-find-msg').textContent = `Found via ${data.website}`;
+      document.getElementById('email-find-msg').style.color = '#2e7d32';
+    } else {
+      document.getElementById('email-find-msg').textContent = 'No email found — enter manually.';
+      document.getElementById('email-find-msg').style.color = '#e65100';
+    }
+  } catch(e) {
+    document.getElementById('email-find-msg').textContent = `Failed: ${e.message}`;
+    document.getElementById('email-find-msg').style.color = '#c62828';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔍 Find Email';
+  }
+}
+
 async function findCompetitors() {
   const name  = document.getElementById('f-name').value.trim();
   const email = document.getElementById('f-email').value.trim();
   const city  = document.getElementById('f-city').value.trim();
   const state = document.getElementById('f-state').value.trim().toUpperCase();
 
-  if (!name)  { showAddMsg('Business name is required.', true); return; }
-  if (!email) { showAddMsg('Contact email is required.', true); return; }
-  if (!city)  { showAddMsg('City is required.', true); return; }
+  if (!name) { showAddMsg('Business name is required.', true); return; }
+  if (!city) { showAddMsg('City is required.', true); return; }
 
   const btn = document.getElementById('find-comps-btn');
   btn.disabled = true;
   btn.textContent = 'Finding competitors...';
   showAddMsg('', false);
+
+  // Auto-find email in parallel if not already filled
+  if (!email) {
+    document.getElementById('email-find-msg').textContent = 'Looking up email...';
+    document.getElementById('email-find-msg').style.color = '#5c6f91';
+    fetch(`${API}/targeted/find-email`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ business_name: name, city, state }),
+    }).then(r => r.json()).then(data => {
+      if (data.email) {
+        document.getElementById('f-email').value = data.email;
+        document.getElementById('email-find-msg').textContent = `Email found: ${data.email}`;
+        document.getElementById('email-find-msg').style.color = '#2e7d32';
+      } else {
+        document.getElementById('email-find-msg').textContent = 'No email found — enter manually before generating.';
+        document.getElementById('email-find-msg').style.color = '#e65100';
+      }
+    }).catch(() => {});
+  }
 
   try {
     const r = await fetch(`${API}/targeted/prospect`, {
@@ -423,9 +483,15 @@ async function generateReport() {
   const c2 = document.getElementById('comp2').value.trim();
   const c3 = document.getElementById('comp3').value.trim();
   const competitors = [c1, c2, c3].filter(Boolean);
+  const email = document.getElementById('f-email').value.trim();
 
   if (!competitors.length) {
     document.getElementById('comp-msg').textContent = 'Enter at least one competitor.';
+    return;
+  }
+  if (!email) {
+    document.getElementById('comp-msg').textContent = 'Contact email is required before generating.';
+    document.getElementById('f-email').focus();
     return;
   }
 
@@ -435,6 +501,13 @@ async function generateReport() {
   document.getElementById('comp-msg').textContent = '';
 
   try {
+    // Patch the email onto the prospect before confirming
+    await fetch(`${API}/targeted/${_pendingProspectId}/draft`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ contact_email: email }),
+    });
+
     const r = await fetch(`${API}/targeted/${_pendingProspectId}/confirm`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
