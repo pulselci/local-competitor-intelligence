@@ -214,12 +214,13 @@ pulselci.com</div>
         <th>Competitors</th>
         <th>Sent</th>
         <th>Days ago</th>
+        <th>Opened</th>
         <th>Day 5</th>
         <th>Day 12</th>
         <th></th>
       </tr>
     </thead>
-    <tbody id="targeted-body"><tr><td colspan="8" class="loading">Loading...</td></tr></tbody>
+    <tbody id="targeted-body"><tr><td colspan="9" class="loading">Loading...</td></tr></tbody>
   </table>
 </div>
 
@@ -705,20 +706,39 @@ function toggleTargetedEmails() {
   btn.textContent = open ? 'Hide follow-up emails' : 'Preview follow-up emails';
 }
 
+// Returns true only if the open happened 2+ minutes after send (filters bot pre-fetches)
+function isRealTargetedOpen(r) {
+  if (!r.email_opened_at) return false;
+  if (!r.sent_at) return true;
+  const diffMs = new Date(r.email_opened_at) - new Date(r.sent_at);
+  return diffMs >= 2 * 60 * 1000;
+}
+
+function targetedOpenedPill(r) {
+  if (!isRealTargetedOpen(r)) return '<span class="pill pill-na">Not opened</span>';
+  const count = (r.email_open_count || 0) > 1 ? ` ×${r.email_open_count}` : '';
+  const date = new Date(r.email_opened_at).toLocaleDateString();
+  return `<span class="pill pill-done" title="First opened ${date}">Opened${count}</span>`;
+}
+
 function renderTargetedStats(rows) {
   const total    = rows.length;
+  const opened   = rows.filter(r => isRealTargetedOpen(r)).length;
+  const replied  = rows.filter(r => r.replied_at).length;
   const d5sent   = rows.filter(r => r.followup1_sent_at).length;
   const d12sent  = rows.filter(r => r.followup2_sent_at).length;
-  const replied  = rows.filter(r => r.replied_at).length;
+  const openPct  = total ? Math.round(opened  / total * 100) : 0;
+  const replyPct = total ? Math.round(replied / total * 100) : 0;
 
   document.getElementById('targeted-stat-cards').innerHTML = `
     <div class="outreach-card" style="background:#f0f9ff;border-color:#bae6fd;flex:none;min-width:0;">
       <div class="oc-title" style="color:#0369a1;">Targeted outreach</div>
       <div class="oc-stats">
         <div class="oc-stat"><strong>${total}</strong>Emails sent</div>
+        <div class="oc-stat"><strong>${openPct}%</strong>Open rate</div>
+        <div class="oc-stat"><strong>${replyPct}%</strong>Reply rate</div>
         <div class="oc-stat"><strong>${d5sent}</strong>Day 5 sent</div>
         <div class="oc-stat"><strong>${d12sent}</strong>Day 12 sent</div>
-        <div class="oc-stat"><strong>${replied}</strong>Replied</div>
       </div>
     </div>`;
 }
@@ -772,6 +792,7 @@ function renderTargeted(rows) {
       <td style="font-size:11px;color:#64748b">${comps}</td>
       <td>${r.sent_at ? new Date(r.sent_at).toLocaleDateString() : '—'}</td>
       <td>${days}d ago</td>
+      <td>${targetedOpenedPill(r)}</td>
       <td>${fpill(5,  r.followup1_sent_at, days)}</td>
       <td>${fpill(12, r.followup2_sent_at, days)}</td>
       <td>${repliedBtn}</td>

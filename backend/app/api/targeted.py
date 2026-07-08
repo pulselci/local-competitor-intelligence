@@ -17,7 +17,15 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
+
+# Transparent 1×1 GIF for email open tracking
+_TRACKING_PIXEL = (
+    b"\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff"
+    b"\x00\x00\x00\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00"
+    b"\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
+)
 
 from app.core.db import get_conn
 from app.services.email_service import send_plain_email
@@ -27,6 +35,26 @@ router = APIRouter(prefix="/targeted", tags=["targeted"])
 
 # In-memory job tracker: prospect_id -> {status, error, report_id}
 _gen_jobs: dict[str, dict] = {}
+
+
+@router.get("/track/open/{prospect_id}", include_in_schema=False)
+def track_open(prospect_id: str) -> Response:
+    """Email open tracking pixel for targeted outreach emails."""
+    try:
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """UPDATE targeted_prospects
+                       SET email_open_count = COALESCE(email_open_count, 0) + 1,
+                           email_opened_at  = COALESCE(email_opened_at, NOW()),
+                           updated_at       = NOW()
+                       WHERE id = %s""",
+                    (prospect_id,),
+                )
+            conn.commit()
+    except Exception:
+        pass
+    return Response(content=_TRACKING_PIXEL, media_type="image/gif")
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +234,8 @@ def followup_stats() -> list:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, business_name, contact_email, city, state,
-                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at, replied_at
+                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at, replied_at,
+                       email_opened_at, email_open_count
                 FROM targeted_prospects
                 WHERE status = 'sent'
                 ORDER BY sent_at DESC
@@ -400,6 +429,8 @@ def approve_and_send(prospect_id: str) -> dict:
             attachment_path=tmp_path,
             attachment_filename=fname,
             in_reply_to=None,
+            tracking_id=prospect_id,
+            tracking_base_path="/targeted/track/open/",
         )
     finally:
         os.unlink(tmp_path)

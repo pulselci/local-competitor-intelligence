@@ -65,6 +65,12 @@ def targeted_outreach_ui():
     return FileResponse(html_path)
 
 
+@app.get("/targeted/prospects-crm", include_in_schema=False)
+def prospects_crm_ui():
+    html_path = Path(__file__).resolve().parent / "static" / "prospects_crm.html"
+    return FileResponse(html_path)
+
+
 @app.get("/hub", include_in_schema=False)
 @app.get("/admin/hub", include_in_schema=False)
 def command_hub():
@@ -96,6 +102,12 @@ def on_startup():
                 )
                 cur.execute(
                     "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ"
+                )
+                cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS email_opened_at TIMESTAMPTZ"
+                )
+                cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS email_open_count INT DEFAULT 0"
                 )
                 cur.execute(
                     """CREATE TABLE IF NOT EXISTS targeted_prospects (

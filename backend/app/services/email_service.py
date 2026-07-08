@@ -275,6 +275,7 @@ def send_plain_email(
     attachment_filename: str | None = None,
     tracking_id: str | None = None,
     in_reply_to: str | None = None,
+    tracking_base_path: str | None = None,
 ) -> "EmailSendResult":
     """
     Send a plain-text (+ HTML alternative) email, optionally with a file attachment.
@@ -329,8 +330,9 @@ def send_plain_email(
                 return f"{api_base}/outreach/track/click/{tid}?url={encoded}"
             paras_html = re.sub(r"https?://[^\s<>\"']+", _wrap_url, paras_html)
 
+        _open_path = tracking_base_path or "/outreach/track/open/"
         pixel = (
-            f'<img src="{api_base}/outreach/track/open/{tid}" '
+            f'<img src="{api_base}{_open_path}{tid}" '
             f'width="1" height="1" style="display:block;width:1px;height:1px;border:0;" alt="" />'
             if tid else ""
         )
