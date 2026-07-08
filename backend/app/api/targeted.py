@@ -234,8 +234,9 @@ def followup_stats() -> list:
         with conn.cursor() as cur:
             cur.execute("""
                 SELECT id, business_name, contact_email, city, state,
-                       competitor_names, sent_at, followup1_sent_at, followup2_sent_at, replied_at,
-                       email_opened_at, email_open_count
+                       competitor_names, report_id, sent_at, followup1_sent_at, followup2_sent_at, replied_at,
+                       email_opened_at, email_open_count,
+                       COALESCE(is_test, false) AS is_test
                 FROM targeted_prospects
                 WHERE status = 'sent'
                 ORDER BY sent_at DESC

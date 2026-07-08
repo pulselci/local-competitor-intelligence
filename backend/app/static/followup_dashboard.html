@@ -697,6 +697,7 @@ async function loadAlerts() {
 // ── Targeted outreach follow-ups ─────────────────────────────────────────────
 
 let targetedData = [];
+let liveTargetedData = [];
 
 function toggleTargetedEmails() {
   const panel = document.getElementById('targeted-email-preview');
@@ -808,7 +809,8 @@ async function markReplied(id, replied) {
     // Refresh targeted data only
     const res = await fetch(`${API}/targeted/followup-stats`);
     targetedData = res.ok ? await res.json() : targetedData;
-    renderTargeted(targetedData);
+    liveTargetedData = targetedData.filter(r => !r.is_test);
+    renderTargeted(liveTargetedData);
   } catch(e) {
     alert(`Failed: ${e.message}`);
   }
@@ -829,8 +831,10 @@ async function loadAll() {
     try {
       const targetedRes = await fetch(`${API}/targeted/followup-stats`);
       targetedData = targetedRes.ok ? await targetedRes.json() : [];
+      liveTargetedData = targetedData.filter(r => !r.is_test);
     } catch(_) {
       targetedData = [];
+      liveTargetedData = [];
     }
 
     liveReportData    = reportData.filter(r => !r.is_test);
@@ -843,7 +847,7 @@ async function loadAll() {
 
     renderStats(reportData, coldData);
     renderReports(liveReportData);
-    renderTargeted(targetedData);
+    renderTargeted(liveTargetedData);
     renderCold(liveColdData);
     renderAgency(liveAgencyData);
     renderSandbox();

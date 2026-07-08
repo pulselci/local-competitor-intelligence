@@ -110,6 +110,13 @@ def on_startup():
                     "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS email_open_count INT DEFAULT 0"
                 )
                 cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE"
+                )
+                # Mark any records sent to Craig's own email as sandbox/test
+                cur.execute(
+                    "UPDATE targeted_prospects SET is_test = TRUE WHERE contact_email = 'craigw0503@gmail.com' AND is_test IS NOT TRUE"
+                )
+                cur.execute(
                     """CREATE TABLE IF NOT EXISTS targeted_prospects (
                         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                         business_name   TEXT NOT NULL,
