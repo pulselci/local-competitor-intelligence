@@ -2758,6 +2758,16 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
         leader_rating = leader.get("google_rating")
         owner_rating = owner.get("google_rating")
 
+        # Realistic monthly review target — needed by both leader and non-leader branches
+        if owner_reviews < 50:
+            realistic_monthly = 4
+        elif owner_reviews < 150:
+            realistic_monthly = 8
+        elif owner_reviews < 300:
+            realistic_monthly = 12
+        else:
+            realistic_monthly = 18
+
         # Check review pulse for top mover (fastest-gaining competitor)
         top_mover_name = None
         top_mover_gain = 0
@@ -2816,15 +2826,6 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
             )
 
             # Realistic monthly review target scaled to business size (review count as proxy)
-            if owner_reviews < 50:
-                realistic_monthly = 4
-            elif owner_reviews < 150:
-                realistic_monthly = 8
-            elif owner_reviews < 300:
-                realistic_monthly = 12
-            else:
-                realistic_monthly = 18
-
             if next_above:
                 # Always target the next rank milestone — keeps the goal achievable
                 next_name = next_above.get("competitor_name") or "the next competitor"
