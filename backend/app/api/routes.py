@@ -2865,14 +2865,21 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
         plan.append({"type": "execution_review_gap", "action": action, "detail": detail})
 
     # ── Item 2: Positioning / rating advantage ────────────────────────────
+    # Reset so Item 1's action can never bleed into Item 2
+    action = None
+    detail = None
     # Use praise words from perception narrative + rating comparison
     perception_text = (sections.get("customer_perception_insights") or {}).get("body") or ""
     praise_words = ""
-    if "words that come up most are:" in perception_text:
-        try:
-            praise_words = perception_text.split("words that come up most are:")[1].split(".")[0].strip()
-        except Exception:
-            pass
+    # Try multiple phrasings the LLM uses for the praise-words sentence
+    for _praise_marker in ["words that come up most are:", "words that come up most in positive reviews are:", "words that come up most in reviews are:", "come up most are:"]:
+        if _praise_marker in perception_text:
+            try:
+                praise_words = perception_text.split(_praise_marker)[1].split(".")[0].strip()
+            except Exception:
+                pass
+            if praise_words:
+                break
 
     # Find competitor with lowest rating (biggest opening)
     rated_comps = [r for r in competitors if r.get("google_rating")]
@@ -2910,6 +2917,14 @@ def _build_data_driven_execution_plan(sections: dict, business_name: str = "") -
                 f"Your current {owner_rating_val:.1f}★ rating is below every competitor in this market. "
                 f"Respond to every negative review within 24 hours, and build a consistent post-visit review request "
                 f"into your workflow so happy customers leave new reviews and shift the average up."
+            )
+        else:
+            # All ratings are equal — pivot to perception-based positioning
+            action = "Make your best-reviewed strengths impossible to miss."
+            detail = (
+                f"Every competitor in this market sits at {owner_rating_val:.1f}★ — rating alone won't differentiate you. "
+                f"The businesses that win are the ones customers can describe in one sentence. "
+                f"Pick the one or two things your reviewers already say and put them front-and-center on your Google profile and website."
             )
     else:
         action = "Highlight one clear advantage customers should associate with your business."
@@ -5413,6 +5428,18 @@ def generate_business_report(
                 return item
             return {k: _fix_term(v) if isinstance(v, str) else v for k, v in item.items()}
         final_focus = [_fix_item(f) for f in final_focus]
+
+        # Deduplicate by action text — LLM sometimes generates two identical rank-type items
+        _seen_actions = set()
+        _deduped = []
+        for _item in final_focus:
+            _key = (_item.get("action") or _item.get("summary") or "").strip().lower()[:120]
+            if _key and _key in _seen_actions:
+                continue
+            if _key:
+                _seen_actions.add(_key)
+            _deduped.append(_item)
+        final_focus = _deduped
 
         # Patch just this_month_focus in the DB — read current saved sections,
         # update only the execution plan, write back. Avoids overwriting the
