@@ -276,10 +276,12 @@ function renderCard(p) {
     footerContent = `
       <button class="btn-save" onclick="saveDraft('${p.id}')">Save edits</button>
       ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" style="text-decoration:none;"><button class="btn-secondary" type="button">👁 View Report</button></a>` : ''}
+      <button class="btn-secondary" onclick="regenerateReport('${p.id}')">↺ Regenerate</button>
       <button class="btn-secondary" onclick="skipProspect('${p.id}')">Skip</button>
       <button class="btn-approve" onclick="approveAndSend('${p.id}')">✓ Approve &amp; Send</button>`;
   } else if (p.status === 'error') {
     footerContent = `
+      <button class="btn-secondary" onclick="regenerateReport('${p.id}')">↺ Regenerate</button>
       <button class="btn-danger" onclick="deleteProspect('${p.id}')">Delete</button>`;
   } else if (!isSentOrSkipped) {
     footerContent = `
@@ -615,6 +617,26 @@ async function deleteProspect(id) {
     loadStats();
   } catch(e) {
     setMsg(id, `Failed: ${e.message}`, true);
+  }
+}
+
+async function regenerateReport(id) {
+  if (!confirm('Regenerate the report? This will replace the existing report and re-run the full analysis.')) return;
+  setMsg(id, 'Regenerating...', false);
+  const btns = document.querySelectorAll(`#card-${id} button`);
+  btns.forEach(b => b.disabled = true);
+  try {
+    const r = await fetch(`${API}/targeted/${id}/regenerate`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    // Switch filter to all so the generating card is visible, reload queue
+    document.getElementById('status-filter').value = '';
+    loadQueue();
+    loadStats();
+    startPolling(id);
+  } catch(e) {
+    setMsg(id, `Regenerate failed: ${e.message}`, true);
+    btns.forEach(b => b.disabled = false);
   }
 }
 

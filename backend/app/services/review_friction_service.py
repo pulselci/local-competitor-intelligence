@@ -441,30 +441,48 @@ def build_customer_friction_summary(friction_counts: dict, insights: list[dict])
     if total_negative == 0:
         return "No meaningful customer friction signals were detected in recent reviews."
 
-    # Find the owner's worst friction theme (highest owner_count); fall back to
-    # market-wide dominant theme only if owner has no friction counts at all.
     owner_themes = [t for t in themes if t.get("owner_count", 0) > 0]
-    if owner_themes:
-        top = max(owner_themes, key=lambda x: x.get("owner_count", 0))
-        label = top.get("theme_label")
-        total = top.get("owner_count", 0)
-    else:
-        top = max(themes, key=lambda x: x.get("market_total", 0))
-        label = top.get("theme_label")
-        total = top.get("market_total", 0)
-
-    if total <= 2:
-        return (
-            f"Customer complaints are limited in volume. The only emerging signal appears in "
-            f"{label.lower()}, but it is not yet a consistent pattern."
-        )
 
     if owner_themes:
+        # Sort by ratio to market average — a 1-complaint theme at 5x the market rate
+        # is more concerning than a 2-complaint theme at 2x the rate.
+        def _ratio(t):
+            avg = max(0.01, float(t.get("market_average") or t.get("market_avg") or 0.01))
+            return float(t.get("owner_count", 0)) / avg
+
+        owner_themes_sorted = sorted(owner_themes, key=_ratio, reverse=True)
+        top = owner_themes_sorted[0]
+        label = top.get("theme_label", "")
+        total = int(top.get("owner_count", 0))
+        top_ratio = _ratio(top)
+
+        # Themes that are above the market average
+        above_avg = [t for t in owner_themes if float(t.get("owner_count", 0)) > float(t.get("market_average") or 0)]
+
+        if len(above_avg) >= 2:
+            names = " and ".join(t.get("theme_label", "").lower() for t in sorted(above_avg, key=_ratio, reverse=True)[:2])
+            return (
+                f"Your reviews show above-market complaint rates for {names}. "
+                f"Even a small number of recurring negative mentions can drag your rating down faster than "
+                f"positive reviews can recover it — identify one operational fix per theme this month."
+            )
+
+        # Single theme above average: only call it "not yet a consistent pattern" if ratio is also low
+        if top_ratio < 2.0:
+            return (
+                f"Customer complaints are limited in volume. The only emerging signal appears in "
+                f"{label.lower()}, but it is not yet a consistent pattern."
+            )
+
         return (
-            f"{label} is the most consistent source of friction in your own recent reviews. "
+            f"{label} is the most consistent source of friction in your own recent reviews "
+            f"({total} complaint{'s' if total != 1 else ''}, {top_ratio:.1f}x the market average). "
             f"Addressing this directly is your highest-leverage move for improving customer perception."
         )
 
+    # No owner friction — describe market-wide picture
+    top = max(themes, key=lambda x: x.get("market_total", 0))
+    label = top.get("theme_label", "")
     return (
         f"{label} is the most consistent source of customer friction in recent reviews. "
         f"This theme is shaping competitor perception and should be monitored closely."

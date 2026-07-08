@@ -1000,6 +1000,12 @@
               {% set headline_text = "Consistent Review Growth Beats a One-Time Surge" %}
             {% elif "visibility" in _at or "profile" in _at %}
               {% set headline_text = "Make Your Business Easier to Choose Online" %}
+            {% elif "words" in _at or "customers already use" in _at or "phrases" in _at %}
+              {% set headline_text = "Own the Words Customers Already Use" %}
+            {% elif "complaint" in _at or "hidden liability" in _at or "friction" in _at or "pattern" in _at %}
+              {% set headline_text = "Your Complaint Pattern Needs Attention" %}
+            {% elif "floor" in _at or ("monthly" in _at and "review" in _at) or ("set" in _at and "lead" in _at) %}
+              {% set headline_text = "Set Your Monthly Review Floor" %}
             {% else %}
               {% set headline_text = "This Month's Highest-Impact Action" %}
             {% endif %}

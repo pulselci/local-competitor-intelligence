@@ -199,6 +199,26 @@ def _run_generate_bg(prospect_id: str) -> None:
 # Routes
 # ---------------------------------------------------------------------------
 
+@router.post("/{prospect_id}/regenerate")
+def regenerate_report(prospect_id: str, background_tasks: BackgroundTasks) -> dict:
+    """Regenerate the report for an existing prospect (replaces old report_id)."""
+    prospect = _get_targeted(prospect_id)
+    if prospect["status"] not in ("ready", "error", "sent"):
+        raise HTTPException(status_code=409, detail=f"Cannot regenerate from status '{prospect['status']}'")
+
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE targeted_prospects SET status = 'generating', report_id = NULL, updated_at = NOW() WHERE id = %s",
+                (prospect_id,),
+            )
+        conn.commit()
+
+    _gen_jobs[prospect_id] = {"status": "generating", "error": None, "report_id": None}
+    background_tasks.add_task(_run_generate_bg, prospect_id)
+    return {"ok": True, "status": "generating"}
+
+
 @router.post("/{prospect_id}/mark-replied")
 def mark_replied(prospect_id: str) -> dict:
     """Stop follow-up sequence for a prospect that has replied."""
