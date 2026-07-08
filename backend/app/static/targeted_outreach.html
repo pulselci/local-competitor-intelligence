@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pulse LCI — Targeted Outreach</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: #f0f4f9; color: #172033; min-height: 100vh; }
+
+  .topbar { background: #122033; color: #fff; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-title { font-size: 15px; font-weight: 700; letter-spacing: 0.04em; }
+  .topbar-sub { font-size: 12px; color: #8a9fbe; }
+
+  .stats-bar { background: #fff; border-bottom: 1px solid #dce6f5; padding: 12px 28px; display: flex; gap: 24px; }
+  .stat { font-size: 13px; color: #5c6f91; }
+  .stat strong { color: #122033; font-size: 16px; margin-right: 4px; }
+
+  /* Add form */
+  .add-form { background: #fff; border-bottom: 1px solid #dce6f5; padding: 20px 28px; }
+  .add-form-title { font-size: 13px; font-weight: 700; color: #122033; margin-bottom: 14px; }
+  .form-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 10px; }
+  .form-field { display: flex; flex-direction: column; gap: 3px; }
+  .form-field label { font-size: 11px; color: #62738f; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+  .form-field input { font-size: 13px; padding: 7px 10px; border: 1px solid #c8d8ee; border-radius: 8px; font-family: inherit; color: #172033; background: #fff; }
+  .form-field input:focus { outline: none; border-color: #4a80e8; }
+  .field-biz { width: 220px; }
+  .field-email { width: 220px; }
+  .field-city { width: 160px; }
+  .field-state { width: 70px; }
+
+  /* Competitor suggestion panel */
+  .comp-panel { display: none; background: #f8faff; border: 1px solid #c8d8ee; border-radius: 10px; padding: 16px 18px; margin-top: 12px; }
+  .comp-panel.visible { display: block; }
+  .comp-panel-title { font-size: 12px; font-weight: 700; color: #122033; margin-bottom: 10px; }
+  .comp-panel-sub { font-size: 12px; color: #5c6f91; margin-bottom: 14px; }
+  .comp-inputs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+  .comp-inputs input { font-size: 13px; padding: 7px 10px; border: 1px solid #c8d8ee; border-radius: 8px; font-family: inherit; color: #172033; background: #fff; width: 200px; }
+  .comp-inputs input:focus { outline: none; border-color: #4a80e8; }
+  .comp-actions { display: flex; gap: 10px; align-items: center; }
+  .comp-msg { font-size: 12px; color: #5c6f91; }
+
+  /* Filter bar */
+  .filter-bar { padding: 16px 28px 0; display: flex; gap: 10px; align-items: center; }
+  .filter-bar label { font-size: 13px; color: #5c6f91; }
+  select { font-size: 13px; padding: 6px 10px; border: 1px solid #c8d8ee; border-radius: 8px; background: #fff; color: #172033; }
+
+  /* Queue */
+  .queue { padding: 20px 28px; display: flex; flex-direction: column; gap: 16px; max-width: 900px; }
+  .empty { text-align: center; padding: 60px 20px; color: #8a9ab5; font-size: 15px; }
+  .loading { text-align: center; padding: 60px; color: #8a9ab5; }
+
+  /* Cards */
+  .card { background: #fff; border: 1px solid #dce6f5; border-radius: 14px; overflow: hidden; }
+  .card-header { padding: 16px 20px 12px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #f0f4f9; }
+  .card-title { font-size: 16px; font-weight: 700; color: #122033; }
+  .card-meta { font-size: 12px; color: #62738f; margin-top: 3px; }
+  .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
+  .badge-generating { background: #fff8e1; color: #e65100; }
+  .badge-ready { background: #e8f5e9; color: #2e7d32; }
+  .badge-sent { background: #e3f2fd; color: #1565c0; }
+  .badge-skipped { background: #f5f5f5; color: #9e9e9e; }
+  .badge-error { background: #fce4ec; color: #c62828; }
+
+  .card-body { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .info-block h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #8a9ab5; font-weight: 700; margin-bottom: 6px; }
+  .info-block p { font-size: 13px; color: #30415f; }
+
+  .contact-email-row { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; }
+  .contact-email-row .el { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #8a9ab5; white-space: nowrap; }
+  .contact-email-row input { flex: 1; font-size: 13px; padding: 8px 12px; border: 1px solid #c8d8ee; border-radius: 8px; }
+  .contact-email-row input:focus { outline: none; border-color: #4a80e8; }
+
+  .email-subject { grid-column: 1 / -1; }
+  .email-subject h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #8a9ab5; font-weight: 700; margin-bottom: 6px; }
+  .email-subject input { width: 100%; font-size: 13px; padding: 8px 12px; border: 1px solid #c8d8ee; border-radius: 8px; font-family: inherit; color: #172033; }
+  .email-subject input:focus { outline: none; border-color: #4a80e8; }
+
+  .email-preview { grid-column: 1 / -1; }
+  .email-preview h4 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #8a9ab5; font-weight: 700; margin-bottom: 6px; }
+  .email-preview textarea { width: 100%; height: 180px; font-size: 13px; font-family: inherit; line-height: 1.6; color: #172033; border: 1px solid #c8d8ee; border-radius: 8px; padding: 12px; resize: vertical; }
+  .email-preview textarea:focus { outline: none; border-color: #4a80e8; }
+
+  .generating-banner { grid-column: 1 / -1; background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #e65100; display: flex; align-items: center; gap: 8px; }
+
+  .card-footer { padding: 12px 20px; border-top: 1px solid #f0f4f9; display: flex; gap: 10px; justify-content: flex-end; align-items: center; }
+  .msg { font-size: 12px; flex: 1; }
+  .msg.success { color: #2e7d32; }
+  .msg.error { color: #c62828; }
+
+  button { font-size: 13px; font-weight: 600; padding: 8px 18px; border: none; border-radius: 8px; cursor: pointer; transition: opacity 0.15s; }
+  button:hover { opacity: 0.85; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #122033; color: #fff; }
+  .btn-secondary { background: #f0f4f9; color: #5c6f91; }
+  .btn-save { background: #e8f0ff; color: #2c5eff; }
+  .btn-approve { background: #1b5e20; color: #fff; }
+  .btn-danger { background: #fce4ec; color: #c62828; }
+  .btn-suggest { background: #e8f0ff; color: #2c5eff; padding: 7px 14px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-title">Targeted Outreach</div>
+    <div class="topbar-sub">Send reports directly to prime targets — 5 to 10 per day</div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><strong id="stat-total">—</strong> total</div>
+  <div class="stat"><strong id="stat-ready">—</strong> ready to send</div>
+  <div class="stat"><strong id="stat-sent">—</strong> sent</div>
+  <div class="stat"><strong id="stat-generating">—</strong> generating</div>
+</div>
+
+<!-- Add form -->
+<div class="add-form">
+  <div class="add-form-title">Add Target</div>
+  <div class="form-row">
+    <div class="form-field field-biz">
+      <label>Business Name *</label>
+      <input id="f-name" type="text" placeholder="e.g. Bright Smiles Dental">
+    </div>
+    <div class="form-field field-email">
+      <label>Contact Email *</label>
+      <input id="f-email" type="email" placeholder="owner@businessname.com">
+    </div>
+    <div class="form-field field-city">
+      <label>City *</label>
+      <input id="f-city" type="text" placeholder="Chicago">
+    </div>
+    <div class="form-field field-state">
+      <label>State *</label>
+      <input id="f-state" type="text" placeholder="IL" maxlength="2">
+    </div>
+    <div class="form-field" style="justify-content:flex-end;">
+      <button class="btn-primary" id="find-comps-btn" onclick="findCompetitors()">Find Competitors →</button>
+    </div>
+  </div>
+  <div id="add-msg" style="font-size:12px;color:#5c6f91;margin-top:4px;"></div>
+
+  <!-- Competitor confirmation panel -->
+  <div class="comp-panel" id="comp-panel">
+    <div class="comp-panel-title">Suggested Competitors</div>
+    <div class="comp-panel-sub" id="comp-panel-sub">Edit or replace any of these before generating the report.</div>
+    <div class="comp-inputs">
+      <input id="comp1" type="text" placeholder="Competitor 1 *">
+      <input id="comp2" type="text" placeholder="Competitor 2">
+      <input id="comp3" type="text" placeholder="Competitor 3">
+    </div>
+    <div class="comp-actions">
+      <button class="btn-suggest" onclick="refindCompetitors()">↺ Re-suggest</button>
+      <button class="btn-primary" id="gen-btn" onclick="generateReport()">Generate Report</button>
+      <button class="btn-secondary" onclick="cancelAdd()">Cancel</button>
+      <span class="comp-msg" id="comp-msg"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Filter -->
+<div class="filter-bar">
+  <label>Show:</label>
+  <select id="status-filter" onchange="loadQueue()">
+    <option value="">All</option>
+    <option value="generating">Generating</option>
+    <option value="ready" selected>Ready to Send</option>
+    <option value="sent">Sent</option>
+    <option value="skipped">Skipped</option>
+  </select>
+</div>
+
+<div class="queue" id="queue">
+  <div class="loading">Loading...</div>
+</div>
+
+<script>
+const API = '';
+let _pendingProspectId = null;
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/targeted/prospects?limit=500`);
+    if (!r.ok) return;
+    const rows = await r.json();
+    document.getElementById('stat-total').textContent = rows.length;
+    document.getElementById('stat-ready').textContent = rows.filter(x => x.status === 'ready').length;
+    document.getElementById('stat-sent').textContent = rows.filter(x => x.status === 'sent').length;
+    document.getElementById('stat-generating').textContent = rows.filter(x => x.status === 'generating').length;
+  } catch(_) {}
+}
+
+// ── Queue ─────────────────────────────────────────────────────────────────────
+
+async function loadQueue() {
+  const status = document.getElementById('status-filter').value;
+  const queue = document.getElementById('queue');
+  queue.innerHTML = '<div class="loading">Loading...</div>';
+  try {
+    const url = status ? `${API}/targeted/prospects?status=${status}` : `${API}/targeted/prospects`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(await r.text());
+    const prospects = await r.json();
+    if (!prospects.length) {
+      queue.innerHTML = `<div class="empty">No targeted prospects yet.<br>Add your first target above.</div>`;
+      return;
+    }
+    queue.innerHTML = '';
+    prospects.forEach(p => queue.appendChild(renderCard(p)));
+    // Start polling for any generating cards
+    prospects.filter(p => p.status === 'generating').forEach(p => startPolling(p.id));
+  } catch(e) {
+    queue.innerHTML = `<div class="empty" style="color:#c62828">Failed to load: ${e.message}</div>`;
+  }
+}
+
+function renderCard(p) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.id = `card-${p.id}`;
+
+  const badge = {
+    generating: '<span class="badge badge-generating">⏳ Generating</span>',
+    ready: '<span class="badge badge-ready">Ready to Send</span>',
+    sent: '<span class="badge badge-sent">Sent</span>',
+    skipped: '<span class="badge badge-skipped">Skipped</span>',
+    error: '<span class="badge badge-error">Error</span>',
+  }[p.status] || `<span class="badge">${esc(p.status)}</span>`;
+
+  const location = [p.city, p.state].filter(Boolean).join(', ');
+  const compStr = (p.competitor_names || []).join(', ') || '—';
+  const isReady = p.status === 'ready';
+  const isSentOrSkipped = p.status === 'sent' || p.status === 'skipped';
+  const ro = isSentOrSkipped ? 'readonly' : '';
+  const roStyle = isSentOrSkipped ? 'background:#f9fafb;color:#888;' : '';
+
+  let bodyContent = '';
+  if (p.status === 'generating') {
+    bodyContent = `
+      <div class="generating-banner">
+        ⏳ Report is being generated — usually takes 30 to 60 seconds. This card will update automatically.
+      </div>`;
+  } else if (isReady || isSentOrSkipped) {
+    bodyContent = `
+      <div class="contact-email-row">
+        <span class="el">Contact Email</span>
+        <input id="email-${p.id}" type="email" value="${esc(p.contact_email || '')}" placeholder="Enter contact email" ${ro} style="${roStyle}">
+      </div>
+      <div class="email-subject">
+        <h4>Subject</h4>
+        <input id="subject-${p.id}" type="text" value="${esc(p.draft_subject || '')}" ${ro} style="${roStyle}">
+      </div>
+      <div class="email-preview">
+        <h4>Email Body</h4>
+        <textarea id="body-${p.id}" ${ro} style="${roStyle}">${esc(p.draft_body || '')}</textarea>
+      </div>`;
+  }
+
+  let footerContent = '';
+  if (isReady) {
+    footerContent = `
+      <button class="btn-save" onclick="saveDraft('${p.id}')">Save edits</button>
+      <button class="btn-secondary" onclick="skipProspect('${p.id}')">Skip</button>
+      <button class="btn-approve" onclick="approveAndSend('${p.id}')">✓ Approve &amp; Send</button>`;
+  } else if (p.status === 'error') {
+    footerContent = `
+      <button class="btn-danger" onclick="deleteProspect('${p.id}')">Delete</button>`;
+  } else if (!isSentOrSkipped) {
+    footerContent = `
+      <button class="btn-secondary" onclick="skipProspect('${p.id}')">Skip</button>`;
+  }
+
+  div.innerHTML = `
+    <div class="card-header">
+      <div>
+        <div class="card-title">${esc(p.business_name)}</div>
+        <div class="card-meta">${location ? esc(location) + ' &nbsp;·&nbsp; ' : ''}vs ${esc(compStr)}</div>
+      </div>
+      <div>${badge}</div>
+    </div>
+    <div class="card-body">${bodyContent}</div>
+    <div class="card-footer">
+      <span class="msg" id="msg-${p.id}"></span>
+      ${footerContent}
+    </div>`;
+
+  return div;
+}
+
+function setMsg(id, text, isError) {
+  const el = document.getElementById(`msg-${id}`);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'msg' + (isError ? ' error' : ' success');
+}
+
+// ── Polling for generating cards ───────────────────────────────────────────────
+
+const _polls = {};
+
+function startPolling(prospectId) {
+  if (_polls[prospectId]) return;
+  _polls[prospectId] = setInterval(async () => {
+    try {
+      const r = await fetch(`${API}/targeted/${prospectId}/status`);
+      const d = await r.json();
+      if (d.status === 'ready' || d.status === 'done') {
+        clearInterval(_polls[prospectId]);
+        delete _polls[prospectId];
+        loadQueue();
+        loadStats();
+      } else if (d.status === 'error') {
+        clearInterval(_polls[prospectId]);
+        delete _polls[prospectId];
+        const card = document.getElementById(`card-${prospectId}`);
+        if (card) {
+          card.querySelector('.card-header').querySelector('div:last-child').innerHTML =
+            '<span class="badge badge-error">Error</span>';
+          card.querySelector('.generating-banner').textContent = `Error: ${d.error || 'Generation failed'}`;
+          card.querySelector('.generating-banner').style.background = '#fce4ec';
+          card.querySelector('.generating-banner').style.borderColor = '#ef9a9a';
+          card.querySelector('.generating-banner').style.color = '#c62828';
+        }
+      }
+    } catch(_) {}
+  }, 5000);
+}
+
+// ── Add prospect flow ──────────────────────────────────────────────────────────
+
+async function findCompetitors() {
+  const name  = document.getElementById('f-name').value.trim();
+  const email = document.getElementById('f-email').value.trim();
+  const city  = document.getElementById('f-city').value.trim();
+  const state = document.getElementById('f-state').value.trim().toUpperCase();
+
+  if (!name)  { showAddMsg('Business name is required.', true); return; }
+  if (!email) { showAddMsg('Contact email is required.', true); return; }
+  if (!city)  { showAddMsg('City is required.', true); return; }
+
+  const btn = document.getElementById('find-comps-btn');
+  btn.disabled = true;
+  btn.textContent = 'Finding competitors...';
+  showAddMsg('', false);
+
+  try {
+    const r = await fetch(`${API}/targeted/prospect`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ business_name: name, contact_email: email, city, state }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+
+    _pendingProspectId = data.id;
+    const suggested = data.suggested_competitors || [];
+
+    document.getElementById('comp1').value = suggested[0] || '';
+    document.getElementById('comp2').value = suggested[1] || '';
+    document.getElementById('comp3').value = suggested[2] || '';
+
+    document.getElementById('comp-panel').classList.add('visible');
+    document.getElementById('comp-panel-sub').textContent =
+      suggested.length
+        ? 'These were auto-suggested based on business type and location. Edit or swap any before generating.'
+        : 'No competitors auto-found -- enter them manually below.';
+
+    document.getElementById('comp1').focus();
+    showAddMsg('', false);
+  } catch(e) {
+    showAddMsg(`Failed: ${e.message}`, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Find Competitors →';
+  }
+}
+
+async function refindCompetitors() {
+  if (!_pendingProspectId) return;
+  const btn = document.querySelector('.btn-suggest');
+  btn.disabled = true;
+  btn.textContent = 'Searching...';
+  // Just re-call find with same inputs
+  const name  = document.getElementById('f-name').value.trim();
+  const city  = document.getElementById('f-city').value.trim();
+  const state = document.getElementById('f-state').value.trim().toUpperCase();
+  const email = document.getElementById('f-email').value.trim();
+  try {
+    const r = await fetch(`${API}/targeted/prospect`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ business_name: name, contact_email: email, city, state }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    // Update pending ID to new record, fill suggestions
+    _pendingProspectId = data.id;
+    const suggested = data.suggested_competitors || [];
+    document.getElementById('comp1').value = suggested[0] || '';
+    document.getElementById('comp2').value = suggested[1] || '';
+    document.getElementById('comp3').value = suggested[2] || '';
+    document.getElementById('comp-msg').textContent = '';
+  } catch(e) {
+    document.getElementById('comp-msg').textContent = `Failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '↺ Re-suggest';
+  }
+}
+
+async function generateReport() {
+  if (!_pendingProspectId) return;
+
+  const c1 = document.getElementById('comp1').value.trim();
+  const c2 = document.getElementById('comp2').value.trim();
+  const c3 = document.getElementById('comp3').value.trim();
+  const competitors = [c1, c2, c3].filter(Boolean);
+
+  if (!competitors.length) {
+    document.getElementById('comp-msg').textContent = 'Enter at least one competitor.';
+    return;
+  }
+
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = 'Starting...';
+  document.getElementById('comp-msg').textContent = '';
+
+  try {
+    const r = await fetch(`${API}/targeted/${_pendingProspectId}/confirm`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ competitor_names: competitors }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+
+    // Reset form
+    cancelAdd();
+    showAddMsg('Report generating -- card will appear in the queue below.', false);
+
+    // Switch filter to show generating
+    document.getElementById('status-filter').value = '';
+    loadQueue();
+    loadStats();
+    startPolling(_pendingProspectId);
+    _pendingProspectId = null;
+  } catch(e) {
+    document.getElementById('comp-msg').textContent = `Failed: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Generate Report';
+  }
+}
+
+function cancelAdd() {
+  _pendingProspectId = null;
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-city').value = '';
+  document.getElementById('f-state').value = '';
+  document.getElementById('comp1').value = '';
+  document.getElementById('comp2').value = '';
+  document.getElementById('comp3').value = '';
+  document.getElementById('comp-panel').classList.remove('visible');
+  document.getElementById('comp-msg').textContent = '';
+  document.getElementById('gen-btn').disabled = false;
+  document.getElementById('gen-btn').textContent = 'Generate Report';
+}
+
+function showAddMsg(text, isError) {
+  const el = document.getElementById('add-msg');
+  el.textContent = text;
+  el.style.color = isError ? '#c62828' : '#2e7d32';
+}
+
+// ── Card actions ───────────────────────────────────────────────────────────────
+
+async function saveDraft(id) {
+  const subject = document.getElementById(`subject-${id}`)?.value || '';
+  const body    = document.getElementById(`body-${id}`)?.value || '';
+  const email   = document.getElementById(`email-${id}`)?.value || '';
+  try {
+    const r = await fetch(`${API}/targeted/${id}/draft`, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ draft_subject: subject, draft_body: body, contact_email: email }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    setMsg(id, 'Saved', false);
+  } catch(e) {
+    setMsg(id, `Save failed: ${e.message}`, true);
+  }
+}
+
+async function approveAndSend(id) {
+  // Save any edits first
+  await saveDraft(id);
+
+  setMsg(id, 'Sending...', false);
+  const btns = document.querySelectorAll(`#card-${id} button`);
+  btns.forEach(b => b.disabled = true);
+
+  try {
+    const r = await fetch(`${API}/targeted/${id}/approve`, { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.statusText);
+    setMsg(id, `Sent to ${data.sent_to}`, false);
+    setTimeout(() => { loadQueue(); loadStats(); }, 1500);
+  } catch(e) {
+    setMsg(id, `Failed: ${e.message}`, true);
+    btns.forEach(b => b.disabled = false);
+  }
+}
+
+async function skipProspect(id) {
+  try {
+    const r = await fetch(`${API}/targeted/${id}/skip`, { method: 'POST' });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById(`card-${id}`)?.remove();
+    loadStats();
+  } catch(e) {
+    setMsg(id, `Failed: ${e.message}`, true);
+  }
+}
+
+async function deleteProspect(id) {
+  if (!confirm('Delete this prospect?')) return;
+  try {
+    const r = await fetch(`${API}/targeted/${id}`, { method: 'DELETE' });
+    if (!r.ok) throw new Error(await r.text());
+    document.getElementById(`card-${id}`)?.remove();
+    loadStats();
+  } catch(e) {
+    setMsg(id, `Failed: ${e.message}`, true);
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+loadQueue();
+loadStats();
+</script>
+</body>
+</html>

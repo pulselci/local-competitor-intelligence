@@ -210,6 +210,9 @@
     <div class="tab" data-tool="playbook">
       <span class="icon">📋</span> Playbook
     </div>
+    <div class="tab" data-tool="targeted">
+      <span class="icon">🎯</span> Targeted Outreach
+    </div>
     <div class="tab" data-tool="admin">
       <span class="icon">📊</span> Admin Stats
     </div>
@@ -378,6 +381,7 @@ const TOOLS = {
   },
   followups:  () => '/followups/ui',
   playbook:   () => null,   // rendered inline
+  targeted:   () => '/targeted/ui',
   admin:      () => '/admin/dashboard',
 };
 
@@ -387,6 +391,7 @@ const LABELS = {
   dashboard:  '👥 Client Dashboard',
   followups:  '🔔 Follow-up Dashboard',
   playbook:   '📋 Playbook',
+  targeted:   '🎯 Targeted Outreach',
   admin:      '📊 Admin Stats',
 };
 
