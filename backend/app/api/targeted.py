@@ -125,6 +125,31 @@ def _run_generate_bg(prospect_id: str) -> None:
 
         business_id = UUID(result.business_id)
 
+        # 1b. Remove any competitors NOT in the confirmed list — prevents stale/extra
+        #     competitors from previous onboardings polluting the targeted report.
+        confirmed_names_lower = {n.strip().lower() for n in competitor_names if n.strip()}
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT id, name FROM competitors WHERE business_id = %s AND NOT is_business",
+                        (str(business_id),),
+                    )
+                    all_comps = cur.fetchall()
+                ids_to_delete = [
+                    row[0] for row in all_comps
+                    if row[1].strip().lower() not in confirmed_names_lower
+                ]
+                if ids_to_delete:
+                    with conn.cursor() as cur2:
+                        cur2.execute(
+                            "DELETE FROM competitors WHERE id = ANY(%s)",
+                            (ids_to_delete,),
+                        )
+                conn.commit()
+        except Exception:
+            import traceback; traceback.print_exc()
+
         # 2. Generate report
         from app.api.routes import generate_business_report
         report_data = generate_business_report(business_id)
