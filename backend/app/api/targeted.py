@@ -613,11 +613,12 @@ def approve_and_send(prospect_id: str) -> dict:
     # targeted prospects have their own follow-up sequence tracked on targeted_prospects,
     # separate from the free-report Day-5/12/21 sequence.
 
+    msg_id = send_result.message_id
     with get_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE targeted_prospects SET status = 'sent', sent_at = NOW(), updated_at = NOW() WHERE id = %s",
-                (prospect_id,),
+                "UPDATE targeted_prospects SET status = 'sent', sent_at = NOW(), updated_at = NOW(), message_id = %s WHERE id = %s",
+                (msg_id, prospect_id),
             )
         conn.commit()
 

@@ -112,6 +112,9 @@ def on_startup():
                 cur.execute(
                     "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS is_test BOOLEAN DEFAULT FALSE"
                 )
+                cur.execute(
+                    "ALTER TABLE targeted_prospects ADD COLUMN IF NOT EXISTS message_id TEXT"
+                )
                 # Mark any records sent to Craig's own email as sandbox/test
                 cur.execute(
                     "UPDATE targeted_prospects SET is_test = TRUE WHERE contact_email = 'craigw0503@gmail.com' AND is_test IS NOT TRUE"
