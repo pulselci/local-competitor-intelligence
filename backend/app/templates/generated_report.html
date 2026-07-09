@@ -1340,99 +1340,110 @@
       <div class="section-title">Execution Plan</div>
     <div class="summary-card next-moves-card">
 
-      <div class="detail-text" style="margin-bottom: 10px;">
-        {% set sorted_rows = sov_rows %}
-        {% set you = sov_rows|selectattr("is_business")|list|first %}
-        {% set leader = sorted_rows[0] if sorted_rows else none %}
-
-        {% if you and leader and not leader.get("is_business") %}
-          {% set you_reviews = you.get("reviews_total") or you.get("review_count") or 0 %}
-
-          {# Find the nearest competitor with more reviews than you (most achievable target) #}
-          {% set nearest_ahead = none %}
-          {% for row in sorted_rows %}
-            {% set row_reviews = row.get("reviews_total") or row.get("review_count") or 0 %}
-            {% if not row.get("is_business") and row_reviews > you_reviews and row_reviews > 0 %}
-              {% if nearest_ahead is none %}
-                {% set nearest_ahead = row %}
-              {% endif %}
-            {% endif %}
-          {% endfor %}
-
-          {% if nearest_ahead %}
-            {% set target_reviews = nearest_ahead.get("reviews_total") or nearest_ahead.get("review_count") or 0 %}
-            {% set target_name = nearest_ahead.get("competitor_name") or nearest_ahead.get("name") or "the next competitor" %}
-            {% set gap = target_reviews - you_reviews %}
-            {# Cap monthly target at 30 reviews — anything higher is unrealistic for most small businesses #}
-            {% set monthly_low = [((gap / 12)|round(0, "ceil"))|int, 5]|max %}
-            {% set monthly_high = [((gap / 6)|round(0, "ceil"))|int, 30]|min %}
-            How to execute on each priority — with specific targets and steps.
-            Your nearest milestone: overtake <strong>{{ target_name }}</strong> ({{ target_reviews }} reviews).
-            Aim for <strong>{{ monthly_low }}–{{ monthly_high }} new reviews per month</strong> to reach that within 6–12 months.
-          {% else %}
-            How to execute on each priority — with specific targets and steps.
+      {# ── Derive key variables for the checklist ── #}
+      {% set _ep_you = namespace(reviews=0, rank=0) %}
+      {% set _ep_key = namespace(name="", reviews=0) %}
+      {% for row in sov_rows %}
+        {% if row.get("is_business") %}
+          {% set _ep_you.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+          {% set _ep_you.rank = (row.get("rank") or 0)|int %}
+        {% endif %}
+      {% endfor %}
+      {% for row in sov_rows %}
+        {% if not row.get("is_business") and not _ep_key.name %}
+          {% if _ep_you.rank == 1 and (row.get("rank") or 0)|int == 2 %}
+            {% set _ep_key.name = row.get("competitor_name") or row.get("name") or "" %}
+            {% set _ep_key.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+          {% elif _ep_you.rank != 1 and (row.get("rank") or 0)|int == 1 %}
+            {% set _ep_key.name = row.get("competitor_name") or row.get("name") or "" %}
+            {% set _ep_key.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
           {% endif %}
+        {% endif %}
+      {% endfor %}
+
+      {% if _ep_you.rank == 1 %}
+        {% set _ep_floor = 18 %}
+      {% else %}
+        {% set _ep_raw_gap = (_ep_key.reviews - _ep_you.reviews)|abs %}
+        {% set _ep_floor = [(((_ep_raw_gap) / 12)|round(0, "ceil"))|int, 5]|max %}
+      {% endif %}
+      {% set _ep_week3_target = (_ep_floor * 0.65)|round|int %}
+
+      {# Friction themes above market average #}
+      {% set _ep_fd = sections.get("customer_friction_signals") or {} %}
+      {% set _ep_bad_themes = namespace(items=[]) %}
+      {% for t in (_ep_fd.get("themes") or []) %}
+        {% if t.get("owner_count", 0)|int > 0 and t.get("owner_count", 0)|int > (t.get("market_average") or 0)|float %}
+          {% set _ep_bad_themes.items = _ep_bad_themes.items + [t.get("theme_label", "")] %}
+        {% endif %}
+      {% endfor %}
+
+      <div class="detail-text" style="margin-bottom: 14px;">
+        {% if _ep_you.rank == 1 %}
+          A 30-day sequence to defend your market lead and act on this month's priorities.
+          {% if _ep_key.name %}Your closest challenger is <strong>{{ _ep_key.name }}</strong> ({{ _ep_key.reviews }} reviews) — every week you don't add reviews is a week they close the gap.{% endif %}
         {% else %}
-          How to execute on each priority — with specific targets and steps.
+          A 30-day sequence to close the gap on <strong>{{ _ep_key.name }}</strong> and act on this month's priorities.
+          Aim for <strong>{{ _ep_floor }}+ new reviews per month</strong> — that pace gets you to parity within 12 months.
         {% endif %}
       </div>
 
-        <ol style="padding-left: 16px; margin: 0;">
-        {% for item in experience.get("this_month_focus") or [] %}
+      {# ── 4-Week Checklist ── #}
+      <div>
 
-            {% set action_text = item.get("action") or item.get("summary") or item.get("title") or "" %}
-            {% set detail_text = item.get("detail") or "" %}
-
-            {% set dominant_competitor = "" %}
-
-            {% set competitor_rows = sov_rows|rejectattr("is_business")|list %}
-            {% set dominant_competitor = "" %}
-
-            {% if competitor_rows %}
-              {% set dominant_competitor = competitor_rows[0].get("competitor_name") or competitor_rows[0].get("name") %}
-            {% endif %}
-
-        <li style="margin-bottom: 10px;">
-
-          {% set review_target = report.sections.report_experience.review_target or {} %}
-          {% set is_leader = review_target.get("current_rank") == 1 %}
-
-          <strong>
-            {% if is_leader and dominant_competitor and "choose you over the leader" in action_text|lower %}
-              {{ action_text|replace("the leader", dominant_competitor) }}
-            {% elif is_leader and dominant_competitor and "choose you over the closest competitor" in action_text|lower %}
-              {{ action_text|replace("the closest competitor", dominant_competitor) }}
+        {# Week 1 #}
+        <div style="margin-bottom: 14px; padding: 14px 16px; background: #f8fbff; border-left: 3px solid #3a5278; border-radius: 0 6px 6px 0;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5278; margin-bottom: 8px;">Week 1 &mdash; Days 1&ndash;7: Audit Your Starting Point</div>
+          <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #344054; line-height: 1.9;">
+            {% if _ep_bad_themes.items %}
+              <li>Pull your most recent 10 reviews. Tag every complaint by theme — flag each <strong>{{ _ep_bad_themes.items|join(", ") }}</strong> mention specifically so you know the exact wording customers are using.</li>
             {% else %}
-              {{ action_text }}
+              <li>Pull your most recent 10 reviews. Tag any complaints by theme and note which ones repeat.</li>
             {% endif %}
-          </strong>
+            <li>Check your Google Business profile description — confirm it uses the exact words that appear most in your positive reviews.</li>
+            <li>Verify you have a post-job review ask in place: text template, email, or QR code. If you don't, this is the only task that matters this week.</li>
+          </ul>
+        </div>
 
-          <div class="detail-text" style="margin-top: 3px;">
+        {# Week 2 #}
+        <div style="margin-bottom: 14px; padding: 14px 16px; background: #f8fbff; border-left: 3px solid #3a5278; border-radius: 0 6px 6px 0;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5278; margin-bottom: 8px;">Week 2 &mdash; Days 8&ndash;14: Fix One Thing</div>
+          <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #344054; line-height: 1.9;">
+            {% if _ep_bad_themes.items %}
+              <li>Pick your #1 complaint theme (<strong>{{ _ep_bad_themes.items[0] }}</strong>) and implement one operational change this week — before the pattern compounds in your rating.</li>
+            {% else %}
+              <li>Address any complaint patterns tagged in Week 1. One operational fix per theme, starting with the most frequent.</li>
+            {% endif %}
+            {% if _ep_key.name %}
+              <li>Check <strong>{{ _ep_key.name }}</strong>'s review count. If they gained 8+ reviews this week, bump your ask frequency immediately.</li>
+            {% endif %}
+            <li>Update any customer-facing copy (website, GBP description) to reinforce the reputation words your reviews already use.</li>
+          </ul>
+        </div>
 
-          {% if detail_text and "identify the highest-impact opportunity" not in detail_text|lower %}
-              {{ detail_text }}
+        {# Week 3 #}
+        <div style="margin-bottom: 14px; padding: 14px 16px; background: #f8fbff; border-left: 3px solid #3a5278; border-radius: 0 6px 6px 0;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5278; margin-bottom: 8px;">Week 3 &mdash; Days 15&ndash;21: Build Momentum</div>
+          <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #344054; line-height: 1.9;">
+            <li>Ask every completed job for a review this week. By end of Week 3 you should have at least <strong>{{ _ep_week3_target }} of your monthly {{ _ep_floor }}+ target</strong> already in.</li>
+            <li>Reply to any 1&ndash;2 star review posted in the last 30 days — a professional public response signals responsiveness to every future customer who reads it.</li>
+            <li>Scan your Google Business Q&amp;A section for unanswered questions and respond this week.</li>
+          </ul>
+        </div>
 
-          {% elif "review" in action_text|lower %}
+        {# Week 4 #}
+        <div style="margin-bottom: 4px; padding: 14px 16px; background: #f8fbff; border-left: 3px solid #3a5278; border-radius: 0 6px 6px 0;">
+          <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5278; margin-bottom: 8px;">Week 4 &mdash; Days 22&ndash;30: Close the Month</div>
+          <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #344054; line-height: 1.9;">
+            <li>Count your new reviews for the month. <strong>Target: {{ _ep_floor }}+.</strong> If you're short, direct personal asks convert far better than passive ones — call or text this week's customers individually.</li>
+            {% if _ep_key.name %}
+              <li>Log <strong>{{ _ep_key.name }}</strong>'s review count vs. 30 days ago. If they closed more than 15 reviews of the gap this month, raise your floor next month.</li>
+            {% endif %}
+            <li>Note what changed from the operational fix you made in Week 2. Document it so it becomes permanent process, not a one-off fix.</li>
+          </ul>
+        </div>
 
-          {% set review_target = report.sections.report_experience.review_target %}
-          {% set review_pace = report.sections.report_experience.review_pace %}
-
-
-          {% if review_target and review_target.get("headline") %}
-              {{ review_target.get("headline") }}
-              {% if review_pace and review_pace.get("message") %}
-                <br/><span style="display:block;margin-top:2px;">{{ review_pace.get("message") }}</span>
-              {% endif %}
-          {% else %}
-              Focus on increasing your review velocity to improve market position.
-          {% endif %}
-
-          {% endif %}
-          </div>
-
-        </li>
-        {% endfor %}
-        </ol>
+      </div>
 
     </div>
     {% endif %}
@@ -1561,6 +1572,7 @@
 
       <div style="font-size: 11px; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase; color: #3a5278; padding-bottom: 10px; margin-bottom: 16px; border-bottom: 1px solid #dce6f5;">What Changes Every Month</div>
 
+      <div sty
       <div style="display: flex; gap: 12px; margin-bottom: 22px;">
         <div style="flex: 1; background: #f8fbff; border: 1px solid #dce6f5; border-radius: 8px; padding: 14px 16px;">
           <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #3a5278; margin-bottom: 10px;">This Report &mdash; One Snapshot</div>
@@ -1598,5 +1610,8 @@
       This report is generated from deterministic competitive signals across snapshots, review trends, and customer perception themes. It is designed to support positioning and decision-making, not replace operator judgment.
     </div>
   </div>
+</body>
+</html>
+div>
 </body>
 </html>
