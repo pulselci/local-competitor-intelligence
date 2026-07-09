@@ -1343,6 +1343,7 @@
       {# ── Derive key variables for the checklist ── #}
       {% set _ep_you = namespace(reviews=0, rank=0) %}
       {% set _ep_key = namespace(name="", reviews=0) %}
+      {% set _ep_next = namespace(name="", reviews=0) %}
       {% for row in sov_rows %}
         {% if row.get("is_business") %}
           {% set _ep_you.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
@@ -1350,21 +1351,38 @@
         {% endif %}
       {% endfor %}
       {% for row in sov_rows %}
-        {% if not row.get("is_business") and not _ep_key.name %}
-          {% if _ep_you.rank == 1 and (row.get("rank") or 0)|int == 2 %}
+        {% if not row.get("is_business") %}
+          {% set _row_rank = (row.get("rank") or 0)|int %}
+          {% if _ep_you.rank == 1 and _row_rank == 2 and not _ep_key.name %}
             {% set _ep_key.name = row.get("competitor_name") or row.get("name") or "" %}
             {% set _ep_key.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
-          {% elif _ep_you.rank != 1 and (row.get("rank") or 0)|int == 1 %}
-            {% set _ep_key.name = row.get("competitor_name") or row.get("name") or "" %}
-            {% set _ep_key.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+          {% elif _ep_you.rank != 1 %}
+            {% if _row_rank == 1 and not _ep_key.name %}
+              {% set _ep_key.name = row.get("competitor_name") or row.get("name") or "" %}
+              {% set _ep_key.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+            {% endif %}
+            {% if _row_rank == _ep_you.rank - 1 and not _ep_next.name %}
+              {% set _ep_next.name = row.get("competitor_name") or row.get("name") or "" %}
+              {% set _ep_next.reviews = (row.get("reviews_total") or row.get("review_count") or 0)|int %}
+            {% endif %}
           {% endif %}
         {% endif %}
       {% endfor %}
 
+      {# For non-leaders, target the next rank up (not the overall leader) #}
       {% if _ep_you.rank == 1 %}
         {% set _ep_floor = 18 %}
+        {% set _ep_target_name = _ep_key.name %}
+        {% set _ep_target_reviews = _ep_key.reviews %}
       {% else %}
-        {% set _ep_raw_gap = (_ep_key.reviews - _ep_you.reviews)|abs %}
+        {% if _ep_next.name %}
+          {% set _ep_target_name = _ep_next.name %}
+          {% set _ep_target_reviews = _ep_next.reviews %}
+        {% else %}
+          {% set _ep_target_name = _ep_key.name %}
+          {% set _ep_target_reviews = _ep_key.reviews %}
+        {% endif %}
+        {% set _ep_raw_gap = (_ep_target_reviews - _ep_you.reviews)|abs %}
         {% set _ep_floor = [(((_ep_raw_gap) / 12)|round(0, "ceil"))|int, 5]|max %}
       {% endif %}
       {% set _ep_week3_target = (_ep_floor * 0.65)|round|int %}
@@ -1383,7 +1401,7 @@
           A 30-day sequence to defend your market lead and act on this month's priorities.
           {% if _ep_key.name %}Your closest challenger is <strong>{{ _ep_key.name }}</strong> ({{ _ep_key.reviews }} reviews) — every week you don't add reviews is a week they close the gap.{% endif %}
         {% else %}
-          A 30-day sequence to close the gap on <strong>{{ _ep_key.name }}</strong> and act on this month's priorities.
+          A 30-day sequence to close the gap on <strong>{{ _ep_target_name }}</strong> and act on this month's priorities.
           Aim for <strong>{{ _ep_floor }}+ new reviews per month</strong> — that pace gets you to parity within 12 months.
         {% endif %}
       </div>
