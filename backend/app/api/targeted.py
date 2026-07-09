@@ -136,7 +136,56 @@ def _run_generate_bg(prospect_id: str) -> None:
         if not report_id:
             raise RuntimeError("Report generation returned no ID")
 
-        # 3. Mark as full (not blurred) and flag for subscription CTA
+        # 3. Filter report SOV to only the confirmed competitors, then mark as full
+        # If the business already exists in DB with extra competitors, the report will include
+        # them all — we strip those out so the targeted report only covers the confirmed set.
+        confirmed_names_lower = {n.strip().lower() for n in competitor_names if n.strip()}
+        import json as _json
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT sections FROM generated_reports WHERE id = %s", (report_id,))
+                    _sec_row = cur.fetchone()
+                if _sec_row and _sec_row[0]:
+                    _sec = dict(_sec_row[0])
+                    # Filter share_of_voice rows
+                    _sov = _sec.get("share_of_voice") or {}
+                    _sov_rows = _sov.get("rows") or []
+                    _sov_rows_filtered = [
+                        r for r in _sov_rows
+                        if r.get("is_business")
+                        or (r.get("competitor_name") or r.get("name") or "").strip().lower() in confirmed_names_lower
+                    ]
+                    if len(_sov_rows_filtered) < len(_sov_rows):
+                        _sov["rows"] = _sov_rows_filtered
+                        # Recalculate share_pct so it adds to 100
+                        _total_reviews = sum(
+                            int(r.get("reviews_total") or r.get("review_count") or 0)
+                            for r in _sov_rows_filtered
+                        )
+                        if _total_reviews > 0:
+                            for r in _sov_rows_filtered:
+                                r_rev = int(r.get("reviews_total") or r.get("review_count") or 0)
+                                r["share_pct"] = round(r_rev / _total_reviews * 100, 1)
+                        _sec["share_of_voice"] = _sov
+                        # Also filter share_of_voice_donut if present
+                        _donut = _sec.get("share_of_voice_donut") or {}
+                        if _donut.get("rows"):
+                            _donut["rows"] = [
+                                r for r in _donut["rows"]
+                                if r.get("is_business")
+                                or (r.get("competitor_name") or r.get("name") or "").strip().lower() in confirmed_names_lower
+                            ]
+                            _sec["share_of_voice_donut"] = _donut
+                        with conn.cursor() as cur2:
+                            cur2.execute(
+                                "UPDATE generated_reports SET sections = %s WHERE id = %s",
+                                (_json.dumps(_sec), report_id),
+                            )
+                        conn.commit()
+        except Exception as _filter_exc:
+            import traceback; traceback.print_exc()
+
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -233,7 +282,7 @@ def _run_generate_bg(prospect_id: str) -> None:
             f"{position_line}\n\n"
             f"I put together a report that breaks down exactly where you stand against {comp_str} — "
             f"Google reviews, ratings, and the complaint patterns customers see before they decide between you and a competitor.\n\n"
-            f"Take a look and let me know if you have any questions.\n\n"
+            f"The report is built around those three. If you'd rather swap in different competitors, just reply and I'll rebuild it.\n\n"
             f"Craig\n"
             f"pulselci.com"
         )
@@ -313,6 +362,20 @@ def unmark_replied(prospect_id: str) -> dict:
                 "UPDATE targeted_prospects SET replied_at = NULL, updated_at = NOW() WHERE id = %s",
                 (prospect_id,),
             )
+        conn.commit()
+    return {"ok": True}
+
+
+@router.delete("/{prospect_id}")
+def delete_prospect(prospect_id: str) -> dict:
+    """Hard-delete a targeted prospect and its associated report (if any)."""
+    prospect = _get_targeted(prospect_id)
+    report_id = prospect.get("report_id")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM targeted_prospects WHERE id = %s", (prospect_id,))
+            if report_id:
+                cur.execute("DELETE FROM generated_reports WHERE id = %s", (report_id,))
         conn.commit()
     return {"ok": True}
 

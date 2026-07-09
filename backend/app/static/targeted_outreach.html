@@ -277,7 +277,7 @@ function renderCard(p) {
       <button class="btn-save" onclick="saveDraft('${p.id}')">Save edits</button>
       ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" style="text-decoration:none;"><button class="btn-secondary" type="button">👁 View Report</button></a>` : ''}
       <button class="btn-secondary" onclick="regenerateReport('${p.id}')">↺ Regenerate</button>
-      <button class="btn-secondary" onclick="skipProspect('${p.id}')">Skip</button>
+      <button class="btn-danger" onclick="deleteProspect('${p.id}')">🗑 Delete</button>
       <button class="btn-approve" onclick="approveAndSend('${p.id}')">✓ Approve &amp; Send</button>`;
   } else if (p.status === 'error') {
     footerContent = `
