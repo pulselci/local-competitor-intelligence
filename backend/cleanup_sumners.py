@@ -40,7 +40,7 @@ prospect_ids = [str(p["id"]) for p in prospects]
 report_ids = []
 if business_ids:
     cur.execute(
-        "SELECT id FROM generated_reports WHERE business_id = ANY(%s)",
+        "SELECT id FROM generated_reports WHERE business_id = ANY(%s::uuid[])",
         (business_ids,),
     )
     report_ids = [str(r["id"]) for r in cur.fetchall()]
@@ -51,18 +51,18 @@ print("\n--- About to delete all of the above. Press Enter to confirm or Ctrl+C 
 input()
 
 if prospect_ids:
-    cur.execute("DELETE FROM targeted_prospects WHERE id = ANY(%s)", (prospect_ids,))
+    cur.execute("DELETE FROM targeted_prospects WHERE id = ANY(%s::uuid[])", (prospect_ids,))
     print(f"Deleted {cur.rowcount} targeted prospect(s).")
 
 if report_ids:
-    cur.execute("DELETE FROM generated_reports WHERE id = ANY(%s)", (report_ids,))
+    cur.execute("DELETE FROM generated_reports WHERE id = ANY(%s::uuid[])", (report_ids,))
     print(f"Deleted {cur.rowcount} generated report(s).")
 
 if business_ids:
-    cur.execute("DELETE FROM competitors WHERE business_id = ANY(%s)", (business_ids,))
+    cur.execute("DELETE FROM competitors WHERE business_id = ANY(%s::uuid[])", (business_ids,))
     print(f"Deleted {cur.rowcount} competitor record(s).")
 
-    cur.execute("DELETE FROM businesses WHERE id = ANY(%s)", (business_ids,))
+    cur.execute("DELETE FROM businesses WHERE id = ANY(%s::uuid[])", (business_ids,))
     print(f"Deleted {cur.rowcount} business record(s).")
 
 conn.commit()
