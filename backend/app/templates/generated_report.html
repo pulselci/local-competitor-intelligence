@@ -1597,7 +1597,7 @@
       <div style="font-size: 16px; font-weight: 800; color: #ffffff; margin-bottom: 6px; line-height: 1.3;">Your score is {{ _mps.score }} today.<br/>See what moves it &mdash; every month.</div>
       {% set _cta_friction = sections.get("customer_friction_signals") or {} %}
       {% set _cta_theme_count = (_cta_friction.get("themes") or [])|length or 6 %}
-      <div style="font-size: 12px; color: #94a3b8; margin-bottom: 16px;">This analysis covered {{ sov_rows|length }} competitors and {{ _cta_theme_count }} complaint categories. Subscribers get this refreshed monthly, with trend lines and velocity data.</div>
+      <div style="font-size: 12px; color: #94a3b8; margin-bottom: 16px;">This analysis covered {{ sov_rows|selectattr("is_business", "ne", true)|list|length }} competitors and {{ _cta_theme_count }} complaint categories. Subscribers get this refreshed monthly, with trend lines and velocity data.</div>
       <a href="https://pulselci.com/#pricing" style="display:inline-block;background:#3b82f6;color:#fff;font-size:13px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;padding:12px 28px;border-radius:6px;text-decoration:none;">See Subscription Options &#8594;</a>
     </div>
     {% endif %}
@@ -1606,8 +1606,5 @@
       This report is generated from deterministic competitive signals across snapshots, review trends, and customer perception themes. It is designed to support positioning and decision-making, not replace operator judgment.
     </div>
   </div>
-</body>
-</html>
-div>
 </body>
 </html>
