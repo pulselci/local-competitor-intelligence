@@ -384,4 +384,14 @@ def unmark_replied(prospect_id: str) -> dict:
 
 
 @router.delete("/{prospect_id}")
-def delete_prospect
+def delete_prospect(prospect_id: str) -> dict:
+    """Hard-delete a targeted prospect and its associated report (if any)."""
+    prospect = _get_targeted(prospect_id)
+    report_id = prospect.get("report_id")
+    with get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM targeted_prospects WHERE id = %s", (prospect_id,))
+            if report_id:
+                cur.execute("DELETE FROM generated_reports WHERE id = %s", (report_id,))
+        conn.commit()
+    return {"ok": True}
