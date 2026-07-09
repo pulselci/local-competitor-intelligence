@@ -147,7 +147,40 @@ def _run_generate_bg(prospect_id: str) -> None:
                 )
             conn.commit()
 
-        # 4. Build draft email
+        # 4. Extract key signals from the report for a personalized email
+        owner_rank: int | None = None
+        owner_reviews: int | None = None
+        owner_rating: float | None = None
+        key_comp_name: str | None = None
+        review_gap: int | None = None
+
+        try:
+            with get_conn() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT sections FROM generated_reports WHERE id = %s", (report_id,))
+                    rpt_row = cur.fetchone()
+            if rpt_row and rpt_row[0]:
+                rpt_sec = rpt_row[0]
+                sov_rows_raw = (rpt_sec.get("share_of_voice") or {}).get("rows") or []
+                owner_row = next((r for r in sov_rows_raw if r.get("is_business")), None)
+                if owner_row:
+                    owner_rank = int(owner_row.get("rank") or 0) or None
+                    owner_reviews = int(owner_row.get("reviews_total") or owner_row.get("review_count") or 0) or None
+                    _rating = owner_row.get("google_rating")
+                    owner_rating = float(_rating) if _rating else None
+                if owner_rank == 1:
+                    key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 2), None)
+                else:
+                    key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 1), None)
+                if key_row:
+                    key_comp_name = key_row.get("competitor_name") or key_row.get("name")
+                    key_reviews = int(key_row.get("reviews_total") or key_row.get("review_count") or 0)
+                    if owner_reviews:
+                        review_gap = abs(owner_reviews - key_reviews)
+        except Exception:
+            pass  # fall back to generic email
+
+        # 5. Build personalized draft email
         comp_list = competitor_names[:3]
         if len(comp_list) == 1:
             comp_str = comp_list[0]
@@ -156,19 +189,45 @@ def _run_generate_bg(prospect_id: str) -> None:
         else:
             comp_str = f"{comp_list[0]}, {comp_list[1]}, and {comp_list[2]}"
 
-        draft_subject = f"competitive snapshot for {business_name}"
+        rating_str = f"★{owner_rating:.1f}" if owner_rating else ""
+
+        # Subject — specific to their market position
+        if owner_rank == 1 and key_comp_name and review_gap:
+            draft_subject = f"{business_name} — #{owner_rank} in your market, {review_gap}-review lead"
+        elif owner_rank and owner_rank > 1 and key_comp_name and review_gap:
+            draft_subject = f"{business_name} — {review_gap} reviews behind #{1}, your market snapshot"
+        elif owner_rank == 1:
+            draft_subject = f"{business_name} — market leader snapshot"
+        else:
+            draft_subject = f"competitive snapshot for {business_name}"
+
+        # Opening line — specific to their position
+        if owner_rank == 1 and key_comp_name and review_gap and owner_reviews:
+            position_line = (
+                f"You're currently #1 in your market with {owner_reviews} reviews"
+                f"{f' and a {rating_str} rating' if rating_str else ''}. "
+                f"Your closest challenger right now is {key_comp_name} — {review_gap} reviews behind you."
+            )
+        elif owner_rank and owner_rank > 1 and key_comp_name and review_gap and owner_reviews:
+            position_line = (
+                f"You're sitting at #{owner_rank} in your market with {owner_reviews} reviews"
+                f"{f' and a {rating_str} rating' if rating_str else ''}. "
+                f"The gap to {key_comp_name} is {review_gap} reviews."
+            )
+        else:
+            position_line = f"I pulled a competitive snapshot for {business_name}."
+
         draft_body = (
             f"Hi,\n\n"
-            f"I put together a competitive intelligence report for {business_name} and wanted to get your take on it.\n\n"
-            f"It breaks down how you stack up against {comp_str} on Google reviews, ratings, and local market visibility"
-            f" -- the signals customers look at before picking between you and a competitor.\n\n"
-            f"Take a look at the attachment and let me know what you think. "
-            f"If there are other competitors you'd want to see in the comparison, just reply and I'll pull an updated version same day.\n\n"
+            f"{position_line}\n\n"
+            f"I put together a report that breaks down exactly where you stand against {comp_str} — "
+            f"Google reviews, ratings, and the complaint patterns customers see before they decide between you and a competitor.\n\n"
+            f"Take a look and let me know if you have any questions.\n\n"
             f"Craig\n"
             f"pulselci.com"
         )
 
-        # 5. Update prospect to ready
+        # 6. Update prospect to ready
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(
