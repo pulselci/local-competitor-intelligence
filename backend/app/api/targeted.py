@@ -153,41 +153,52 @@ def _run_generate_bg(prospect_id: str) -> None:
         owner_rating: float | None = None
         key_comp_name: str | None = None
         review_gap: int | None = None
+        report_comp_names: list[str] = []
 
         try:
             with get_conn() as conn:
                 with conn.cursor() as cur:
                     cur.execute("SELECT sections FROM generated_reports WHERE id = %s", (report_id,))
                     rpt_row = cur.fetchone()
-            if rpt_row and rpt_row[0]:
-                rpt_sec = rpt_row[0]
-                sov_rows_raw = (rpt_sec.get("share_of_voice") or {}).get("rows") or []
-                owner_row = next((r for r in sov_rows_raw if r.get("is_business")), None)
-                if owner_row:
-                    owner_rank = int(owner_row.get("rank") or 0) or None
-                    owner_reviews = int(owner_row.get("reviews_total") or owner_row.get("review_count") or 0) or None
-                    _rating = owner_row.get("google_rating")
-                    owner_rating = float(_rating) if _rating else None
-                if owner_rank == 1:
-                    key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 2), None)
-                else:
-                    key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 1), None)
-                if key_row:
-                    key_comp_name = key_row.get("competitor_name") or key_row.get("name")
-                    key_reviews = int(key_row.get("reviews_total") or key_row.get("review_count") or 0)
-                    if owner_reviews:
-                        review_gap = abs(owner_reviews - key_reviews)
-        except Exception:
-            pass  # fall back to generic email
+                    rpt_sec = rpt_row[0] if (rpt_row and rpt_row[0]) else {}
+
+            sov_rows_raw = (rpt_sec.get("share_of_voice") or {}).get("rows") or []
+
+            # Pull competitor names from the actual report (not the prospect record)
+            report_comp_names = [
+                r.get("competitor_name") or r.get("name", "")
+                for r in sov_rows_raw
+                if not r.get("is_business") and (r.get("competitor_name") or r.get("name"))
+            ]
+
+            owner_row = next((r for r in sov_rows_raw if r.get("is_business")), None)
+            if owner_row:
+                owner_rank = int(owner_row.get("rank") or 0) or None
+                owner_reviews = int(owner_row.get("reviews_total") or owner_row.get("review_count") or 0) or None
+                _rating = owner_row.get("google_rating")
+                owner_rating = float(_rating) if _rating else None
+
+            if owner_rank == 1:
+                key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 2), None)
+            else:
+                key_row = next((r for r in sov_rows_raw if not r.get("is_business") and r.get("rank") == 1), None)
+            if key_row:
+                key_comp_name = key_row.get("competitor_name") or key_row.get("name")
+                key_reviews = int(key_row.get("reviews_total") or key_row.get("review_count") or 0)
+                if owner_reviews:
+                    review_gap = abs(owner_reviews - key_reviews)
+        except Exception as _e:
+            import traceback; traceback.print_exc()  # log but don't crash
 
         # 5. Build personalized draft email
-        comp_list = competitor_names[:3]
-        if len(comp_list) == 1:
-            comp_str = comp_list[0]
-        elif len(comp_list) == 2:
-            comp_str = f"{comp_list[0]} and {comp_list[1]}"
+        # Use competitor names from the actual report; fall back to stored list
+        comp_names_for_email = (report_comp_names or competitor_names)[:3]
+        if len(comp_names_for_email) == 1:
+            comp_str = comp_names_for_email[0]
+        elif len(comp_names_for_email) == 2:
+            comp_str = f"{comp_names_for_email[0]} and {comp_names_for_email[1]}"
         else:
-            comp_str = f"{comp_list[0]}, {comp_list[1]}, and {comp_list[2]}"
+            comp_str = f"{comp_names_for_email[0]}, {comp_names_for_email[1]}, and {comp_names_for_email[2]}"
 
         rating_str = f"★{owner_rating:.1f}" if owner_rating else ""
 
