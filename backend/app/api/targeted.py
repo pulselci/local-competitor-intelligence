@@ -276,38 +276,30 @@ def _run_generate_bg(prospect_id: str) -> None:
 
         rating_str = f"★{owner_rating:.1f}" if owner_rating else ""
 
-        # Subject — specific to their market position
-        if owner_rank == 1 and key_comp_name and review_gap:
-            draft_subject = f"{business_name} — #{owner_rank} in your market, {review_gap}-review lead"
-        elif owner_rank and owner_rank > 1 and key_comp_name and review_gap:
-            draft_subject = f"{business_name} — {review_gap} reviews behind #{1}, your market snapshot"
-        elif owner_rank == 1:
-            draft_subject = f"{business_name} — market leader snapshot"
-        else:
-            draft_subject = f"competitive snapshot for {business_name}"
+        # Subject
+        draft_subject = f"Your local competitive report — {business_name}"
 
         # Opening line — specific to their position
         if owner_rank == 1 and key_comp_name and review_gap and owner_reviews:
             position_line = (
-                f"You're currently #1 in your market with {owner_reviews} reviews"
-                f"{f' and a {rating_str} rating' if rating_str else ''}. "
-                f"Your closest challenger right now is {key_comp_name} — {review_gap} reviews behind you."
+                f"You're leading your local market with {owner_reviews} reviews"
+                f" and a {review_gap}-review gap over your closest competitor."
+                f" I put together a full competitive report — attached."
             )
         elif owner_rank and owner_rank > 1 and key_comp_name and review_gap and owner_reviews:
             position_line = (
-                f"You're sitting at #{owner_rank} in your market with {owner_reviews} reviews"
-                f"{f' and a {rating_str} rating' if rating_str else ''}. "
-                f"The gap to {key_comp_name} is {review_gap} reviews."
+                f"You're sitting at #{owner_rank} in your local market with {owner_reviews} reviews"
+                f" — {review_gap} reviews behind {key_comp_name}."
+                f" I put together a full competitive report — attached."
             )
         else:
-            position_line = f"I pulled a competitive snapshot for {business_name}."
+            position_line = f"I put together a full competitive report for {business_name} — attached."
 
         draft_body = (
-            f"Hi,\n\n"
+            f"Hello,\n\n"
             f"{position_line}\n\n"
-            f"I put together a report that breaks down exactly where you stand against {comp_str} — "
-            f"Google reviews, ratings, and the complaint patterns customers see before they decide between you and a competitor.\n\n"
-            f"The report is built around those three. If you'd rather swap in different competitors, just reply and I'll rebuild it.\n\n"
+            f"It covers {comp_str}: review standings, ratings, and the complaint patterns showing up before customers decide who to choose.\n\n"
+            f"If you want to swap in different competitors or have any questions, just reply.\n\n"
             f"Craig\n"
             f"pulselci.com"
         )
@@ -392,292 +384,4 @@ def unmark_replied(prospect_id: str) -> dict:
 
 
 @router.delete("/{prospect_id}")
-def delete_prospect(prospect_id: str) -> dict:
-    """Hard-delete a targeted prospect and its associated report (if any)."""
-    prospect = _get_targeted(prospect_id)
-    report_id = prospect.get("report_id")
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM targeted_prospects WHERE id = %s", (prospect_id,))
-            if report_id:
-                cur.execute("DELETE FROM generated_reports WHERE id = %s", (report_id,))
-        conn.commit()
-    return {"ok": True}
-
-
-@router.get("/followup-stats")
-def followup_stats() -> list:
-    """Return sent targeted prospects with follow-up status for the dashboard."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT id, business_name, contact_email, city, state,
-                       competitor_names, report_id, sent_at, followup1_sent_at, followup2_sent_at, replied_at,
-                       email_opened_at, email_open_count,
-                       COALESCE(is_test, false) AS is_test
-                FROM targeted_prospects
-                WHERE status = 'sent'
-                ORDER BY sent_at DESC
-                LIMIT 200
-            """)
-            rows = cur.fetchall()
-
-    result = []
-    for row in rows:
-        d = dict(row)
-        d["id"] = str(d["id"])
-        if d.get("competitor_names"):
-            d["competitor_names"] = list(d["competitor_names"])
-        result.append(d)
-    return result
-
-
-@router.post("/find-email")
-def find_email(body: CreateProspectIn) -> dict:
-    """
-    Resolve the business website via Google Places then scrape / Hunter-lookup
-    for the best contact email. Returns {email, website} or {email: null}.
-    """
-    import sys
-    from pathlib import Path
-
-    # Make sure outreach package is importable
-    backend_dir = Path(__file__).resolve().parent.parent.parent
-    if str(backend_dir) not in sys.path:
-        sys.path.insert(0, str(backend_dir))
-
-    from app.services.place_resolver import resolve_place_id
-    from outreach.discover import get_place_details, scrape_email_from_website, lookup_email_hunter
-
-    place = resolve_place_id(body.business_name, body.city, body.state or "")
-    if not place:
-        return {"email": None, "website": None}
-
-    details = get_place_details(place.place_id) or {}
-    website = details.get("website")
-    if not website:
-        return {"email": None, "website": None}
-
-    email = scrape_email_from_website(website)
-    if not email:
-        from urllib.parse import urlparse
-        domain = urlparse(website).netloc.lstrip("www.")
-        email = lookup_email_hunter(domain)
-
-    return {"email": email, "website": website}
-
-
-@router.post("/prospect")
-def create_prospect(body: CreateProspectIn) -> dict:
-    """
-    Create a targeted prospect and return auto-suggested competitors.
-    """
-    if not body.business_name.strip():
-        raise HTTPException(status_code=400, detail="Business name is required")
-
-    # Suggest competitors (non-blocking — if it fails we return empty list)
-    try:
-        suggested = suggest_competitors(body.business_name, body.city, body.state)
-    except Exception:
-        suggested = []
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """INSERT INTO targeted_prospects
-                   (business_name, contact_email, city, state, status)
-                   VALUES (%s, %s, %s, %s, 'pending_competitors')
-                   RETURNING id""",
-                (
-                    body.business_name.strip(),
-                    body.contact_email.strip() if body.contact_email else None,
-                    body.city.strip(),
-                    body.state.strip().upper(),
-                ),
-            )
-            prospect_id = str(cur.fetchone()["id"])
-        conn.commit()
-
-    return {"id": prospect_id, "suggested_competitors": suggested}
-
-
-@router.post("/{prospect_id}/confirm")
-def confirm_competitors(prospect_id: str, body: ConfirmCompetitorsIn, background_tasks: BackgroundTasks) -> dict:
-    """
-    Confirm competitor list and kick off report generation in the background.
-    """
-    competitors = [n.strip() for n in body.competitor_names if n.strip()]
-    if not competitors:
-        raise HTTPException(status_code=400, detail="At least one competitor required")
-
-    prospect = _get_targeted(prospect_id)
-    if prospect["status"] not in ("pending_competitors", "error"):
-        raise HTTPException(status_code=409, detail=f"Cannot confirm from status '{prospect['status']}'")
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """UPDATE targeted_prospects
-                   SET competitor_names = %s, status = 'generating', updated_at = NOW()
-                   WHERE id = %s""",
-                (competitors, prospect_id),
-            )
-        conn.commit()
-
-    background_tasks.add_task(_run_generate_bg, prospect_id)
-    return {"ok": True, "status": "generating"}
-
-
-@router.get("/{prospect_id}/status")
-def generation_status(prospect_id: str) -> dict:
-    """Poll for report generation completion."""
-    job = _gen_jobs.get(prospect_id)
-    if not job:
-        # Check DB status directly for jobs that survived a restart
-        p = _get_targeted(prospect_id)
-        return {"status": p["status"], "error": None, "report_id": str(p["report_id"]) if p.get("report_id") else None}
-    return job
-
-
-@router.get("/prospects")
-def list_prospects(status: Optional[str] = None, limit: int = 100) -> list:
-    """List targeted prospects, optionally filtered by status."""
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            if status:
-                cur.execute(
-                    "SELECT * FROM targeted_prospects WHERE status = %s ORDER BY created_at DESC LIMIT %s",
-                    (status, limit),
-                )
-            else:
-                cur.execute(
-                    "SELECT * FROM targeted_prospects ORDER BY created_at DESC LIMIT %s",
-                    (limit,),
-                )
-            rows = cur.fetchall()
-
-    result = []
-    for row in rows:
-        d = dict(row)
-        d["id"] = str(d["id"])
-        if d.get("report_id"):
-            d["report_id"] = str(d["report_id"])
-        if d.get("competitor_names"):
-            d["competitor_names"] = list(d["competitor_names"])
-        result.append(d)
-    return result
-
-
-@router.post("/{prospect_id}/approve")
-def approve_and_send(prospect_id: str) -> dict:
-    """Render PDF from stored report and send email to prospect."""
-    prospect = _get_targeted(prospect_id)
-    if prospect["status"] != "ready":
-        raise HTTPException(status_code=409, detail=f"Prospect not ready (status: {prospect['status']})")
-
-    report_id = prospect.get("report_id")
-    contact_email = prospect.get("contact_email")
-    if not report_id:
-        raise HTTPException(status_code=400, detail="No report generated yet")
-    if not contact_email:
-        raise HTTPException(status_code=400, detail="No contact email on this prospect")
-
-    # Render PDF
-    try:
-        from app.api.generated_reports import _fetch_report
-        from app.services.pdf_service import render_report_pdf
-        report = _fetch_report(UUID(str(report_id)))
-        pdf_bytes = render_report_pdf(report)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"PDF render failed: {exc}")
-
-    business_name = prospect["business_name"]
-    subject = prospect.get("draft_subject") or f"competitive snapshot for {business_name}"
-    body = prospect.get("draft_body") or ""
-
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
-        tf.write(pdf_bytes)
-        tmp_path = tf.name
-
-    try:
-        fname = business_name.replace(" ", "_").replace("/", "-") + "_LCI_Report.pdf"
-        send_result = send_plain_email(
-            to_email=contact_email,
-            subject=subject,
-            body=body,
-            attachment_path=tmp_path,
-            attachment_filename=fname,
-            in_reply_to=None,
-            tracking_id=prospect_id,
-            tracking_base_path="/targeted/track/open/",
-        )
-    finally:
-        os.unlink(tmp_path)
-
-    if not send_result.ok:
-        raise HTTPException(status_code=500, detail=f"Email send failed: {send_result.error}")
-
-    # NOTE: intentionally NOT calling log_report_delivery here —
-    # targeted prospects have their own follow-up sequence tracked on targeted_prospects,
-    # separate from the free-report Day-5/12/21 sequence.
-
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE targeted_prospects SET status = 'sent', sent_at = NOW(), updated_at = NOW() WHERE id = %s",
-                (prospect_id,),
-            )
-        conn.commit()
-
-    return {"ok": True, "sent_to": contact_email}
-
-
-@router.post("/{prospect_id}/skip")
-def skip_prospect(prospect_id: str) -> dict:
-    """Skip a targeted prospect."""
-    _get_targeted(prospect_id)  # 404 guard
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE targeted_prospects SET status = 'skipped', updated_at = NOW() WHERE id = %s",
-                (prospect_id,),
-            )
-        conn.commit()
-    return {"ok": True}
-
-
-@router.put("/{prospect_id}/draft")
-def update_draft(prospect_id: str, body: dict) -> dict:
-    """Update draft subject/body/email before sending."""
-    _get_targeted(prospect_id)
-    fields = {}
-    if "draft_subject" in body:
-        fields["draft_subject"] = body["draft_subject"]
-    if "draft_body" in body:
-        fields["draft_body"] = body["draft_body"]
-    if "contact_email" in body:
-        fields["contact_email"] = body["contact_email"]
-    if not fields:
-        return {"ok": True}
-
-    set_clause = ", ".join(f"{k} = %s" for k in fields)
-    values = list(fields.values()) + [prospect_id]
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                f"UPDATE targeted_prospects SET {set_clause}, updated_at = NOW() WHERE id = %s",
-                values,
-            )
-        conn.commit()
-    return {"ok": True}
-
-
-@router.delete("/{prospect_id}")
-def delete_prospect(prospect_id: str) -> dict:
-    """Delete a targeted prospect."""
-    _get_targeted(prospect_id)
-    with get_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute("DELETE FROM targeted_prospects WHERE id = %s", (prospect_id,))
-        conn.commit()
-    return {"ok": True}
+def delete_prospect
