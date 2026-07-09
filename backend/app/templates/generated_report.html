@@ -1414,10 +1414,8 @@
             {% else %}
               <li>Address any complaint patterns tagged in Week 1. One operational fix per theme, starting with the most frequent.</li>
             {% endif %}
-            {% if _ep_key.name %}
-              <li>Check <strong>{{ _ep_key.name }}</strong>'s review count. If they gained 8+ reviews this week, bump your ask frequency immediately.</li>
-            {% endif %}
             <li>Update any customer-facing copy (website, GBP description) to reinforce the reputation words your reviews already use.</li>
+            <li>Set your review ask script: one sentence, sent the same day the job is closed. Consistency beats creativity here.</li>
           </ul>
         </div>
 
@@ -1436,10 +1434,8 @@
           <div style="font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #3a5278; margin-bottom: 8px;">Week 4 &mdash; Days 22&ndash;30: Close the Month</div>
           <ul style="margin: 0; padding-left: 16px; font-size: 12px; color: #344054; line-height: 1.9;">
             <li>Count your new reviews for the month. <strong>Target: {{ _ep_floor }}+.</strong> If you're short, direct personal asks convert far better than passive ones — call or text this week's customers individually.</li>
-            {% if _ep_key.name %}
-              <li>Log <strong>{{ _ep_key.name }}</strong>'s review count vs. 30 days ago. If they closed more than 15 reviews of the gap this month, raise your floor next month.</li>
-            {% endif %}
             <li>Note what changed from the operational fix you made in Week 2. Document it so it becomes permanent process, not a one-off fix.</li>
+            {% if _ep_key.name %}<li style="color: #3a5278; font-style: italic;">Your next monthly report will show exactly how much ground <strong>{{ _ep_key.name }}</strong> gained this month — and whether your floor needs adjusting. That's what the subscription is for.</li>{% endif %}
           </ul>
         </div>
 
