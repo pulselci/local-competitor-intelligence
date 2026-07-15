@@ -28,6 +28,26 @@ _GENERIC_TYPES = {
     "administrative_area_level_3", "country", "postal_code",
 }
 
+# Types that are too broad — deprioritize in favor of more specific types
+_BROAD_TYPES = {
+    "general_contractor", "home_goods_store", "shopping_mall",
+    "premise", "subpremise", "street_address",
+}
+
+# Specific types to prefer when available — ordered by specificity
+_PREFERRED_TYPES = {
+    "plumber", "dentist", "doctor", "veterinary_care", "hospital",
+    "physiotherapist", "pharmacy", "optician",
+    "auto_repair", "car_repair", "car_dealer", "car_wash",
+    "restaurant", "cafe", "bakery", "bar", "meal_delivery",
+    "beauty_salon", "hair_care", "spa", "gym", "fitness_center",
+    "electrician", "painter", "roofing_contractor", "moving_company",
+    "locksmith", "florist", "funeral_home", "laundry",
+    "lawyer", "accounting", "insurance_agency", "real_estate_agency",
+    "pet_store", "veterinary_care", "lodging", "campground",
+    "travel_agency", "bank", "atm",
+}
+
 
 def _clean_place_name(name: str) -> str:
     """Strip Google Maps UI artifacts from place names.
@@ -86,8 +106,12 @@ def suggest_competitors(
     target_name_lower = (target.get("name") or business_name).lower()
 
     # Step 2: pick a specific type for the competitor search
+    # Priority: preferred specific types > non-generic non-broad > broad > name fallback
     types = target.get("types") or []
-    category = next((t for t in types if t not in _GENERIC_TYPES), None)
+    preferred = next((t for t in types if t in _PREFERRED_TYPES), None)
+    specific = next((t for t in types if t not in _GENERIC_TYPES and t not in _BROAD_TYPES), None)
+    broad = next((t for t in types if t not in _GENERIC_TYPES), None)
+    category = preferred or specific or broad
 
     if category:
         search_term = category.replace("_", " ")
