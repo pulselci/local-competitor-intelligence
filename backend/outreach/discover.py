@@ -94,7 +94,7 @@ def search_places(query: str, city: str, state: str) -> list[dict]:
     results = []
     next_page_token = None
 
-    for _ in range(3):  # max 3 pages = 60 results
+    for page in range(3):  # max 3 pages = 60 results
         params: dict = {"query": location_query, "key": _api_key()}
         if next_page_token:
             params = {"pagetoken": next_page_token, "key": _api_key()}
@@ -106,6 +106,19 @@ def search_places(query: str, city: str, state: str) -> list[dict]:
             data = r.json()
         except Exception as e:
             print(f"  [WARN] Places search failed: {e}")
+            break
+
+        # Google returns HTTP 200 even when it rejects the request, with the
+        # real outcome in "status". Surface rejections instead of treating
+        # them as an empty result set.
+        status = data.get("status", "")
+        if status not in ("OK", "ZERO_RESULTS"):
+            message = data.get("error_message") or "no error message from Google"
+            if page == 0:
+                raise RuntimeError(f"Google Places search failed: {status}: {message}")
+            # A later page failing (e.g. page token not ready) shouldn't
+            # throw away the results already collected.
+            print(f"  [WARN] Places search page {page + 1} failed: {status}: {message}")
             break
 
         results.extend(data.get("results", []))
